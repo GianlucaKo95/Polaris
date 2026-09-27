@@ -4,7 +4,7 @@ import { daysBetween } from "../lib/utils.js";
 import { terminprognose } from "../lib/terminkette.js";
 import { AUFGABEN_STATUS } from "../config/konstanten.js";
 
-export function GanttView({ felder }) {
+export function GanttView({ felder, onAufgabeKlick }) {
   const heute = new Date();
   const startDate = new Date(heute); startDate.setDate(startDate.getDate() - 14);
   const endDate   = new Date(heute); endDate.setDate(endDate.getDate() + 42);
@@ -112,7 +112,9 @@ export function GanttView({ felder }) {
                 .map(id => felder.find(x => x.id === id))
                 .filter(x => x && x.status !== "abgeschlossen");
               return (
-                <div key={f.id} style={{ display:"flex", alignItems:"center", borderBottom:`1px solid ${'var(--border)'}`, minHeight:40 }}>
+                <div key={f.id} onClick={() => onAufgabeKlick?.(f.id)}
+                  style={{ display:"flex", alignItems:"center", borderBottom:`1px solid ${'var(--border)'}`, minHeight:40,
+                    cursor: onAufgabeKlick ? "pointer" : "default" }}>
                   <div style={{ width:130, minWidth:130, padding:"6px 10px", borderRight:`1px solid ${'var(--border)'}` }}>
                     <div style={{ color: "var(--text)", fontSize:11, fontWeight:600, lineHeight:1.2,
                       display:"flex", alignItems:"center", gap:3 }}>
