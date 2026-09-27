@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Users, Plus, TriangleAlert, X, Pencil, HardHat, Phone, CircleCheckBig, Ban, User, Calendar, Copy, ArrowUpRight, Mail, FileClock } from "lucide-react";
+import { Users, Plus, TriangleAlert, X, Pencil, HardHat, Phone, CircleCheckBig, Ban, User, Calendar, Copy, ArrowUpRight, Mail, FileClock, MapPin } from "lucide-react";
 import { sbFetch } from "../lib/supabase.js";
 import { ROLLEN } from "../config/konstanten.js";
 import { ibanMaskiert } from "../lib/utils.js";
@@ -11,10 +11,11 @@ const AENDERUNGS_FELD_LABEL = {
   strasse: "Straße", plz: "PLZ", ort: "Ort", iban: "IBAN", kontoinhaber: "Kontoinhaber",
 };
 
-export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null }) {
+export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, projekte = [] }) {
   const [nutzer,      setNutzer]      = useState([]);
   const [einladungen, setEinladungen] = useState([]);
   const [aenderungen, setAenderungen] = useState([]);
+  const [projektZugriffe, setProjektZugriffe] = useState([]); // [{profil_id, projekt_id}]
   const [laden,       setLaden]       = useState(true);
   const [ansicht,     setAnsicht]     = useState("nutzer"); // nutzer | einladungen | aenderungen
   const [editNutzer,  setEditNutzer]  = useState(null);
@@ -27,7 +28,7 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null })
 
   async function ladeAlles() {
     setLaden(true);
-    const [n, e, a] = await Promise.all([
+    const [n, e, a, z] = await Promise.all([
       sbFetch("profile?select=*&order=created_at.desc", {
         headers: { "Authorization": `Bearer ${session?.access_token}` }
       }),
@@ -37,11 +38,39 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null })
       sbFetch("profil_aenderungen?select=*,profile!profil_aenderungen_profil_id_fkey(vorname,nachname)&order=beantragt_am.desc&limit=50", {
         headers: { "Authorization": `Bearer ${session?.access_token}` }
       }),
+      sbFetch("projekt_zugriff?select=profil_id,projekt_id", {
+        headers: { "Authorization": `Bearer ${session?.access_token}` }
+      }),
     ]);
     if (n) setNutzer(n);
     if (e) setEinladungen(e);
     if (a) setAenderungen(a);
+    if (z) setProjektZugriffe(z);
     setLaden(false);
+  }
+
+  // Baustellen-Zugriff für Rollen, die nicht siehtAlleProjekte sind (Polier,
+  // Vorarbeiter, Facharbeiter) — steuert, welche Baustellen sie z.B. im
+  // Stunden-Export sehen dürfen (durchgesetzt per RLS über projekt_zugriff,
+  // hier nur die Verwaltungsoberfläche dafür).
+  async function projektZugriffUmschalten(profilId, projektId, hatZugriff) {
+    setAktionsFehler("");
+    if (hatZugriff) {
+      const ok = await sbFetch(`projekt_zugriff?profil_id=eq.${profilId}&projekt_id=eq.${projektId}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${session?.access_token}` },
+      });
+      if (ok === null) { setAktionsFehler("Baustellen-Zugriff konnte nicht entfernt werden."); return; }
+      setProjektZugriffe(prev => prev.filter(z => !(z.profil_id === profilId && z.projekt_id === projektId)));
+    } else {
+      const ok = await sbFetch("projekt_zugriff", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ profil_id: profilId, projekt_id: projektId }),
+      });
+      if (!ok?.length) { setAktionsFehler("Baustellen-Zugriff konnte nicht erteilt werden."); return; }
+      setProjektZugriffe(prev => [...prev, { profil_id: profilId, projekt_id: projektId }]);
+    }
   }
 
   async function aenderungBearbeiten(id, status) {
@@ -296,6 +325,34 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null })
                             <option key={k.id} value={k.id}>{k.name}</option>
                           ))}
                         </select>
+                      </div>
+                    )}
+
+                    {/* Baustellen-Zugriff — nur für Rollen, die nicht ohnehin
+                        alle Baustellen sehen (z.B. Polier): steuert u.a., wessen
+                        Stunden im Stunden-Export sichtbar sind. */}
+                    {projekte.length > 0 && ROLLEN[n.rolle]?.siehtAlleProjekte === false && (
+                      <div>
+                        <div style={{ color:"var(--muted)", fontSize:11,
+                          fontWeight:600, marginBottom:4, display:"flex",
+                          alignItems:"center", gap:4 }}>
+                          <MapPin size={11} /> Baustellen-Zugriff
+                        </div>
+                        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                          {projekte.map(p => {
+                            const hatZugriff = projektZugriffe.some(z => z.profil_id === n.id && z.projekt_id === p.id);
+                            return (
+                              <label key={p.id} style={{ display:"flex", alignItems:"center", gap:8,
+                                background:"var(--surface2)", border:"1px solid var(--border)",
+                                borderRadius:8, padding:"7px 10px", fontSize:13,
+                                color:"var(--text)", cursor:"pointer" }}>
+                                <input type="checkbox" checked={hatZugriff}
+                                  onChange={() => projektZugriffUmschalten(n.id, p.id, hatZugriff)} />
+                                {p.name}
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
 
