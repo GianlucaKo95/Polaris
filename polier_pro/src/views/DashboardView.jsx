@@ -222,7 +222,7 @@ function CockpitKarte({ ampelRot, ampelOrange, ampelGruen, totalMann, stundenGep
       <div style={{ display:"flex", gap:14, flexWrap:"wrap", marginBottom:8 }}>
         <span style={zeile}>🟢 {ampelGruen} im Plan</span>
         <span style={zeile}>🟠 {ampelOrange} gefährdet</span>
-        <span style={zeile}>🔴 {ampelRot} kritisch</span>
+        <span style={zeile}>🔴 {ampelRot} Terminrisiko</span>
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
