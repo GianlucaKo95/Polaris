@@ -10,11 +10,16 @@ export const WMO_ICONS = {
 
 export function wmoIcon(code) { return WMO_ICONS[code] || "🌡️"; }
 
+// tempMin/tempMax erlauben die Prüfung einer ganzen Tagesspanne (z.B.
+// Morgenfrost trotz warmem Tageshöchstwert) — bei einem einzelnen
+// Momentanwert (aktuelle Messung) reicht "temp" für beide Grenzen.
 export function betonCheck(w) {
   const warn = [];
   if (!w) return warn;
-  if (w.temp < 5)    warn.push("🚫 Temperatur unter 5°C – Frostschutzmaßnahmen erforderlich");
-  if (w.temp > 30)   warn.push("⚠️ Hitze über 30°C – Nachbehandlung intensivieren");
+  const tempMin = w.tempMin ?? w.temp;
+  const tempMax = w.tempMax ?? w.temp;
+  if (tempMin < 5)   warn.push("🚫 Temperatur unter 5°C – Frostschutzmaßnahmen erforderlich");
+  if (tempMax > 30)  warn.push("⚠️ Hitze über 30°C – Nachbehandlung intensivieren");
   if (w.wind > 40)   warn.push("🚫 Wind über 40 km/h – Betonage nicht empfohlen");
   if (w.rain > 5)    warn.push("🚫 Starkregen – Betonage stoppen");
   if (w.humidity>90) warn.push("⚠️ Sehr hohe Luftfeuchtigkeit");
@@ -92,6 +97,22 @@ export function betonageEignung(stunde) {
   else if (stunde.temp < 8) { wert -= Math.round((8 - stunde.temp) * 8); }
   if (stunde.temp > 30) { wert -= 30; gruende.push(`Temperatur ${stunde.temp}°C über 30°C`); }
   return { wert: Math.max(0, Math.min(100, wert)), gruende };
+}
+
+// Erste noch bevorstehende Risiko-Stunde am heutigen Tag (ab jetzt) —
+// beantwortet "warum genau ist Betonage heute nicht möglich" mit einer
+// konkreten Uhrzeit/Zeitspanne statt nur einer pauschalen Tageswarnung.
+export function naechstesRisiko(stundenDaten) {
+  if (!stundenDaten?.length) return null;
+  const jetzt = new Date().getHours();
+  for (const s of stundenDaten) {
+    if (s.stunde < jetzt) continue;
+    const { gruende } = betonageEignung(s);
+    if (gruende.length > 0) {
+      return { stunde: s.stunde, inStunden: s.stunde - jetzt, gruende };
+    }
+  }
+  return null;
 }
 
 // Bestes zusammenhängendes Arbeitszeitfenster (Standard: 2 Stunden) für

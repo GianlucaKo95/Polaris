@@ -1062,6 +1062,11 @@ export default function PolierApp() {
             offlineSpeichern={offline.speichereOffline}
             aufgaben={felder} setAufgaben={setFelder}
             session={auth.session}
+            onNavigate={(tabId, filter) => {
+              if (filter) setAufgabenFilter(filter);
+              else setAufgabenFilter("alle");
+              setTab(tabId);
+            }}
           />}
         {tab === "aufgaben"      && <AufgabenView aufgaben={felder} setAufgaben={setFelder} kolonnen={kolonnen} sbConnected={sbConnected} darfBearbeiten={rolleConfig?.kannBearbeiten !== false} initialFilter={aufgabenFilter}
             kannVorschlagen={aktiveRolle === "facharbeiter"} onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}

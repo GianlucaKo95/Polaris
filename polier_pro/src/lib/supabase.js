@@ -18,6 +18,11 @@ export function parsePath(path) {
   return { table, params };
 }
 
+// Ohne Zeitlimit blieb ein hängender Request (Netzwerkaussetzer o.ä.) für
+// immer offen — der Aufrufer sah dann dauerhaft seinen "Lädt…"-Zustand,
+// ohne Fehler und ohne dass der Button je wieder nutzbar wurde.
+const SB_TIMEOUT_MS = 15000;
+
 export async function sbFetch(path, opts = {}) {
   try {
     const { table, params } = parsePath(path);
@@ -55,7 +60,7 @@ export async function sbFetch(path, opts = {}) {
           query = query[op](key, val);
         }
       }
-      const { data, error, status } = await query;
+      const { data, error, status } = await query.abortSignal(AbortSignal.timeout(SB_TIMEOUT_MS));
       if (error) {
         if (status === 401 && nutzeEchtenToken) {
           window.dispatchEvent(new CustomEvent("polaris-auth-invalid"));
@@ -67,7 +72,7 @@ export async function sbFetch(path, opts = {}) {
 
     if (method === "POST") {
       const body = opts.body ? JSON.parse(opts.body) : {};
-      const { data, error, status } = await query.insert(body).select();
+      const { data, error, status } = await query.insert(body).select().abortSignal(AbortSignal.timeout(SB_TIMEOUT_MS));
       if (error) {
         if (status === 401 && nutzeEchtenToken) {
           window.dispatchEvent(new CustomEvent("polaris-auth-invalid"));
@@ -84,7 +89,7 @@ export async function sbFetch(path, opts = {}) {
         const m = value.match(/^eq\.(.*)$/);
         if (m) updateQuery = updateQuery.eq(key, m[1]);
       }
-      const { data, error, status } = await updateQuery.select();
+      const { data, error, status } = await updateQuery.select().abortSignal(AbortSignal.timeout(SB_TIMEOUT_MS));
       if (error) {
         if (status === 401 && nutzeEchtenToken) {
           window.dispatchEvent(new CustomEvent("polaris-auth-invalid"));
@@ -100,7 +105,7 @@ export async function sbFetch(path, opts = {}) {
         const m = value.match(/^eq\.(.*)$/);
         if (m) delQuery = delQuery.eq(key, m[1]);
       }
-      const { error, status } = await delQuery;
+      const { error, status } = await delQuery.abortSignal(AbortSignal.timeout(SB_TIMEOUT_MS));
       if (error) {
         if (status === 401 && nutzeEchtenToken) {
           window.dispatchEvent(new CustomEvent("polaris-auth-invalid"));
