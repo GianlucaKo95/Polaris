@@ -69,11 +69,11 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
     const heute = weather?.forecast?.[0];
     if (!heute || tagesRisiko(heute).length === 0) return;
     let abgebrochen = false;
-    holeStuendlicheVorhersage(ort, plz, heute.date).then(daten => {
+    holeStuendlicheVorhersage(loc.lat, loc.lon, heute.date).then(daten => {
       if (!abgebrochen) setHeuteStunden(daten);
     });
     return () => { abgebrochen = true; };
-  }, [weather, ort, plz]);
+  }, [weather, loc.lat, loc.lon]);
 
   async function fetchWeather(lat, lon) {
     setLoading(true);
@@ -117,7 +117,7 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
     setAusgewaehlterTag(datumISO);
     setStundenDaten(null);
     setStundenLaden(true);
-    const daten = await holeStuendlicheVorhersage(ort, plz, datumISO);
+    const daten = await holeStuendlicheVorhersage(loc.lat, loc.lon, datumISO);
     setStundenDaten(daten);
     setStundenLaden(false);
   }

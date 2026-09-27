@@ -9,13 +9,15 @@ import { AUFGABEN_STATUS, AUFGABEN_TYPEN } from "../config/konstanten.js";
 import { useBackButton } from "../hooks/useBackButton.js";
 
 export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, darfBearbeiten = true, initialFilter = "alle",
-  kannVorschlagen = false, onVorschlagen, onEntscheiden, zeitbuchungen = [], projekt }) {
+  initialEditId = null, kannVorschlagen = false, onVorschlagen, onEntscheiden, zeitbuchungen = [], projekt }) {
   const projektTyp = projekt?.typ;
   const [ansicht,     setAnsicht]     = useState("liste");  // liste | kanban
   const [filter,      setFilter]      = useState(initialFilter);
   const [neuAufgabe,  setNeuAufgabe]  = useState(false);
   const [neuMangel,   setNeuMangel]   = useState(false);
-  const [editAufgabe, setEditAufgabe] = useState(null);
+  // Sprung aus dem Terminplan direkt in eine Aufgabe — initialEditId nur
+  // beim ersten Rendern ausgewertet, wie initialFilter auch.
+  const [editAufgabe, setEditAufgabe] = useState(() => aufgaben.find(a => a.id === initialEditId) || null);
   useBackButton(neuAufgabe, () => setNeuAufgabe(false));
   useBackButton(neuMangel,  () => setNeuMangel(false));
   useBackButton(editAufgabe, () => setEditAufgabe(null));

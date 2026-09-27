@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ChartColumn, Search, Download } from "lucide-react";
 import writeXlsxFile from "write-excel-file/browser";
 import { sbFetch } from "../lib/supabase.js";
@@ -19,38 +19,42 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
   const [laden,    setLaden]    = useState(false);
   const [buchungen,setBuchungen]= useState([]);
   const [geladen,  setGeladen]  = useState(false);
-  const [mitarbeiterListe, setMitarbeiterListe] = useState([]);
   const [gewaehlteMA, setGewaehlteMA] = useState("alle");
-
-  // Mitarbeiterliste nur für den Filter-Dropdown — nur laden, wenn die Rolle
-  // ohnehin mehr als die eigenen Stunden sehen darf (RLS würde den Zugriff
-  // für alle anderen Rollen sowieso verweigern).
-  useEffect(() => {
-    if (!darfAlleSehen) return;
-    sbFetch("profile?select=id,vorname,nachname&order=vorname.asc", {
-      headers: { "Authorization": `Bearer ${session?.access_token}` }
-    }).then(data => { if (data) setMitarbeiterListe(data); });
-  }, [darfAlleSehen]);
 
   async function ladeZeitraum() {
     setLaden(true); setGeladen(false);
-    const filterProfil = !darfAlleSehen
-      ? `&profil_id=eq.${profil.id}`
-      : gewaehlteMA !== "alle" ? `&profil_id=eq.${gewaehlteMA}` : "";
+    // Kein separater profil_id-Filter mehr im Query — die RLS auf
+    // zeitbuchungen liefert für jede Rolle ohnehin nur das, was sie sehen
+    // darf (Polier z.B. nur seine eigenen Baustellen, nie andere oder gar
+    // Admin/Geschäftsführer). Die Mitarbeiter-Auswahl unten filtert danach
+    // rein clientseitig innerhalb dieser bereits korrekt eingeschränkten
+    // Treffermenge — es gibt dadurch gar keine Möglichkeit mehr, im
+    // Dropdown einen Namen zu sehen, dessen Buchungen man nicht laden dürfte.
     const data = await sbFetch(
       `zeitbuchungen?select=*,profile(vorname,nachname)&status=eq.abgeschlossen` +
       `&eingestempelt_at=gte.${vonDatum}T00:00:00` +
       `&eingestempelt_at=lte.${bisDatum}T23:59:59` +
-      filterProfil +
       `&order=eingestempelt_at.asc`,
       { headers: { "Authorization": `Bearer ${session?.access_token}` } }
     );
     setBuchungen(data || []);
+    setGewaehlteMA("alle");
     setGeladen(true);
     setLaden(false);
   }
 
-  const gesamtMinuten = buchungen.reduce((s,b) => s + (b.netto_minuten||0), 0);
+  // Mitarbeiter-Dropdown-Optionen kommen ausschließlich aus den bereits
+  // geladenen (RLS-gefilterten) Buchungen selbst, nicht aus einer separaten
+  // firmenweiten Mitarbeiterliste.
+  const mitarbeiterOptionen = [...new Map(
+    buchungen.filter(b => b.profil_id).map(b => [b.profil_id, buchungName(b)])
+  ).entries()].map(([id, name]) => ({ id, name })).sort((a,b) => a.name.localeCompare(b.name,"de"));
+
+  const sichtbareBuchungen = gewaehlteMA === "alle"
+    ? buchungen
+    : buchungen.filter(b => String(b.profil_id) === String(gewaehlteMA));
+
+  const gesamtMinuten = sichtbareBuchungen.reduce((s,b) => s + (b.netto_minuten||0), 0);
   const gesamtStunden = (gesamtMinuten / 60).toFixed(2);
 
   function projektName(id) {
@@ -71,7 +75,7 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
 
   async function exportExcel() {
     const gruppen = new Map();
-    for (const b of buchungen) {
+    for (const b of sichtbareBuchungen) {
       const name = buchungName(b);
       if (!gruppen.has(name)) gruppen.set(name, []);
       gruppen.get(name).push(b);
@@ -122,7 +126,7 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
     }
 
     const maSuffix = gewaehlteMA !== "alle"
-      ? "_" + (mitarbeiterListe.find(m => String(m.id) === String(gewaehlteMA))?.nachname || "MA")
+      ? "_" + (mitarbeiterOptionen.find(m => String(m.id) === String(gewaehlteMA))?.name || "MA").replace(/\s+/g, "_")
       : "";
     await writeXlsxFile(rows, { columns: SPALTEN })
       .toFile(`Stunden_${vonDatum}_bis_${bisDatum}${maSuffix}.xlsx`);
@@ -148,19 +152,6 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
         </div>
       </div>
 
-      {darfAlleSehen && (
-        <div style={{ marginBottom:10 }}>
-          <Label>Mitarbeiter</Label>
-          <select value={gewaehlteMA} onChange={e=>setGewaehlteMA(e.target.value)}
-            style={{ ...inputStyle(), padding:"11px 12px" }}>
-            <option value="alle">Alle Mitarbeiter</option>
-            {mitarbeiterListe.map(m => (
-              <option key={m.id} value={m.id}>{m.vorname} {m.nachname}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
       <button onClick={ladeZeitraum} disabled={laden}
         style={{ width:"100%", background:"var(--surface2)", color:"var(--text)",
           border:"1.5px solid var(--border)", borderRadius:12, padding:13,
@@ -171,6 +162,19 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
 
       {geladen && (
         <>
+          {darfAlleSehen && mitarbeiterOptionen.length > 1 && (
+            <div style={{ marginBottom:10 }}>
+              <Label>Mitarbeiter</Label>
+              <select value={gewaehlteMA} onChange={e=>setGewaehlteMA(e.target.value)}
+                style={{ ...inputStyle(), padding:"11px 12px" }}>
+                <option value="alle">Alle Mitarbeiter</option>
+                {mitarbeiterOptionen.map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div style={{ background:"var(--surface)", borderRadius:14, padding:12,
             marginBottom:10, border:"1.5px solid var(--border)" }}>
             <div style={{ display:"flex", justifyContent:"space-between",
@@ -183,12 +187,12 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
                 </div>
               </div>
               <div style={{ color:"var(--muted)", fontSize:12, textAlign:"right" }}>
-                {buchungen.length} Buchung{buchungen.length!==1?"en":""}
+                {sichtbareBuchungen.length} Buchung{sichtbareBuchungen.length!==1?"en":""}
               </div>
             </div>
           </div>
 
-          {buchungen.length > 0 && (
+          {sichtbareBuchungen.length > 0 && (
             <button onClick={exportExcel}
               style={{ width:"100%", background:"var(--yellow)", color:"#1a1200",
                 border:"none", borderRadius:12, padding:14, fontWeight:800,
@@ -198,13 +202,13 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
             </button>
           )}
 
-          {buchungen.length === 0 && (
+          {sichtbareBuchungen.length === 0 && (
             <div style={{ textAlign:"center", padding:"23px 20px", color:"var(--muted)" }}>
               Keine Buchungen im gewählten Zeitraum.
             </div>
           )}
 
-          {buchungen.map(b => {
+          {sichtbareBuchungen.map(b => {
             const von = new Date(b.eingestempelt_at);
             const name = b.profile ? `${b.profile.vorname||""} ${b.profile.nachname||""}`.trim() : "";
             return (

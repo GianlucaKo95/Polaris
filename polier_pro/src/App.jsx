@@ -141,6 +141,7 @@ export default function PolierApp() {
   }, [aktivId, tab]);
 
   const [aufgabenFilter,setAufgabenFilter] = useState("alle"); // für Dashboard-Sprungziele
+  const [aufgabenEditId,setAufgabenEditId] = useState(null);   // Sprung aus Terminplan direkt in eine Aufgabe
   const [zeigeMehr,     setZeigeMehr]    = useState(false);
   const [mehrDragY,     setMehrDragY]    = useState(0);
   const [mehrDragging,  setMehrDragging] = useState(false);
@@ -1050,7 +1051,8 @@ export default function PolierApp() {
               else setAufgabenFilter("alle");
               setTab(tabId);
             }} />}
-        {tab === "gantt"     && <GanttView felder={felder} />}
+        {tab === "gantt"     && <GanttView felder={felder}
+            onAufgabeKlick={id => { setAufgabenEditId(id); setAufgabenFilter("alle"); setTab("aufgaben"); }} />}
         {tab === "wetter"    && <WeatherView ort={projekt?.ort} plz={projekt?.plz} projektId={projekt?.id} />}
         {tab === "kolonnen"  && <KolonnenView kolonnen={kolonnen} projekt={projekt} setKolonnen={setKolonnen}
             darfBearbeiten={rolleConfig?.kannBearbeiten !== false}
@@ -1069,6 +1071,7 @@ export default function PolierApp() {
             }}
           />}
         {tab === "aufgaben"      && <AufgabenView aufgaben={felder} setAufgaben={setFelder} kolonnen={kolonnen} sbConnected={sbConnected} darfBearbeiten={rolleConfig?.kannBearbeiten !== false} initialFilter={aufgabenFilter}
+            initialEditId={aufgabenEditId}
             kannVorschlagen={aktiveRolle === "facharbeiter"} onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}
             zeitbuchungen={zeitbuchungen} projekt={projekt} />}
         {tab === "kosten"        && <KostenView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
@@ -1084,7 +1087,7 @@ export default function PolierApp() {
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
         {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
         {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} />}
-        {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} />}
+        {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
         {tab === "profil"       && <MeinProfilView profil={aktiveProfil} session={auth.session} />}
       </div>
       </PlanGuard>
