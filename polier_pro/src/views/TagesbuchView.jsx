@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Mic, Camera, PenLine, CloudSun, CloudRain, Users } from "lucide-react";
+import { Mic, Camera, PenLine, CloudSun, CloudRain, Users, TriangleAlert } from "lucide-react";
 import { supabase } from "../lib/supabase.js";
 import { KITagesabschlussButton } from "./KITagesabschlussButton.jsx";
 import { leereAufgabe } from "../lib/utils.js";
@@ -9,8 +9,9 @@ import { RevisionssichererExport } from "./RevisionssichererExport.jsx";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
+import { AUFGABEN_STATUS, AUFGABEN_PRIO } from "../config/konstanten.js";
 
-export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eigeneFirma, kolonnen, offlineSpeichern, aufgaben, setAufgaben, session }) {
+export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eigeneFirma, kolonnen, offlineSpeichern, aufgaben, setAufgaben, session, onNavigate }) {
   const [open,       setOpen]       = useState(false);
   const [detail,     setDetail]     = useState(null);
   const [form,       setForm]       = useState({ taetigkeit:"", besonderheiten:"", material:"", arbeiter:0, maengel:0 });
@@ -20,6 +21,13 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
   const fileRef = useRef(null);
   useBackButton(open,   () => setOpen(false));
   useBackButton(detail, () => setDetail(null));
+
+  // Mängel-Aufgaben, die am Tag dieses Berichts angelegt wurden — der
+  // Zähler im Bericht ist nur eine Zahl, ohne diese Zuordnung gäbe es
+  // keinen Weg, sich den konkreten Mangel anzusehen.
+  const maengelDesTages = detail
+    ? (aufgaben || []).filter(a => a.ist_mangel && (a.created_at || "").slice(0, 10) === detail.datum)
+    : [];
 
   // Wetter für PDF laden
   useEffect(() => {
@@ -300,6 +308,54 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
                   color: "var(--text2)", fontSize:13, lineHeight:1.5 }}>{v}</div>
               </div>
             ))}
+
+            {/* Mängel-Liste */}
+            {maengelDesTages.length > 0 && (
+              <div style={{ marginBottom:10 }}>
+                <div style={{ color: "var(--muted)", fontSize:11, marginBottom:6 }}>
+                  MÄNGEL ({maengelDesTages.length})
+                </div>
+                {maengelDesTages.map(m => {
+                  const statusCfg = AUFGABEN_STATUS[m.status] || AUFGABEN_STATUS.offen;
+                  const prioCfg   = AUFGABEN_PRIO[m.prioritaet] || AUFGABEN_PRIO.mittel;
+                  return (
+                    <div key={m.id}
+                      onClick={() => onNavigate && onNavigate("aufgaben", "maengel")}
+                      style={{ background: "var(--border)", borderRadius:8, padding:"9px 12px",
+                        marginBottom:6, cursor: onNavigate ? "pointer" : "default",
+                        borderLeft:`3px solid ${prioCfg.farbe}` }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+                        <div style={{ color: "var(--text)", fontWeight:700, fontSize:13.5, display:"flex", alignItems:"center", gap:5 }}>
+                          <TriangleAlert size={13} color="var(--orange)" />{m.titel || "Ohne Titel"}
+                        </div>
+                        <div style={{ background:statusCfg.bg, color:statusCfg.farbe, fontSize:10,
+                          fontWeight:700, padding:"2px 7px", borderRadius:6, whiteSpace:"nowrap" }}>
+                          {statusCfg.label}
+                        </div>
+                      </div>
+                      {m.mangel_verursacher && (
+                        <div style={{ color: "var(--muted)", fontSize:11.5, marginTop:3 }}>
+                          Verursacher: {m.mangel_verursacher}
+                        </div>
+                      )}
+                      {m.beschreibung && (
+                        <div style={{ color: "var(--text2)", fontSize:12.5, marginTop:4, lineHeight:1.4 }}>
+                          {m.beschreibung}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {onNavigate && (
+                  <button onClick={() => onNavigate("aufgaben", "maengel")}
+                    style={{ background:"none", border:"1px solid var(--border)", color:"var(--text2)",
+                      borderRadius:8, padding:"6px 12px", fontSize:12, fontWeight:600, cursor:"pointer",
+                      fontFamily:"inherit", width:"100%" }}>
+                    Alle Mängel im Aufgaben-Bereich öffnen →
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Bilder Galerie */}
             {detail.bilder?.length > 0 && (
