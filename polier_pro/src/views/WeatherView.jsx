@@ -116,7 +116,7 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
           <div style={{ color: "var(--muted)", fontSize: 11, textTransform:"uppercase", letterSpacing:1 }}>{loc.name}</div>
           <div style={{ color: "var(--text)", fontSize: 26, fontWeight: 700 }}>{weather.icon} {weather.temp}°C</div>
           <div style={{ color: "var(--muted)", fontSize: 12, display:"flex", alignItems:"center", gap:4, flexWrap:"wrap" }}>
-            <Wind size={11} /> {weather.wind} km/h · <Droplet size={11} /> {weather.humidity}% · <CloudRain size={11} /> {weather.rain}mm
+            <Wind size={11} /> {weather.wind} km/h · <Droplet size={11} /> {weather.humidity}% · <CloudRain size={11} /> {weather.rain}mm jetzt
           </div>
         </div>
         {hatOffeneBetonage && (
@@ -157,7 +157,7 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
             <div style={{ color: "var(--text)", fontSize:42, fontWeight:800 }}>{weather.icon} {weather.temp}°C</div>
             <div style={{ color: "var(--muted)", fontSize:13, marginTop:4,
               display:"flex", alignItems:"center", gap:4, flexWrap:"wrap" }}>
-              <Wind size={12} /> {weather.wind} km/h Wind &nbsp;|&nbsp; <Droplet size={12} /> {weather.humidity}% Feuchte &nbsp;|&nbsp; <CloudRain size={12} /> {weather.rain} mm
+              <Wind size={12} /> {weather.wind} km/h Wind &nbsp;|&nbsp; <Droplet size={12} /> {weather.humidity}% Feuchte &nbsp;|&nbsp; <CloudRain size={12} /> {weather.rain} mm jetzt
             </div>
           </div>
         </div>
@@ -177,7 +177,7 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
         {[
           ["Temperatur",    `${weather.temp}°C`,        weather.temp >= 5 && weather.temp <= 30, "5°C – 30°C"],
           ["Wind",          `${weather.wind} km/h`,     weather.wind <= 40,                      "max. 40 km/h"],
-          ["Niederschlag",  `${weather.rain} mm`,       weather.rain <= 5,                       "max. 5 mm"],
+          ["Niederschlag (jetzt)", `${weather.rain} mm`, weather.rain <= 5,                       "max. 5 mm"],
           ["Luftfeuchte",   `${weather.humidity}%`,     weather.humidity <= 90,                  "max. 90%"],
         ].map(([k,v,ok,limit]) => (
           <div key={k} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${'var(--border)'}` }}>
