@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { CircleX, Wind, Droplet, CloudRain, CircleCheckBig, Ban, MapPin, Blocks, Calendar, ChevronDown, Clock3 } from "lucide-react";
-import { geocodePLZ, geocodeAdresse, wmoIcon, betonCheck, holeStuendlicheVorhersage, betonageEignung, besteZeitfenster } from "../lib/geo.js";
+import { geocodePLZ, geocodeAdresse, wmoIcon, betonCheck, holeStuendlicheVorhersage, betonageEignung, besteZeitfenster, naechstesRisiko } from "../lib/geo.js";
 
 // Betonage-Risiko für einen Tag (Vorhersage-Eintrag mit min/max/wind/rain/
 // humidity) statt nur für den aktuellen Momentanwert — regnet es jetzt
@@ -19,6 +19,7 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
   const [ausgewaehlterTag, setAusgewaehlterTag] = useState(null); // date-string des aufgeklappten Tages
   const [stundenDaten,      setStundenDaten]      = useState(null);
   const [stundenLaden,      setStundenLaden]       = useState(false);
+  const [heuteStunden,      setHeuteStunden]       = useState(null);
 
   // PLZ ist eindeutig und daher die zuverlässigste Suchgrundlage —
   // Ortsnamen können mehrfach vorkommen (z.B. "Neustadt" >20x in
@@ -58,6 +59,20 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
   useEffect(() => {
     onData?.({ weather, warn: tagesRisiko(weather?.forecast?.[0]) });
   }, [weather]);
+
+  // Nur bei einer Tageswarnung zusätzlich die Stunden abfragen — beantwortet
+  // "warum genau" mit einer konkreten Uhrzeit (z.B. "Regen ab 14 Uhr"),
+  // ohne bei jedem Aufruf unnötig einen zweiten API-Call auszulösen.
+  useEffect(() => {
+    setHeuteStunden(null);
+    const heute = weather?.forecast?.[0];
+    if (!heute || tagesRisiko(heute).length === 0) return;
+    let abgebrochen = false;
+    holeStuendlicheVorhersage(ort, plz, heute.date).then(daten => {
+      if (!abgebrochen) setHeuteStunden(daten);
+    });
+    return () => { abgebrochen = true; };
+  }, [weather, ort, plz]);
 
   async function fetchWeather(lat, lon) {
     setLoading(true);
@@ -108,6 +123,7 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
   const heute = weather?.forecast?.[0];
   const warn = heute ? tagesRisiko(heute) : betonCheck(weather);
   const ok = warn.length === 0;
+  const risikoHeute = heuteStunden ? naechstesRisiko(heuteStunden) : null;
   const empfehlung = stundenDaten ? besteZeitfenster(stundenDaten) : null;
 
   if (loading) return (
@@ -143,6 +159,11 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
       {hatOffeneBetonage && warn.length > 0 && (
         <div style={{ background:"#3A1A1A", borderRadius:8, padding:"6px 12px", marginTop:10 }}>
           {warn.map((w,i) => <div key={i} style={{ color:"#FF9999", fontSize:12 }}>{w}</div>)}
+          {risikoHeute && (
+            <div style={{ color:"#FF9999", fontSize:12, marginTop:4, display:"flex", alignItems:"center", gap:4 }}>
+              <Clock3 size={11} /> Ab {risikoHeute.stunde}:00 Uhr{risikoHeute.inStunden > 0 ? ` (in ${risikoHeute.inStunden} Std.)` : ""}: {risikoHeute.gruende.join(", ")}
+            </div>
+          )}
         </div>
       )}
       <div style={{ display:"flex", gap:6, marginTop:10, overflowX:"auto" }}>
@@ -181,6 +202,11 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
             {ok ? <><CircleCheckBig size={15} /> Betonage heute möglich</> : <><Ban size={15} /> Betonage eingeschränkt</>}
           </div>
           {warn.map((w,i) => <div key={i} style={{ color:"#FF9999", fontSize:13, marginTop:4 }}>{w}</div>)}
+          {risikoHeute && (
+            <div style={{ color:"#FF9999", fontSize:13, marginTop:4, display:"flex", alignItems:"center", gap:5 }}>
+              <Clock3 size={12} /> Ab {risikoHeute.stunde}:00 Uhr{risikoHeute.inStunden > 0 ? ` (in ${risikoHeute.inStunden} Std.)` : ""}: {risikoHeute.gruende.join(", ")}
+            </div>
+          )}
         </div>
       </div>
 

@@ -99,6 +99,22 @@ export function betonageEignung(stunde) {
   return { wert: Math.max(0, Math.min(100, wert)), gruende };
 }
 
+// Erste noch bevorstehende Risiko-Stunde am heutigen Tag (ab jetzt) —
+// beantwortet "warum genau ist Betonage heute nicht möglich" mit einer
+// konkreten Uhrzeit/Zeitspanne statt nur einer pauschalen Tageswarnung.
+export function naechstesRisiko(stundenDaten) {
+  if (!stundenDaten?.length) return null;
+  const jetzt = new Date().getHours();
+  for (const s of stundenDaten) {
+    if (s.stunde < jetzt) continue;
+    const { gruende } = betonageEignung(s);
+    if (gruende.length > 0) {
+      return { stunde: s.stunde, inStunden: s.stunde - jetzt, gruende };
+    }
+  }
+  return null;
+}
+
 // Bestes zusammenhängendes Arbeitszeitfenster (Standard: 2 Stunden) für
 // Betonage an einem Tag, gemittelt über den Eignungswert je Stunde.
 export function besteZeitfenster(stundenDaten, fensterGroesse = 2) {
