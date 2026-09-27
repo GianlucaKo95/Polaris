@@ -2,6 +2,15 @@ import { useState, useEffect } from "react";
 import { CircleX, Wind, Droplet, CloudRain, CircleCheckBig, Ban, MapPin, Blocks, Calendar, ChevronDown, Clock3 } from "lucide-react";
 import { geocodePLZ, geocodeAdresse, wmoIcon, betonCheck, holeStuendlicheVorhersage, betonageEignung, besteZeitfenster } from "../lib/geo.js";
 
+// Betonage-Risiko für einen Tag (Vorhersage-Eintrag mit min/max/wind/rain/
+// humidity) statt nur für den aktuellen Momentanwert — regnet es jetzt
+// nicht, aber laut Vorhersage später am Tag, ist Betonieren trotzdem
+// nicht möglich.
+function tagesRisiko(tag) {
+  if (!tag) return [];
+  return betonCheck({ tempMin: tag.min, tempMax: tag.max, wind: tag.wind, rain: tag.rain, humidity: tag.humidity });
+}
+
 export function WeatherView({ compact = false, ort = null, plz = null, projektId = null, onData, hatOffeneBetonage = true }) {
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -47,7 +56,7 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
   // Erlaubt einem Elternteil (z.B. dem Baustellen-Cockpit im Dashboard),
   // das Wetterrisiko ohne eigenen zweiten API-Call mitzubekommen.
   useEffect(() => {
-    onData?.({ weather, warn: betonCheck(weather) });
+    onData?.({ weather, warn: tagesRisiko(weather?.forecast?.[0]) });
   }, [weather]);
 
   async function fetchWeather(lat, lon) {
@@ -55,7 +64,7 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
     try {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
         + `&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code`
-        + `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code`
+        + `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,relative_humidity_2m_max,weather_code`
         + `&timezone=Europe%2FBerlin&forecast_days=7`;
       const res = await fetch(url);
       const data = await res.json();
@@ -67,13 +76,14 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
         wind:     Math.round(cur.wind_speed_10m),
         icon:     wmoIcon(cur.weather_code),
         forecast: data.daily.time.slice(0,7).map((day,i) => ({
-          day:  ["So","Mo","Di","Mi","Do","Fr","Sa"][new Date(day).getDay()],
-          date: day,
-          max:  Math.round(data.daily.temperature_2m_max[i]),
-          min:  Math.round(data.daily.temperature_2m_min[i]),
-          rain: data.daily.precipitation_sum[i],
-          wind: Math.round(data.daily.wind_speed_10m_max[i]),
-          icon: wmoIcon(data.daily.weather_code[i]),
+          day:      ["So","Mo","Di","Mi","Do","Fr","Sa"][new Date(day).getDay()],
+          date:     day,
+          max:      Math.round(data.daily.temperature_2m_max[i]),
+          min:      Math.round(data.daily.temperature_2m_min[i]),
+          rain:     data.daily.precipitation_sum[i],
+          wind:     Math.round(data.daily.wind_speed_10m_max[i]),
+          humidity: Math.round(data.daily.relative_humidity_2m_max[i]),
+          icon:     wmoIcon(data.daily.weather_code[i]),
         })),
       });
     } catch (e) {
@@ -92,7 +102,11 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
     setStundenLaden(false);
   }
 
-  const warn = betonCheck(weather);
+  // Die "jetzt"-Werte oben im Widget bleiben eine reine Live-Anzeige, für
+  // die Betonage-Entscheidung zählt der ganze Tag (Tageshöchst-/Tiefstwerte,
+  // Tagesregensumme) — siehe tagesRisiko().
+  const heute = weather?.forecast?.[0];
+  const warn = heute ? tagesRisiko(heute) : betonCheck(weather);
   const ok = warn.length === 0;
   const empfehlung = stundenDaten ? besteZeitfenster(stundenDaten) : null;
 
@@ -134,7 +148,7 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
       <div style={{ display:"flex", gap:6, marginTop:10, overflowX:"auto" }}>
         {weather.forecast.map((f,i) => (
           <div key={i} style={{ minWidth:52, background: "var(--surface2)", borderRadius:12, padding:"6px 4px", textAlign:"center",
-            border: betonCheck({temp:f.max,wind:f.wind,rain:f.rain}).length > 0
+            border: tagesRisiko(f).length > 0
               ? `2px solid ${'var(--red)'}` : `1px solid ${'var(--border)'}` }}>
             <div style={{ color: "var(--muted)", fontSize:10 }}>{f.day}</div>
             <div style={{ fontSize:16 }}>{f.icon}</div>
@@ -175,10 +189,10 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
         <div style={{ color: "var(--yellow)", fontWeight:700, marginBottom:9,
           display:"flex", alignItems:"center", gap:7 }}><Blocks size={15} /> Betonier-Checkliste</div>
         {[
-          ["Temperatur",    `${weather.temp}°C`,        weather.temp >= 5 && weather.temp <= 30, "5°C – 30°C"],
-          ["Wind",          `${weather.wind} km/h`,     weather.wind <= 40,                      "max. 40 km/h"],
-          ["Niederschlag (jetzt)", `${weather.rain} mm`, weather.rain <= 5,                       "max. 5 mm"],
-          ["Luftfeuchte",   `${weather.humidity}%`,     weather.humidity <= 90,                  "max. 90%"],
+          ["Temperatur (heute)",   `${heute.min}° – ${heute.max}°C`, heute.min >= 5 && heute.max <= 30, "5°C – 30°C"],
+          ["Wind (heute, max.)",   `${heute.wind} km/h`,             heute.wind <= 40,                  "max. 40 km/h"],
+          ["Niederschlag (heute)", `${heute.rain} mm`,               heute.rain <= 5,                   "max. 5 mm"],
+          ["Luftfeuchte (heute, max.)", `${heute.humidity}%`,        heute.humidity <= 90,              "max. 90%"],
         ].map(([k,v,ok,limit]) => (
           <div key={k} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${'var(--border)'}` }}>
             <div>
@@ -198,7 +212,7 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
         <div style={{ color: "var(--yellow)", fontWeight:700, marginBottom:9,
           display:"flex", alignItems:"center", gap:7 }}><Calendar size={15} /> 7-Tage Betonierplan</div>
         {weather.forecast.map((f,i) => {
-          const dayWarn = betonCheck({ temp:f.max, wind:f.wind, rain:f.rain });
+          const dayWarn = tagesRisiko(f);
           const dayOk = dayWarn.length === 0;
           const aufgeklappt = ausgewaehlterTag === f.date;
           return (

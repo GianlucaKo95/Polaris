@@ -10,11 +10,16 @@ export const WMO_ICONS = {
 
 export function wmoIcon(code) { return WMO_ICONS[code] || "🌡️"; }
 
+// tempMin/tempMax erlauben die Prüfung einer ganzen Tagesspanne (z.B.
+// Morgenfrost trotz warmem Tageshöchstwert) — bei einem einzelnen
+// Momentanwert (aktuelle Messung) reicht "temp" für beide Grenzen.
 export function betonCheck(w) {
   const warn = [];
   if (!w) return warn;
-  if (w.temp < 5)    warn.push("🚫 Temperatur unter 5°C – Frostschutzmaßnahmen erforderlich");
-  if (w.temp > 30)   warn.push("⚠️ Hitze über 30°C – Nachbehandlung intensivieren");
+  const tempMin = w.tempMin ?? w.temp;
+  const tempMax = w.tempMax ?? w.temp;
+  if (tempMin < 5)   warn.push("🚫 Temperatur unter 5°C – Frostschutzmaßnahmen erforderlich");
+  if (tempMax > 30)  warn.push("⚠️ Hitze über 30°C – Nachbehandlung intensivieren");
   if (w.wind > 40)   warn.push("🚫 Wind über 40 km/h – Betonage nicht empfohlen");
   if (w.rain > 5)    warn.push("🚫 Starkregen – Betonage stoppen");
   if (w.humidity>90) warn.push("⚠️ Sehr hohe Luftfeuchtigkeit");
