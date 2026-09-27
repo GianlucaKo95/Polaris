@@ -2,13 +2,14 @@ import { useState, useEffect } from "react";
 import { CircleX, Wind, Droplet, CloudRain, CircleCheckBig, Ban, MapPin, Blocks, Calendar, ChevronDown, Clock3 } from "lucide-react";
 import { geocodePLZ, geocodeAdresse, wmoIcon, betonCheck, holeStuendlicheVorhersage, betonageEignung, besteZeitfenster, naechstesRisiko } from "../lib/geo.js";
 
-// Betonage-Risiko für einen Tag (Vorhersage-Eintrag mit min/max/wind/rain/
-// humidity) statt nur für den aktuellen Momentanwert — regnet es jetzt
-// nicht, aber laut Vorhersage später am Tag, ist Betonieren trotzdem
-// nicht möglich.
+// Betonage-Risiko für einen Tag (Vorhersage-Eintrag mit min/max/wind/rain)
+// statt nur für den aktuellen Momentanwert — regnet es jetzt nicht, aber
+// laut Vorhersage später am Tag, ist Betonieren trotzdem nicht möglich.
+// Luftfeuchte gibt es von Open-Meteo nur als Momentanwert, nicht als
+// Tagesaggregat — dafür bleibt es beim aktuellen Wert (siehe unten).
 function tagesRisiko(tag) {
   if (!tag) return [];
-  return betonCheck({ tempMin: tag.min, tempMax: tag.max, wind: tag.wind, rain: tag.rain, humidity: tag.humidity });
+  return betonCheck({ tempMin: tag.min, tempMax: tag.max, wind: tag.wind, rain: tag.rain });
 }
 
 export function WeatherView({ compact = false, ort = null, plz = null, projektId = null, onData, hatOffeneBetonage = true }) {
@@ -79,10 +80,15 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
     try {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
         + `&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code`
-        + `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,relative_humidity_2m_max,weather_code`
+        + `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code`
         + `&timezone=Europe%2FBerlin&forecast_days=7`;
-      const res = await fetch(url);
+      // Ohne Timeout blieb die Ansicht bei einer hängenden Anfrage (z.B.
+      // Netzwerkaussetzer) für immer auf "wird geladen" stehen, ohne
+      // Fehlermeldung — nach 15s wird abgebrochen und der Fehlerzustand
+      // gezeigt statt endlos zu warten.
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
       const data = await res.json();
+      if (!res.ok || !data?.daily) throw new Error(data?.reason || "Wetterdaten ungültig");
       const cur = data.current;
       setWeather({
         temp:     Math.round(cur.temperature_2m),
@@ -91,14 +97,13 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
         wind:     Math.round(cur.wind_speed_10m),
         icon:     wmoIcon(cur.weather_code),
         forecast: data.daily.time.slice(0,7).map((day,i) => ({
-          day:      ["So","Mo","Di","Mi","Do","Fr","Sa"][new Date(day).getDay()],
-          date:     day,
-          max:      Math.round(data.daily.temperature_2m_max[i]),
-          min:      Math.round(data.daily.temperature_2m_min[i]),
-          rain:     data.daily.precipitation_sum[i],
-          wind:     Math.round(data.daily.wind_speed_10m_max[i]),
-          humidity: Math.round(data.daily.relative_humidity_2m_max[i]),
-          icon:     wmoIcon(data.daily.weather_code[i]),
+          day:  ["So","Mo","Di","Mi","Do","Fr","Sa"][new Date(day).getDay()],
+          date: day,
+          max:  Math.round(data.daily.temperature_2m_max[i]),
+          min:  Math.round(data.daily.temperature_2m_min[i]),
+          rain: data.daily.precipitation_sum[i],
+          wind: Math.round(data.daily.wind_speed_10m_max[i]),
+          icon: wmoIcon(data.daily.weather_code[i]),
         })),
       });
     } catch (e) {
@@ -119,9 +124,12 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
 
   // Die "jetzt"-Werte oben im Widget bleiben eine reine Live-Anzeige, für
   // die Betonage-Entscheidung zählt der ganze Tag (Tageshöchst-/Tiefstwerte,
-  // Tagesregensumme) — siehe tagesRisiko().
+  // Tagesregensumme) — siehe tagesRisiko(). Luftfeuchte gibt es nur als
+  // Momentanwert, die fließt deshalb zusätzlich über den aktuellen Wert ein.
   const heute = weather?.forecast?.[0];
-  const warn = heute ? tagesRisiko(heute) : betonCheck(weather);
+  const warn = heute
+    ? [...new Set([...tagesRisiko(heute), ...betonCheck({ humidity: weather.humidity })])]
+    : betonCheck(weather);
   const ok = warn.length === 0;
   const risikoHeute = heuteStunden ? naechstesRisiko(heuteStunden) : null;
   const empfehlung = stundenDaten ? besteZeitfenster(stundenDaten) : null;
@@ -218,7 +226,7 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
           ["Temperatur (heute)",   `${heute.min}° – ${heute.max}°C`, heute.min >= 5 && heute.max <= 30, "5°C – 30°C"],
           ["Wind (heute, max.)",   `${heute.wind} km/h`,             heute.wind <= 40,                  "max. 40 km/h"],
           ["Niederschlag (heute)", `${heute.rain} mm`,               heute.rain <= 5,                   "max. 5 mm"],
-          ["Luftfeuchte (heute, max.)", `${heute.humidity}%`,        heute.humidity <= 90,              "max. 90%"],
+          ["Luftfeuchte (jetzt)",  `${weather.humidity}%`,           weather.humidity <= 90,             "max. 90%"],
         ].map(([k,v,ok,limit]) => (
           <div key={k} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${'var(--border)'}` }}>
             <div>
