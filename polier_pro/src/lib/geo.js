@@ -55,17 +55,22 @@ export async function holeWettervorhersage(ort, plz) {
 // Stündliche Vorhersage für einen einzelnen Tag — nutzt precipitation_probability
 // von Open-Meteo, eine ECHTE, vom Wettermodell berechnete Regenwahrscheinlichkeit
 // (kein erfundener Wert). Für die Betonage-Zeitfenster-Empfehlung.
-export async function holeStuendlicheVorhersage(ort, plz, datumISO) {
-  if (!ort?.trim() && !plz?.trim()) return null;
-  const ziel = plz?.trim() ? await geocodePLZ(plz, ort) : await geocodeAdresse(ort);
-  if (!ziel) return null;
+//
+// Nimmt lat/lon statt Ort/PLZ entgegen — der Standort ist zu diesem
+// Zeitpunkt (Tages-Aufklappen im schon geladenen Wetter-Widget) bereits
+// bekannt. Ein erneutes Geocoding hier hätte nur einen unnötigen
+// Zusatz-Request an Nominatim bedeutet, der bei dessen strikten
+// Rate-Limits ("nicht verfügbar" trotz eigentlich funktionierendem
+// Wetter-Widget) unabhängig vom eigentlichen Wetterabruf scheitern kann.
+export async function holeStuendlicheVorhersage(lat, lon, datumISO) {
+  if (lat == null || lon == null) return null;
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${ziel.lat}&longitude=${ziel.lon}`
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
       + `&hourly=temperature_2m,precipitation_probability,precipitation,wind_speed_10m,weather_code`
       + `&timezone=Europe%2FBerlin&start_date=${datumISO}&end_date=${datumISO}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
     const data = await res.json();
-    if (!data.hourly?.time) return null;
+    if (!res.ok || !data.hourly?.time) return null;
     return data.hourly.time.map((zeit, i) => ({
       stunde: new Date(zeit).getHours(),
       temp:   Math.round(data.hourly.temperature_2m[i]),
