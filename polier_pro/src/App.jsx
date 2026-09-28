@@ -967,10 +967,10 @@ export default function PolierApp() {
     { id:"kosten",        icon:"💰",  label:"Kosten",      rollen:["administrator","geschaeftsfuehrer"] },
     { id:"wetter",        icon:"🌤️", label:"Wetter",      rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
     { id:"kolonnen",      icon:"👷",  label:"Kolonnen",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
-    { id:"tagebuch",      icon:"📋",  label:"Tagebuch",    rollen:["administrator","geschaeftsfuehrer","polier","vorarbeiter"] },
+    { id:"tagebuch",      icon:"📋",  label:"Tagebuch",    rollen:["administrator","geschaeftsfuehrer","polier"] },
     { id:"stempeln",      icon:"⏱️",  label:"Stempeln",    rollen:["administrator","polier","vorarbeiter","facharbeiter"] },
     { id:"stunden",       icon:"📊",  label:"Stunden",     rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
-    { id:"ki_frage",      icon:"💬",  label:"KI fragen",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
+    { id:"ki_frage",      icon:"💬",  label:"KI fragen",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     { id:"simulation",    icon:"🧪",  label:"Simulation",  rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     { id:"angebot",       icon:"📄",  label:"Angebot",     rollen:["administrator","geschaeftsfuehrer"] },
     { id:"admin_params",  icon:"⚙️",  label:"Parameter",   rollen:["administrator"] },
@@ -1072,6 +1072,7 @@ export default function PolierApp() {
           </div>
         )}
         {tab === "dashboard" && <DashboardView aufgaben={felder} kolonnen={kolonnen} sbConnected={sbConnected} projekt={projekt}
+            erlaubteTabs={TABS.map(t => t.id)}
             onNavigate={(tabId, filter) => {
               if (filter) setAufgabenFilter(filter);
               else setAufgabenFilter("alle");
@@ -1108,7 +1109,13 @@ export default function PolierApp() {
                 : projekte
               : projekte}
             session={auth.session} kolonnen={kolonnen} aufgaben={felder} />}
-        {tab === "stunden"       && <StundenExportView profil={aktiveProfil} session={auth.session} projekte={projekte} darfAlleSehen={["administrator","geschaeftsfuehrer","polier"].includes(aktiveRolle)} />}
+        {tab === "stunden"       && <StundenExportView profil={aktiveProfil} session={auth.session} projekte={projekte}
+            // darfAlleSehen steuert hier nur die Mitarbeiter-Filter-Anzeige
+            // innerhalb der bereits per RLS eingeschränkten Treffermenge —
+            // bei Vorarbeiter ist das durch die zeitbuchungen-Policy schon
+            // auf die eigene Kolonne begrenzt, "alle" heißt für ihn also
+            // "alle aus seiner Kolonne", nicht firmenweit.
+            darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} session={auth.session} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
         {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
