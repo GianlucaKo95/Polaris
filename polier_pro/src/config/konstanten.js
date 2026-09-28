@@ -247,6 +247,7 @@ export const PLAN_CONFIG = {
 };
 
 export const ONBOARDING_KEY = "polier_pro_onboarding_done";
+export const ONBOARDING_DRAFT_KEY = "polier_pro_onboarding_draft";
 
 export const ROLLEN = {
   administrator: {
