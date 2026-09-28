@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { Star, Building2, Wrench, HardHat, PartyPopper, ClipboardList, CloudSun, FileText, Info, Check, ArrowLeft, ArrowRight, Rocket, Sparkles, Search, TriangleAlert, ExternalLink } from "lucide-react";
 import { ONBOARDING_KEY, ALLE_GEWERKE } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
+import { Spinner } from "../components/Spinner.jsx";
 import { kiFirmenRecherche } from "../lib/ai.js";
 
 export function OnboardingFlow({ onComplete, session }) {
@@ -233,7 +234,7 @@ export function OnboardingFlow({ onComplete, session }) {
                     fontWeight:700, fontSize:13, cursor: firma.name.trim() ? "pointer" : "default",
                     fontFamily:"inherit", display:"flex", alignItems:"center", gap:6,
                     whiteSpace:"nowrap" }}>
-                  <Search size={14} /> {kiLaedt ? "Suche…" : "Recherchieren"}
+                  {kiLaedt ? <Spinner size={14} /> : <Search size={14} />} {kiLaedt ? "Suche…" : "Recherchieren"}
                 </button>
               </div>
               {!firma.name.trim() && (

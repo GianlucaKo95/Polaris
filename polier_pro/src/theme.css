@@ -116,3 +116,11 @@ input, textarea, select {
   scroll-margin-top: calc(70px + env(safe-area-inset-top));
 }
 .num { font-variant-numeric: tabular-nums; }
+
+/* Rotierender Lade-Indikator (Spinner.jsx) — global statt pro Komponente
+   definiert, weil der Spinner an vielen Stellen gleichzeitig auftaucht
+   (mehrere KI-Buttons, Formulare) und doppelte @keyframes-Blöcke pro
+   Instanz unnötig sind. */
+@keyframes polaris-spin {
+  to { transform: rotate(360deg); }
+}

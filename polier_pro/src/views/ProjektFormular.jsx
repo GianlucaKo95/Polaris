@@ -5,6 +5,7 @@ import { leerProjekt } from "../lib/utils.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { PROJEKTTYPEN, ALLE_GEWERKE } from "../config/konstanten.js";
 import { DiktierFeld } from "../components/DiktierFeld.jsx";
+import { Spinner } from "../components/Spinner.jsx";
 import { kiBaustelleAnlegen } from "../lib/ai.js";
 
 export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherFehler = "", session, istAdmin = false }) {
@@ -106,8 +107,9 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
               style={{ width:"100%", background: kiDiktat.trim() && !kiLaedt ? "var(--yellow)" : "var(--surface2)",
                 color: kiDiktat.trim() && !kiLaedt ? "#1a1200" : "var(--muted)",
                 border:"none", borderRadius:8, padding:"9px 0", fontWeight:700, fontSize:12.5,
-                cursor: kiDiktat.trim() && !kiLaedt ? "pointer" : "default", fontFamily:"inherit" }}>
-              {kiLaedt ? "Erkenne Felder…" : "Felder mit KI übernehmen"}
+                cursor: kiDiktat.trim() && !kiLaedt ? "pointer" : "default", fontFamily:"inherit",
+                display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+              {kiLaedt ? <><Spinner size={12} /> Erkenne Felder…</> : "Felder mit KI übernehmen"}
             </button>
             {kiErfolg && (
               <div style={{ color:"var(--green)", fontSize:11.5, marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
@@ -258,8 +260,9 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
               color: valid ? "#1a1200" : "var(--muted)",
               border:"none", borderRadius:12, padding:14, fontWeight:800,
               cursor: valid && !wirdGespeichert ? "pointer" : "default", fontSize:15,
-              fontFamily:"inherit" }}>
-            {wirdGespeichert ? "Speichert…" : "Speichern"}
+              fontFamily:"inherit",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+            {wirdGespeichert ? <><Spinner size={14} /> Speichert…</> : "Speichern"}
           </button>
         </div>
       </div>

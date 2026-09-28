@@ -5,6 +5,7 @@ import { ALLE_GEWERKE, ONBOARDING_KEY } from "../config/konstanten.js";
 import { Chip } from "../components/Chip.jsx";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { SwipeToDelete } from "../components/SwipeToDelete.jsx";
+import { Spinner } from "../components/Spinner.jsx";
 
 export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboardingReset, session = null, firmaId = null }) {
   const [screen, setScreen]     = useState("home"); // home | eigene | subs | subEdit
@@ -267,8 +268,9 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
 
           <button onClick={firmaSpeichern} disabled={speichern}
             style={{ width:"100%", background: "var(--yellow)", color:"#1C2027", border:"none",
-              borderRadius:10, padding:14, fontWeight:700, cursor:"pointer", fontSize:15 }}>
-            {speichern ? "Speichert…" : "Speichern"}
+              borderRadius:10, padding:14, fontWeight:700, cursor:"pointer", fontSize:15,
+              display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+            {speichern ? <><Spinner size={14} /> Speichert…</> : "Speichern"}
           </button>
         </div>
       )}
@@ -366,8 +368,9 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
             <button disabled={!editSub.name || subSpeichert} onClick={() => subSpeichern(editSub)}
               style={{ flex:2, background: editSub.name ? "var(--yellow)" : "var(--border)",
                 color: editSub.name ? "#1C2027" : "var(--muted)",
-                border:"none", borderRadius:10, padding:13, fontWeight:700, cursor:"pointer", fontSize:15 }}>
-              {subSpeichert ? "Speichert…" : "Speichern"}
+                border:"none", borderRadius:10, padding:13, fontWeight:700, cursor:"pointer", fontSize:15,
+                display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+              {subSpeichert ? <><Spinner size={14} /> Speichert…</> : "Speichern"}
             </button>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Euro, Check } from "lucide-react";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { sbProjektKostenSpeichern } from "../lib/supabase.js";
+import { Spinner } from "../components/Spinner.jsx";
 
 export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, session, onKostenGespeichert }) {
   const [budgetPos, setBudgetPos] = useState(projekt?.budget_positionen?.length ? projekt.budget_positionen : [
@@ -131,7 +132,7 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, session
           cursor: speichern ? "default" : "pointer", fontSize:15,
           fontFamily:"inherit", marginTop:4,
           display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-        {gespeichertOk ? <><Check size={16} /> Gespeichert</> : speichern ? "Speichert…" : "Speichern"}
+        {gespeichertOk ? <><Check size={16} /> Gespeichert</> : speichern ? <><Spinner size={14} /> Speichert…</> : "Speichern"}
       </button>
     </div>
   );

@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Bot, X, CircleX, Square, Mic, Sparkles, ClipboardList, CircleCheckBig, TriangleAlert, Wrench, CloudRain, ArrowLeft } from "lucide-react";
 import { kiTagesabschluss } from "../lib/ai.js";
+import { Spinner } from "../components/Spinner.jsx";
 import { AUFGABEN_TYPEN, AUFGABEN_PRIO } from "../config/konstanten.js";
 import { useBackButton } from "../hooks/useBackButton.js";
 
@@ -135,7 +136,7 @@ export function KITagesabschlussButton({ projekt, kolonnen, wetter, onErgebnis, 
                     fontSize:15, cursor: diktat.trim() ? "pointer" : "default",
                     fontFamily:"inherit",
                     display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-                  {laden ? "KI analysiert…" : <><Sparkles size={15} /> Analysieren & Vorschlag erstellen</>}
+                  {laden ? <><Spinner size={15} /> KI analysiert…</> : <><Sparkles size={15} /> Analysieren & Vorschlag erstellen</>}
                 </button>
               </>
             ) : (
