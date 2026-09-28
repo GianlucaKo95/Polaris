@@ -1,9 +1,10 @@
 import { useState, useRef } from "react";
-import { Star, Building2, Wrench, HardHat, PartyPopper, ClipboardList, CloudSun, FileText, Info, Check, ArrowLeft, ArrowRight, Rocket } from "lucide-react";
+import { Star, Building2, Wrench, HardHat, PartyPopper, ClipboardList, CloudSun, FileText, Info, Check, ArrowLeft, ArrowRight, Rocket, Sparkles, Search, TriangleAlert, ExternalLink } from "lucide-react";
 import { ONBOARDING_KEY, ALLE_GEWERKE } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
+import { kiFirmenRecherche } from "../lib/ai.js";
 
-export function OnboardingFlow({ onComplete }) {
+export function OnboardingFlow({ onComplete, session }) {
   const [schritt, setSchritt] = useState(0);
   const [firma, setFirma] = useState({
     name:"", strasse:"", plz:"", ort:"", telefon:"", email:"",
@@ -11,6 +12,52 @@ export function OnboardingFlow({ onComplete }) {
   });
   const [ersterPolier, setErsterPolier] = useState({ name:"", telefon:"", email:"" });
   const logoRef = useRef(null);
+
+  // KI-Firmenrecherche: füllt die Felder unten vor, ersetzt sie aber nicht
+  // unwidersprochen — kiFelder merkt sich, welche Werte von der KI stammen
+  // (Badge zur Kennzeichnung), kiHinweis/kiQuellen zeigen offen, was die KI
+  // NICHT sicher finden konnte bzw. woher ein Fund stammt, statt es einfach
+  // zu verschweigen. Der Admin sieht danach ganz normal das bestehende
+  // Formular und kann jedes Feld vor dem Speichern noch korrigieren
+  // (Human-in-the-Loop) — es wird nichts automatisch übernommen.
+  const [kiOrt,     setKiOrt]     = useState("");
+  const [kiLaedt,   setKiLaedt]   = useState(false);
+  const [kiFehler,  setKiFehler]  = useState("");
+  const [kiHinweis, setKiHinweis] = useState("");
+  const [kiQuellen, setKiQuellen] = useState([]);
+  const [kiFelder,  setKiFelder]  = useState(new Set());
+  const [kiGelaufen,setKiGelaufen]= useState(false);
+
+  async function kiRecherche() {
+    if (!firma.name.trim() || kiLaedt) return;
+    setKiLaedt(true); setKiFehler(""); setKiHinweis(""); setKiQuellen([]);
+    try {
+      const { firma: gefunden, quellen, hinweis } = await kiFirmenRecherche(firma.name.trim(), kiOrt.trim(), session);
+      const neueFelder = new Set();
+      setFirma(p => {
+        const next = { ...p };
+        if (gefunden.name?.trim())              { next.name = gefunden.name.trim(); }
+        if (gefunden.adresse)                    { next.strasse = gefunden.adresse; neueFelder.add("strasse"); }
+        if (gefunden.plz)                        { next.plz = gefunden.plz; neueFelder.add("plz"); }
+        if (gefunden.ort)                        { next.ort = gefunden.ort; neueFelder.add("ort"); }
+        if (gefunden.telefon)                    { next.telefon = gefunden.telefon; neueFelder.add("telefon"); }
+        if (gefunden.email)                      { next.email = gefunden.email; neueFelder.add("email"); }
+        if (gefunden.geschaeftsfuehrer)          { next.geschaeftsfuehrer = gefunden.geschaeftsfuehrer; neueFelder.add("geschaeftsfuehrer"); }
+        if (Array.isArray(gefunden.gewerke) && gefunden.gewerke.length) { next.gewerke = gefunden.gewerke; }
+        // steuernummer bewusst NIE von der KI übernehmen, auch falls
+        // irgendwann doch etwas zurückkäme — öffentlich praktisch nie
+        // verlässlich auffindbar, das bleibt Handeingabe.
+        return next;
+      });
+      setKiFelder(neueFelder);
+      setKiHinweis(hinweis || "");
+      setKiQuellen(quellen || []);
+      setKiGelaufen(true);
+    } catch (e) {
+      setKiFehler(e.message || "Recherche fehlgeschlagen.");
+    }
+    setKiLaedt(false);
+  }
 
   const SCHRITTE = [
     { label:"Willkommen", icon:Star },
@@ -159,9 +206,77 @@ export function OnboardingFlow({ onComplete }) {
           <div>
             <div style={{ fontWeight:800, fontSize:22, color:"var(--text)",
               marginBottom:4, display:"flex", alignItems:"center", gap:9 }}><Building2 size={20} /> Dein Unternehmen</div>
-            <div style={{ color:"var(--muted)", fontSize:13, marginBottom:17,
+            <div style={{ color:"var(--muted)", fontSize:13, marginBottom:14,
               lineHeight:1.5 }}>
               Diese Daten erscheinen auf PDFs und im Bautagebuch.
+            </div>
+
+            {/* KI-Firmenrecherche — optional, füllt die Felder unten vor */}
+            <div style={{ background:"var(--surface)", borderRadius:14,
+              padding:14, marginBottom:17, border:"1.5px solid var(--yellow)" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:7,
+                color:"var(--text)", fontWeight:700, fontSize:13.5, marginBottom:8 }}>
+                <Sparkles size={15} style={{ color:"var(--yellow)" }} /> Mit KI ausfüllen
+              </div>
+              <div style={{ color:"var(--muted)", fontSize:12, lineHeight:1.5, marginBottom:10 }}>
+                Name eingeben, optional den Ort — die KI durchsucht das Web nach euren
+                öffentlichen Firmendaten. Nichts wird erfunden: was sie nicht sicher
+                findet, bleibt leer, damit du es selbst einträgst.
+              </div>
+              <div style={{ display:"flex", gap:8, marginBottom:kiFehler||kiGelaufen ? 10 : 0 }}>
+                <input value={kiOrt} onChange={e=>setKiOrt(e.target.value)}
+                  placeholder="Ort (optional)" style={{ ...inputStyle(), marginTop:0, flex:1 }} />
+                <button onClick={kiRecherche} disabled={!firma.name.trim() || kiLaedt}
+                  style={{ background: firma.name.trim() ? "var(--yellow)" : "var(--surface2)",
+                    color: firma.name.trim() ? "#1a1200" : "var(--muted)",
+                    border:"none", borderRadius:10, padding:"0 16px",
+                    fontWeight:700, fontSize:13, cursor: firma.name.trim() ? "pointer" : "default",
+                    fontFamily:"inherit", display:"flex", alignItems:"center", gap:6,
+                    whiteSpace:"nowrap" }}>
+                  <Search size={14} /> {kiLaedt ? "Suche…" : "Recherchieren"}
+                </button>
+              </div>
+              {!firma.name.trim() && (
+                <div style={{ color:"var(--muted)", fontSize:11, marginTop:6 }}>
+                  Erst den Firmennamen unten eintragen.
+                </div>
+              )}
+              {kiFehler && (
+                <div style={{ display:"flex", gap:6, alignItems:"flex-start",
+                  color:"var(--red)", fontSize:12, lineHeight:1.5 }}>
+                  <TriangleAlert size={13} style={{ flexShrink:0, marginTop:2 }} /> {kiFehler}
+                </div>
+              )}
+              {kiGelaufen && !kiFehler && (
+                <div>
+                  {kiHinweis && (
+                    <div style={{ display:"flex", gap:6, alignItems:"flex-start",
+                      background:"var(--ybg)", border:"1px solid var(--yellow)", borderRadius:10,
+                      padding:"8px 10px", color:"var(--ydark)", fontSize:12, lineHeight:1.5 }}>
+                      <Info size={13} style={{ flexShrink:0, marginTop:2 }} /> {kiHinweis}
+                    </div>
+                  )}
+                  {kiQuellen.length > 0 && (
+                    <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:4 }}>
+                      <div style={{ color:"var(--muted)", fontSize:10, fontWeight:700,
+                        textTransform:"uppercase", letterSpacing:0.6 }}>Quellen</div>
+                      {kiQuellen.map((q,i) => (
+                        <a key={i} href={q} target="_blank" rel="noopener noreferrer"
+                          style={{ color:"var(--blue)", fontSize:11.5, display:"flex",
+                            alignItems:"center", gap:4, textDecoration:"none",
+                            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          <ExternalLink size={10} style={{ flexShrink:0 }} /> {q}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  {kiFelder.size === 0 && !kiHinweis && (
+                    <div style={{ color:"var(--muted)", fontSize:12 }}>
+                      Keine öffentlichen Daten sicher gefunden — bitte alles manuell eintragen.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Logo */}
@@ -194,14 +309,32 @@ export function OnboardingFlow({ onComplete }) {
               ["Telefon",        "telefon",            "+49 89 123456"],
               ["E-Mail",         "email",              "info@firma.de"],
               ["Steuernummer",   "steuernummer",       "123/456/78900"],
-            ].map(([label, key, ph]) => (
-              <div key={key} style={{ marginBottom:10 }}>
-                <Label>{label}</Label>
-                <input value={firma[key]||""}
-                  onChange={e => setFirma(p=>({...p,[key]:e.target.value}))}
-                  placeholder={ph} style={inputStyle()} />
-              </div>
-            ))}
+            ].map(([label, key, ph]) => {
+              const vonKi = kiFelder.has(key);
+              const nichtGefunden = kiGelaufen && !firma[key] && key !== "steuernummer";
+              return (
+                <div key={key} style={{ marginBottom:10 }}>
+                  <Label>
+                    {label}
+                    {vonKi && (
+                      <span style={{ marginLeft:6, color:"var(--yellow)", fontWeight:700,
+                        display:"inline-flex", alignItems:"center", gap:2 }}>
+                        <Sparkles size={10} /> KI
+                      </span>
+                    )}
+                  </Label>
+                  <input value={firma[key]||""}
+                    onChange={e => setFirma(p=>({...p,[key]:e.target.value}))}
+                    placeholder={ph} style={{ ...inputStyle(),
+                      border: nichtGefunden ? "1.5px solid var(--muted)" : inputStyle().border }} />
+                  {nichtGefunden && (
+                    <div style={{ color:"var(--muted)", fontSize:11, marginTop:3 }}>
+                      Von der KI nicht gefunden — bitte prüfen.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 

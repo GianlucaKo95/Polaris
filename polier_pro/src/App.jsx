@@ -458,11 +458,30 @@ export default function PolierApp() {
     if (auth.session?.access_token && !auth.profil?.firma_id) {
       try {
         const client = sbClientMitToken(auth.session);
-        const { error } = await client.rpc("firma_registrieren", {
+        const { data: neueFirmaId, error } = await client.rpc("firma_registrieren", {
           p_user_id:    auth.session.user?.id,
           p_firma_name: firmaDaten?.name || "Meine Firma",
           p_email:      auth.session.user?.email || "",
         });
+        // firma_registrieren speichert absichtlich nur Name/E-Mail (schlanke
+        // RPC-Signatur) — alles andere, was der Onboarding-Assistent erfragt
+        // hat (Adresse, Gewerke, KI-Recherche-Ergebnisse …), sonst wortlos
+        // verloren ginge es hier per Update nach, statt nur lokal im State
+        // zu stehen und beim gleich folgenden Reload zu verschwinden.
+        if (!error && neueFirmaId) {
+          await client.from("firmen").update({
+            name:              firmaDaten?.name || "",
+            adresse:           firmaDaten?.strasse || "",
+            plz:               firmaDaten?.plz || "",
+            ort:               firmaDaten?.ort || "",
+            telefon:           firmaDaten?.telefon || "",
+            email:             firmaDaten?.email || "",
+            steuernummer:      firmaDaten?.steuernummer || "",
+            logo_url:          firmaDaten?.logo || null,
+            geschaeftsfuehrer: firmaDaten?.geschaeftsfuehrer || "",
+            gewerke:           firmaDaten?.gewerke || [],
+          }).eq("id", neueFirmaId);
+        }
         if (!error) {
           setOnboardingDone(true);
           // auth.profil kennt die neue firma_id erst nach einem frischen
@@ -485,7 +504,7 @@ export default function PolierApp() {
   // Onboarding anzeigen wenn noch nicht abgeschlossen
 
   if (!onboardingDone) {
-    return <OnboardingFlow onComplete={handleOnboardingComplete} />;
+    return <OnboardingFlow onComplete={handleOnboardingComplete} session={auth.session} />;
   }
 
   const projekt = projekte.find(p => p.id === aktivId) || null;

@@ -313,3 +313,29 @@ Antworte NUR mit diesem JSON (kein Markdown, keine Erklärungen):
     return null;
   }
 }
+
+// Läuft VOR jeder Firmenanlage — es gibt also noch keine firma_id und
+// keinen firmenspezifischen Anthropic-Key, deshalb ein eigener Endpunkt
+// (nicht ki-proxy): firma-recherche nutzt einen Plattform-Key, der laut
+// Server serverseitig nur für Nutzer OHNE firma_id funktioniert, und
+// durchsucht das Web über Anthropics Websuche-Werkzeug statt nur zu raten.
+// Nicht gefundene Felder kommen als null zurück (nie erfunden) — der
+// Aufrufer (OnboardingFlow) markiert sie entsprechend zur manuellen Prüfung.
+export async function kiFirmenRecherche(name, ort, session) {
+  if (!session?.access_token) {
+    throw new Error("Keine gültige Sitzung für die Firmenrecherche.");
+  }
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/firma-recherche`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ name, ort }),
+  });
+  if (!res.ok) {
+    const fehlerBody = await res.json().catch(() => ({}));
+    throw new Error(fehlerBody?.error || `Firmenrecherche fehlgeschlagen (${res.status})`);
+  }
+  return res.json(); // { firma, quellen, hinweis }
+}
