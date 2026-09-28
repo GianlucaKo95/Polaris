@@ -541,17 +541,17 @@ export default function PolierApp() {
     const neueIds = new Set(neu.map(a => a.id));
 
     setSpeicherFehler("");
-    let fehler = false;
+    let fehlermeldung = "";
     const gespeichert = [];
     for (const a of neu) {
       const istNeu = !alteIds.has(a.id) || typeof a.id !== "number" || a.id > 1e12;
-      const ergebnis = await sbAufgabeSpeichern(a, aktivId, auth.session, istNeu);
-      if (!ergebnis) { fehler = true; gespeichert.push(a); continue; }
+      const { daten, fehler } = await sbAufgabeSpeichern(a, aktivId, auth.session, istNeu);
+      if (!daten) { fehlermeldung = fehlermeldung || fehler; gespeichert.push(a); continue; }
       // Nach einem Insert die client-seitige Date.now()-ID durch die echte
       // Server-ID ersetzen — sonst hält sie jede Folge-Bearbeitung weiter
       // für "neu" (id > 1e12) und erzeugt bei jedem Speichern einen neuen
       // Datensatz statt eines Updates (genau der Kolonnen-Vervielfachungs-Bug).
-      gespeichert.push(istNeu ? { ...a, id: ergebnis.id } : a);
+      gespeichert.push(istNeu ? { ...a, id: daten.id } : a);
     }
     for (const alteId of alteIds) {
       if (!neueIds.has(alteId)) await sbAufgabeLoeschen(alteId, auth.session);
@@ -560,8 +560,10 @@ export default function PolierApp() {
     // Die lokale Ansicht wird trotzdem aktualisiert (kein Datenverlust in der
     // UI), aber der Nutzer erfährt, dass die Änderung nicht auf dem Server
     // angekommen ist — vorher wurde ein fehlgeschlagenes Speichern still als
-    // Erfolg behandelt.
-    if (fehler) setSpeicherFehler("Eine Aufgabe konnte nicht gespeichert werden — bitte Verbindung prüfen und erneut versuchen.");
+    // Erfolg behandelt. Die Meldung kommt jetzt konkret vom Server (z.B.
+    // "Keine Berechtigung für diese Aktion"), statt pauschal auf die
+    // Verbindung zu verweisen — das war bei RLS-Ablehnungen irreführend.
+    if (fehlermeldung) setSpeicherFehler(`Eine Aufgabe konnte nicht gespeichert werden: ${fehlermeldung}`);
   }
 
   // Facharbeiter schlagen eine Aufgabe nur als erledigt vor (Status
@@ -571,8 +573,8 @@ export default function PolierApp() {
   // Full-Row-Save würde an der RLS scheitern.
   async function aufgabeVorschlagen(a) {
     setSpeicherFehler("");
-    const ok = await sbAufgabeVorschlagen(a.id, auth.session);
-    if (!ok) { setSpeicherFehler("Vorschlag konnte nicht gespeichert werden — bitte Verbindung prüfen."); return; }
+    const { ok, fehler } = await sbAufgabeVorschlagen(a.id, auth.session);
+    if (!ok) { setSpeicherFehler(fehler || "Vorschlag konnte nicht gespeichert werden."); return; }
     setAktProjektAufgaben(prev => prev.map(x => x.id === a.id
       ? { ...x, status:"zur_pruefung", vorschlag_von: auth.session?.user?.id, vorschlag_am: new Date().toISOString() }
       : x));
@@ -580,8 +582,8 @@ export default function PolierApp() {
 
   async function aufgabeEntscheiden(a, akzeptiert) {
     setSpeicherFehler("");
-    const ok = await sbAufgabeVorschlagEntscheiden(a.id, akzeptiert, auth.session);
-    if (!ok) { setSpeicherFehler("Entscheidung konnte nicht gespeichert werden — bitte Verbindung prüfen."); return; }
+    const { ok, fehler } = await sbAufgabeVorschlagEntscheiden(a.id, akzeptiert, auth.session);
+    if (!ok) { setSpeicherFehler(fehler || "Entscheidung konnte nicht gespeichert werden."); return; }
     setAktProjektAufgaben(prev => prev.map(x => x.id === a.id
       ? { ...x, status: akzeptiert ? "abgeschlossen" : "offen", vorschlag_von:null, vorschlag_am:null }
       : x));
@@ -592,15 +594,15 @@ export default function PolierApp() {
     const neu = typeof fn === "function" ? fn(berichte) : fn;
     const alteIds = new Set(berichte.map(b => b.id));
     setSpeicherFehler("");
-    let fehler = false;
+    let fehlermeldung = "";
     for (const b of neu) {
       if (!alteIds.has(b.id)) {
-        const ok = await sbBerichtSpeichern(b, aktivId, auth.session);
-        if (!ok) fehler = true;
+        const { daten, fehler } = await sbBerichtSpeichern(b, aktivId, auth.session);
+        if (!daten) fehlermeldung = fehlermeldung || fehler;
       }
     }
     setAktProjektBerichte(neu);
-    if (fehler) setSpeicherFehler("Der Tagesbericht konnte nicht gespeichert werden — bitte Verbindung prüfen und erneut versuchen.");
+    if (fehlermeldung) setSpeicherFehler(`Der Tagesbericht konnte nicht gespeichert werden: ${fehlermeldung}`);
   }
 
   // ── Kolonnen: laden + speichern direkt gegen Supabase ──
@@ -610,20 +612,20 @@ export default function PolierApp() {
     const neueIds = new Set(neu.map(k => k.id));
 
     setSpeicherFehler("");
-    let fehler = false;
+    let fehlermeldung = "";
     const gespeichert = [];
     for (const k of neu) {
       const istNeu = !alteIds.has(k.id) || typeof k.id !== "number" || k.id > 1e12;
-      const ergebnis = await sbKolonneSpeichern(k, aktivId, auth.session, istNeu);
-      if (!ergebnis) { fehler = true; gespeichert.push(k); continue; }
+      const { daten, fehler } = await sbKolonneSpeichern(k, aktivId, auth.session, istNeu);
+      if (!daten) { fehlermeldung = fehlermeldung || fehler; gespeichert.push(k); continue; }
       // Nach einem Insert die client-seitige Date.now()-ID durch die echte
       // Server-ID ersetzen — sonst hält sie jede Folge-Bearbeitung (z.B.
       // "Mitarbeiter hinzufügen") weiter für "neu" (id > 1e12) und erzeugt
       // bei jedem Speichern einen weiteren Datensatz statt eines Updates.
       // Das war der Grund für die Kolonnen-Vervielfachung im UI.
-      gespeichert.push(istNeu ? { ...k, id: ergebnis.id } : k);
+      gespeichert.push(istNeu ? { ...k, id: daten.id } : k);
     }
-    if (fehler) setSpeicherFehler("Eine Kolonne konnte nicht gespeichert werden — bitte Verbindung prüfen und erneut versuchen.");
+    if (fehlermeldung) setSpeicherFehler(`Eine Kolonne konnte nicht gespeichert werden: ${fehlermeldung}`);
     for (const alteId of alteIds) {
       if (!neueIds.has(alteId)) await sbKolonneLoeschen(alteId, auth.session);
     }
