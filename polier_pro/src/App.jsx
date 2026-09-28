@@ -981,9 +981,16 @@ export default function PolierApp() {
 
   // ── Navigation gruppieren: Hauptfunktionen sichtbar, Rest unter "Mehr" ──
   const HAUPT_TAB_IDS = ["dashboard", "aufgaben", "tagebuch", "kolonnen", "stempeln"];
-  const hauptTabs = TABS.filter(t => HAUPT_TAB_IDS.includes(t.id))
+  let hauptTabs = TABS.filter(t => HAUPT_TAB_IDS.includes(t.id))
     .sort((a,b) => HAUPT_TAB_IDS.indexOf(a.id) - HAUPT_TAB_IDS.indexOf(b.id));
-  const mehrTabs  = TABS.filter(t => !HAUPT_TAB_IDS.includes(t.id));
+  let mehrTabs  = TABS.filter(t => !HAUPT_TAB_IDS.includes(t.id));
+  // Ein "Mehr"-Menü mit nur einem Eintrag ist ein unnötiger Umweg (z.B.
+  // Facharbeiter: dahinter versteckte sich bislang nur "Mein Profil") —
+  // dann direkt in die Hauptleiste zeigen statt hinter einem Tippschritt.
+  if (mehrTabs.length === 1) {
+    hauptTabs = [...hauptTabs, ...mehrTabs];
+    mehrTabs = [];
+  }
   const aktivInMehr = mehrTabs.some(t => t.id === tab);
   const TAB_ICONS = { dashboard:LayoutGrid, aufgaben:CircleCheckBig, tagebuch:NotebookPen,
     kolonnen:Users, stempeln:Clock, gantt:Calendar, kosten:Euro, wetter:CloudSun,
