@@ -1098,7 +1098,9 @@ export default function PolierApp() {
           />}
         {tab === "aufgaben"      && <AufgabenView aufgaben={felder} setAufgaben={setFelder} kolonnen={kolonnen} sbConnected={sbConnected} darfBearbeiten={rolleConfig?.kannAufgabenBearbeiten !== false} initialFilter={aufgabenFilter}
             initialEditId={aufgabenEditId}
-            kannVorschlagen={aktiveRolle === "facharbeiter"} onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}
+            kannVorschlagen={["facharbeiter","vorarbeiter"].includes(aktiveRolle)}
+            darfEntscheiden={["administrator","polier","bauleiter"].includes(aktiveRolle)}
+            onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}
             zeitbuchungen={zeitbuchungen} projekt={projekt} />}
         {tab === "kosten"        && <KostenView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "stempeln"      && <StempeluhrView profil={aktiveProfil}
