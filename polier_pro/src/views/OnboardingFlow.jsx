@@ -1,11 +1,11 @@
 import { useState, useRef } from "react";
-import { Star, Building2, Wrench, HardHat, PartyPopper, ClipboardList, CloudSun, FileText, Info, Check, ArrowLeft, ArrowRight, Rocket, Sparkles, Search, TriangleAlert, ExternalLink } from "lucide-react";
+import { Star, Building2, Wrench, HardHat, PartyPopper, ClipboardList, CloudSun, FileText, Info, Check, ArrowLeft, ArrowRight, Rocket, Sparkles, Search, TriangleAlert, ExternalLink, LogOut } from "lucide-react";
 import { ONBOARDING_KEY, ALLE_GEWERKE } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { kiFirmenRecherche } from "../lib/ai.js";
 
-export function OnboardingFlow({ onComplete, session }) {
+export function OnboardingFlow({ onComplete, session, onAbmelden }) {
   const [schritt, setSchritt] = useState(0);
   const [firma, setFirma] = useState({
     name:"", strasse:"", plz:"", ort:"", telefon:"", email:"",
@@ -122,8 +122,19 @@ export function OnboardingFlow({ onComplete, session }) {
               Einrichtung
             </div>
           </div>
-          <div style={{ color:"var(--muted)", fontSize:12, fontWeight:600 }}>
-            {schritt + 1} / {SCHRITTE.length}
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ color:"var(--muted)", fontSize:12, fontWeight:600 }}>
+              {schritt + 1} / {SCHRITTE.length}
+            </div>
+            {onAbmelden && (
+              <button onClick={onAbmelden} title="Abmelden"
+                style={{ width:32, height:32, background:"var(--surface2)",
+                  border:"1px solid var(--border)", borderRadius:8,
+                  color:"var(--muted)", cursor:"pointer",
+                  display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <LogOut size={15} />
+              </button>
+            )}
           </div>
         </div>
 

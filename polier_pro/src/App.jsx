@@ -504,7 +504,7 @@ export default function PolierApp() {
   // Onboarding anzeigen wenn noch nicht abgeschlossen
 
   if (!onboardingDone) {
-    return <OnboardingFlow onComplete={handleOnboardingComplete} session={auth.session} />;
+    return <OnboardingFlow onComplete={handleOnboardingComplete} session={auth.session} onAbmelden={abmelden} />;
   }
 
   const projekt = projekte.find(p => p.id === aktivId) || null;
