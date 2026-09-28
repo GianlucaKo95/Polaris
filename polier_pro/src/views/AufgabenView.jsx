@@ -9,7 +9,8 @@ import { AUFGABEN_STATUS, AUFGABEN_TYPEN } from "../config/konstanten.js";
 import { useBackButton } from "../hooks/useBackButton.js";
 
 export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, darfBearbeiten = true, initialFilter = "alle",
-  initialEditId = null, kannVorschlagen = false, onVorschlagen, onEntscheiden, zeitbuchungen = [], projekt }) {
+  initialEditId = null, kannVorschlagen = false, onVorschlagen, onEntscheiden, darfEntscheiden = darfBearbeiten,
+  zeitbuchungen = [], projekt }) {
   const projektTyp = projekt?.typ;
   const [ansicht,     setAnsicht]     = useState("liste");  // liste | kanban
   const [filter,      setFilter]      = useState(initialFilter);
@@ -175,7 +176,7 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
                 <AufgabenKarte key={a.id} aufgabe={a} kolonnen={kolonnen} istStunden={istStundenProAufgabe[a.id] || 0}
                   onClick={() => darfBearbeiten && setEditAufgabe(a)}
                   onDelete={darfBearbeiten ? handleDelete : undefined}
-                  onEntscheiden={darfBearbeiten ? onEntscheiden : undefined} />
+                  onEntscheiden={darfEntscheiden ? onEntscheiden : undefined} />
               ))}
             </>
           )}

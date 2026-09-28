@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, CalendarX, Users, ArrowRight } from "lucide-react";
+import { Calendar, CalendarX, Users } from "lucide-react";
 import { WeatherView } from "./WeatherView.jsx";
 import { terminprognose } from "../lib/terminkette.js";
 
@@ -144,26 +144,6 @@ export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, pro
           </div>
         </>
       )}
-
-      {/* Schnellzugriff */}
-      <SektionsTitel label="Schnellzugriff" />
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
-        {[
-          ["tagebuch","Tagebuch"],
-          ["kolonnen",`Kolonnen (${totalMann} Mann)`],
-          ["stempeln","Stempeln"],
-          ["gantt","Zeitplan"],
-        ].map(([tid, label]) => (
-          <button key={tid} onClick={() => springeZu(tid)}
-            style={{ background:"var(--surface)", border:"1px solid var(--border)",
-              padding:"13px 14px", cursor:"pointer",
-              display:"flex", alignItems:"center", justifyContent:"space-between",
-              fontFamily:"inherit", textAlign:"left" }}>
-            <span style={{ color:"var(--text)", fontSize:12.5, fontWeight:700 }}>{label}</span>
-            <ArrowRight size={14} color="var(--muted)" />
-          </button>
-        ))}
-      </div>
 
       {/* Kolonnen vor Ort */}
       <div style={{ display:"flex", justifyContent:"space-between",

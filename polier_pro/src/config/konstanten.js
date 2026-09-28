@@ -247,6 +247,7 @@ export const PLAN_CONFIG = {
 };
 
 export const ONBOARDING_KEY = "polier_pro_onboarding_done";
+export const ONBOARDING_DRAFT_KEY = "polier_pro_onboarding_draft";
 
 export const ROLLEN = {
   administrator: {
@@ -255,20 +256,21 @@ export const ROLLEN = {
     farbe: "#7C3AED",
     tabs: ["dashboard","felder","gantt","editor","scanner","wetter","kolonnen","tagebuch","zeiten","firmen"],
     kannBearbeiten: true,
+    kannAufgabenBearbeiten: true,
     kannNutzerVerwalten: true,
     kannKolonneLoeschen: true,
     siehtAlleProjekte: true,
   },
   // "Abgespeckter Admin" für Geschäftsführer/Inhaber: sieht alle Baustellen,
   // Kosten & Angebote (inkl. KI-Angebotserstellung), aber keine
-  // Nutzerverwaltung, kein Kolonnen-Löschen und keine operative Bearbeitung
-  // von Aufgaben/Kolonnen — das bleibt Sache von Polier/Vorarbeiter/Admin.
+  // Nutzerverwaltung und kein Kolonnen-Löschen.
   geschaeftsfuehrer: {
     label: "Geschäftsführer",
     icon: "💼",
     farbe: "#0F766E",
     tabs: ["dashboard","gantt","kosten","wetter","kolonnen","tagebuch","zeiten","angebot"],
     kannBearbeiten: false,
+    kannAufgabenBearbeiten: true,
     kannNutzerVerwalten: false,
     kannKolonneLoeschen: false,
     siehtAlleProjekte: true,
@@ -279,6 +281,7 @@ export const ROLLEN = {
     farbe: "#2563EB",
     tabs: ["dashboard","felder","gantt","wetter","kolonnen","tagebuch","zeiten"],
     kannBearbeiten: false,
+    kannAufgabenBearbeiten: true,
     kannNutzerVerwalten: false,
     kannKolonneLoeschen: false,
     siehtAlleProjekte: true,
@@ -289,16 +292,22 @@ export const ROLLEN = {
     farbe: "#F5C400",
     tabs: ["dashboard","felder","gantt","editor","scanner","wetter","kolonnen","tagebuch","zeiten"],
     kannBearbeiten: true,
+    kannAufgabenBearbeiten: true,
     kannNutzerVerwalten: false,
     kannKolonneLoeschen: false,
     siehtAlleProjekte: false,
   },
+  // Aufgaben-Bearbeitung bewusst NICHT erlaubt (Stand: Absprache mit dem
+  // Kunden) — nur Polier, Admin, Geschäftsführer und Bauleiter dürfen
+  // Aufgaben anlegen/bearbeiten/löschen. Vorarbeiter darf weiterhin Kolonnen
+  // und Projektdaten bearbeiten (kannBearbeiten), nur eben keine Aufgaben.
   vorarbeiter: {
     label: "Vorarbeiter",
     icon: "👷",
     farbe: "#EA580C",
     tabs: ["dashboard","felder","kolonnen","tagebuch","stempeln"],
     kannBearbeiten: true,
+    kannAufgabenBearbeiten: false,
     kannNutzerVerwalten: false,
     kannKolonneLoeschen: false,
     siehtAlleProjekte: false,
@@ -309,6 +318,7 @@ export const ROLLEN = {
     farbe: "#64748B",
     tabs: ["stempeln"],
     kannBearbeiten: false,
+    kannAufgabenBearbeiten: false,
     kannNutzerVerwalten: false,
     kannKolonneLoeschen: false,
     siehtAlleProjekte: false,

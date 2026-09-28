@@ -1,18 +1,42 @@
-import { useState, useRef } from "react";
-import { Star, Building2, Wrench, HardHat, PartyPopper, ClipboardList, CloudSun, FileText, Info, Check, ArrowLeft, ArrowRight, Rocket, Sparkles, Search, TriangleAlert, ExternalLink } from "lucide-react";
-import { ONBOARDING_KEY, ALLE_GEWERKE } from "../config/konstanten.js";
+import { useState, useRef, useEffect } from "react";
+import { Star, Building2, Wrench, HardHat, PartyPopper, ClipboardList, CloudSun, FileText, Info, Check, ArrowLeft, ArrowRight, Rocket, Sparkles, Search, TriangleAlert, ExternalLink, LogOut } from "lucide-react";
+import { ONBOARDING_KEY, ONBOARDING_DRAFT_KEY, ALLE_GEWERKE } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { kiFirmenRecherche } from "../lib/ai.js";
 
-export function OnboardingFlow({ onComplete, session }) {
-  const [schritt, setSchritt] = useState(0);
-  const [firma, setFirma] = useState({
-    name:"", strasse:"", plz:"", ort:"", telefon:"", email:"",
-    geschaeftsfuehrer:"", steuernummer:"", gewerke:[], logo:null,
+const LEERE_FIRMA = {
+  name:"", strasse:"", plz:"", ort:"", telefon:"", email:"",
+  geschaeftsfuehrer:"", steuernummer:"", gewerke:[], logo:null,
+};
+const LEERER_POLIER = { name:"", telefon:"", email:"" };
+
+export function OnboardingFlow({ onComplete, session, onAbmelden }) {
+  // Fortschritt wird pro Account lokal zwischengespeichert (localStorage) —
+  // meldet sich jemand mitten im Ausfüllen ab (z.B. aus Versehen oder um
+  // später weiterzumachen), sind Eingaben beim nächsten Anmelden noch da,
+  // statt verloren zu gehen. Erst nach erfolgreichem Abschluss gelöscht.
+  const draftKey = `${ONBOARDING_DRAFT_KEY}_${session?.user?.id || "anon"}`;
+  const [schritt, setSchritt] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(draftKey) || "null")?.schritt ?? 0; } catch { return 0; }
   });
-  const [ersterPolier, setErsterPolier] = useState({ name:"", telefon:"", email:"" });
+  const [firma, setFirma] = useState(() => {
+    try {
+      const gespeichert = JSON.parse(localStorage.getItem(draftKey) || "null")?.firma;
+      return gespeichert ? { ...LEERE_FIRMA, ...gespeichert } : { ...LEERE_FIRMA };
+    } catch { return { ...LEERE_FIRMA }; }
+  });
+  const [ersterPolier, setErsterPolier] = useState(() => {
+    try {
+      const gespeichert = JSON.parse(localStorage.getItem(draftKey) || "null")?.ersterPolier;
+      return gespeichert ? { ...LEERER_POLIER, ...gespeichert } : { ...LEERER_POLIER };
+    } catch { return { ...LEERER_POLIER }; }
+  });
   const logoRef = useRef(null);
+
+  useEffect(() => {
+    try { localStorage.setItem(draftKey, JSON.stringify({ schritt, firma, ersterPolier })); } catch { /* z.B. Speicherplatz voll — Entwurf bleibt nur im State */ }
+  }, [draftKey, schritt, firma, ersterPolier]);
 
   // KI-Firmenrecherche: füllt die Felder unten vor, ersetzt sie aber nicht
   // unwidersprochen — kiFelder merkt sich, welche Werte von der KI stammen
@@ -87,6 +111,7 @@ export function OnboardingFlow({ onComplete, session }) {
 
   function abschliessen() {
     localStorage.setItem(ONBOARDING_KEY, "1");
+    localStorage.removeItem(draftKey);
     onComplete(firma, ersterPolier);
   }
 
@@ -122,8 +147,19 @@ export function OnboardingFlow({ onComplete, session }) {
               Einrichtung
             </div>
           </div>
-          <div style={{ color:"var(--muted)", fontSize:12, fontWeight:600 }}>
-            {schritt + 1} / {SCHRITTE.length}
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ color:"var(--muted)", fontSize:12, fontWeight:600 }}>
+              {schritt + 1} / {SCHRITTE.length}
+            </div>
+            {onAbmelden && (
+              <button onClick={onAbmelden} title="Abmelden"
+                style={{ width:32, height:32, background:"var(--surface2)",
+                  border:"1px solid var(--border)", borderRadius:8,
+                  color:"var(--muted)", cursor:"pointer",
+                  display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <LogOut size={15} />
+              </button>
+            )}
           </div>
         </div>
 

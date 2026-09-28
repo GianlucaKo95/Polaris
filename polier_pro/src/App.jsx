@@ -504,7 +504,7 @@ export default function PolierApp() {
   // Onboarding anzeigen wenn noch nicht abgeschlossen
 
   if (!onboardingDone) {
-    return <OnboardingFlow onComplete={handleOnboardingComplete} session={auth.session} />;
+    return <OnboardingFlow onComplete={handleOnboardingComplete} session={auth.session} onAbmelden={abmelden} />;
   }
 
   const projekt = projekte.find(p => p.id === aktivId) || null;
@@ -967,10 +967,10 @@ export default function PolierApp() {
     { id:"kosten",        icon:"💰",  label:"Kosten",      rollen:["administrator","geschaeftsfuehrer"] },
     { id:"wetter",        icon:"🌤️", label:"Wetter",      rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
     { id:"kolonnen",      icon:"👷",  label:"Kolonnen",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
-    { id:"tagebuch",      icon:"📋",  label:"Tagebuch",    rollen:["administrator","geschaeftsfuehrer","polier","vorarbeiter"] },
+    { id:"tagebuch",      icon:"📋",  label:"Tagebuch",    rollen:["administrator","geschaeftsfuehrer","polier"] },
     { id:"stempeln",      icon:"⏱️",  label:"Stempeln",    rollen:["administrator","polier","vorarbeiter","facharbeiter"] },
     { id:"stunden",       icon:"📊",  label:"Stunden",     rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
-    { id:"ki_frage",      icon:"💬",  label:"KI fragen",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
+    { id:"ki_frage",      icon:"💬",  label:"KI fragen",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     { id:"simulation",    icon:"🧪",  label:"Simulation",  rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     { id:"angebot",       icon:"📄",  label:"Angebot",     rollen:["administrator","geschaeftsfuehrer"] },
     { id:"admin_params",  icon:"⚙️",  label:"Parameter",   rollen:["administrator"] },
@@ -981,9 +981,16 @@ export default function PolierApp() {
 
   // ── Navigation gruppieren: Hauptfunktionen sichtbar, Rest unter "Mehr" ──
   const HAUPT_TAB_IDS = ["dashboard", "aufgaben", "tagebuch", "kolonnen", "stempeln"];
-  const hauptTabs = TABS.filter(t => HAUPT_TAB_IDS.includes(t.id))
+  let hauptTabs = TABS.filter(t => HAUPT_TAB_IDS.includes(t.id))
     .sort((a,b) => HAUPT_TAB_IDS.indexOf(a.id) - HAUPT_TAB_IDS.indexOf(b.id));
-  const mehrTabs  = TABS.filter(t => !HAUPT_TAB_IDS.includes(t.id));
+  let mehrTabs  = TABS.filter(t => !HAUPT_TAB_IDS.includes(t.id));
+  // Ein "Mehr"-Menü mit nur einem Eintrag ist ein unnötiger Umweg (z.B.
+  // Facharbeiter: dahinter versteckte sich bislang nur "Mein Profil") —
+  // dann direkt in die Hauptleiste zeigen statt hinter einem Tippschritt.
+  if (mehrTabs.length === 1) {
+    hauptTabs = [...hauptTabs, ...mehrTabs];
+    mehrTabs = [];
+  }
   const aktivInMehr = mehrTabs.some(t => t.id === tab);
   const TAB_ICONS = { dashboard:LayoutGrid, aufgaben:CircleCheckBig, tagebuch:NotebookPen,
     kolonnen:Users, stempeln:Clock, gantt:Calendar, kosten:Euro, wetter:CloudSun,
@@ -1089,9 +1096,11 @@ export default function PolierApp() {
               setTab(tabId);
             }}
           />}
-        {tab === "aufgaben"      && <AufgabenView aufgaben={felder} setAufgaben={setFelder} kolonnen={kolonnen} sbConnected={sbConnected} darfBearbeiten={rolleConfig?.kannBearbeiten !== false} initialFilter={aufgabenFilter}
+        {tab === "aufgaben"      && <AufgabenView aufgaben={felder} setAufgaben={setFelder} kolonnen={kolonnen} sbConnected={sbConnected} darfBearbeiten={rolleConfig?.kannAufgabenBearbeiten !== false} initialFilter={aufgabenFilter}
             initialEditId={aufgabenEditId}
-            kannVorschlagen={aktiveRolle === "facharbeiter"} onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}
+            kannVorschlagen={["facharbeiter","vorarbeiter"].includes(aktiveRolle)}
+            darfEntscheiden={["administrator","polier","bauleiter"].includes(aktiveRolle)}
+            onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}
             zeitbuchungen={zeitbuchungen} projekt={projekt} />}
         {tab === "kosten"        && <KostenView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "stempeln"      && <StempeluhrView profil={aktiveProfil}
@@ -1101,7 +1110,13 @@ export default function PolierApp() {
                 : projekte
               : projekte}
             session={auth.session} kolonnen={kolonnen} aufgaben={felder} />}
-        {tab === "stunden"       && <StundenExportView profil={aktiveProfil} session={auth.session} projekte={projekte} darfAlleSehen={["administrator","geschaeftsfuehrer","polier"].includes(aktiveRolle)} />}
+        {tab === "stunden"       && <StundenExportView profil={aktiveProfil} session={auth.session} projekte={projekte}
+            // darfAlleSehen steuert hier nur die Mitarbeiter-Filter-Anzeige
+            // innerhalb der bereits per RLS eingeschränkten Treffermenge —
+            // bei Vorarbeiter ist das durch die zeitbuchungen-Policy schon
+            // auf die eigene Kolonne begrenzt, "alle" heißt für ihn also
+            // "alle aus seiner Kolonne", nicht firmenweit.
+            darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} session={auth.session} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
         {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
