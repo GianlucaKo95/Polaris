@@ -1072,7 +1072,6 @@ export default function PolierApp() {
           </div>
         )}
         {tab === "dashboard" && <DashboardView aufgaben={felder} kolonnen={kolonnen} sbConnected={sbConnected} projekt={projekt}
-            erlaubteTabs={TABS.map(t => t.id)}
             onNavigate={(tabId, filter) => {
               if (filter) setAufgabenFilter(filter);
               else setAufgabenFilter("alle");

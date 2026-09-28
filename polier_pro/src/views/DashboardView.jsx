@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Calendar, CalendarX, Users, ArrowRight } from "lucide-react";
+import { Calendar, CalendarX, Users } from "lucide-react";
 import { WeatherView } from "./WeatherView.jsx";
 import { terminprognose } from "../lib/terminkette.js";
 
-export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, projekt, wetter, erlaubteTabs = null }) {
+export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, projekt, wetter }) {
   const [wetterInfo, setWetterInfo] = useState(null);
   const offeneAufgaben = aufgaben.filter(a => a.status !== "abgeschlossen");
   const kritisch  = aufgaben.filter(a => a.prioritaet === "kritisch" && a.status !== "abgeschlossen").length;
@@ -144,30 +144,6 @@ export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, pro
           </div>
         </>
       )}
-
-      {/* Schnellzugriff — nur Ziele zeigen, die die aktuelle Rolle laut
-          Navigation auch tatsächlich betreten darf. Vorher wich dieser
-          Shortcut-Block der eigentlichen Tab-Berechtigung komplett aus:
-          eine Rolle ohne z.B. "gantt" oder "tagebuch" in der Bottom-Nav
-          konnte trotzdem über diese Kacheln dorthin springen. */}
-      <SektionsTitel label="Schnellzugriff" />
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
-        {[
-          ["tagebuch","Tagebuch"],
-          ["kolonnen",`Kolonnen (${totalMann} Mann)`],
-          ["stempeln","Stempeln"],
-          ["gantt","Zeitplan"],
-        ].filter(([tid]) => !erlaubteTabs || erlaubteTabs.includes(tid)).map(([tid, label]) => (
-          <button key={tid} onClick={() => springeZu(tid)}
-            style={{ background:"var(--surface)", border:"1px solid var(--border)",
-              padding:"13px 14px", cursor:"pointer",
-              display:"flex", alignItems:"center", justifyContent:"space-between",
-              fontFamily:"inherit", textAlign:"left" }}>
-            <span style={{ color:"var(--text)", fontSize:12.5, fontWeight:700 }}>{label}</span>
-            <ArrowRight size={14} color="var(--muted)" />
-          </button>
-        ))}
-      </div>
 
       {/* Kolonnen vor Ort */}
       <div style={{ display:"flex", justifyContent:"space-between",
