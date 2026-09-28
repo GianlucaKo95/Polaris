@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Send, Sparkles, TriangleAlert } from "lucide-react";
+import { Spinner } from "../components/Spinner.jsx";
 import { kiProjektFrage } from "../lib/ai.js";
 import { holeWettervorhersage } from "../lib/geo.js";
 import { terminprognose } from "../lib/terminkette.js";
@@ -81,8 +82,9 @@ export function KiFrageView({ projekt, aufgaben = [], kolonnen = [], session }) 
         {laedt && (
           <div style={{ display:"flex", justifyContent:"flex-start", marginBottom:8 }}>
             <div style={{ padding:"9px 13px", background:"var(--surface)", border:"1px solid var(--border)",
-              borderRadius:12, borderBottomLeftRadius:3, color:"var(--muted)", fontSize:13 }}>
-              denkt nach…
+              borderRadius:12, borderBottomLeftRadius:3, color:"var(--muted)", fontSize:13,
+              display:"flex", alignItems:"center", gap:7 }}>
+              <Spinner size={13} /> denkt nach…
             </div>
           </div>
         )}
@@ -119,7 +121,7 @@ export function KiFrageView({ projekt, aufgaben = [], kolonnen = [], session }) 
             color: eingabe.trim() && !laedt ? "#1a1200" : "var(--muted)",
             border:"none", borderRadius:10, cursor: eingabe.trim() && !laedt ? "pointer" : "default",
             display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <Send size={17} />
+          {laedt ? <Spinner size={16} /> : <Send size={17} />}
         </button>
       </div>
     </div>

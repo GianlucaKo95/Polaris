@@ -6,6 +6,7 @@ import { inputStyle, Label } from "../components/Label.jsx";
 import { escapeHtml } from "../lib/utils.js";
 import { druckePDF } from "../lib/pdf.jsx";
 import { DiktierFeld } from "../components/DiktierFeld.jsx";
+import { Spinner } from "../components/Spinner.jsx";
 import { kiAngebotErstellen } from "../lib/ai.js";
 
 export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, projekt, eigeneFirma, session }) {
@@ -17,6 +18,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [kiDiktat,  setKiDiktat]  = useState("");
   const [kiLaedt,   setKiLaedt]   = useState(false);
   const [kiFehler,  setKiFehler]  = useState("");
+  const [speichertLaedt, setSpeichertLaedt] = useState(false);
 
   const netto   = a.positionen.reduce((s,p)=>s+(p.menge||0)*(p.ep||0),0);
   const rabattBetrag = netto * (a.rabatt||0)/100;
@@ -88,6 +90,15 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       setKiFehler(e.message || "KI-Anfrage fehlgeschlagen.");
     } finally {
       setKiLaedt(false);
+    }
+  }
+
+  async function speichernKlick() {
+    setSpeichertLaedt(true);
+    try {
+      await onSave(a);
+    } finally {
+      setSpeichertLaedt(false);
     }
   }
 
@@ -253,8 +264,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               color: kiDiktat.trim() && !kiLaedt ? "#1a1200" : "var(--muted)",
               border:"none", borderRadius:10, padding:14, fontWeight:800,
               cursor: kiDiktat.trim() && !kiLaedt ? "pointer" : "default", fontSize:14,
-              fontFamily:"inherit" }}>
-            {kiLaedt ? "Erstelle Positionen…" : "Positionen übernehmen"}
+              fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+            {kiLaedt ? <><Spinner size={14} /> Erstelle Positionen…</> : "Positionen übernehmen"}
           </button>
         </div>
       </div>,
@@ -560,11 +571,12 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 ].map(([k,l])=><option key={k} value={k}>{l}</option>)}
               </select>
             </div>
-            <button onClick={() => onSave(a)}
+            <button onClick={speichernKlick} disabled={speichertLaedt}
               style={{ width:"100%", background:"var(--yellow)", color:"#1a1200",
                 border:"none", borderRadius:12, padding:14, fontWeight:800,
-                cursor:"pointer", fontSize:14, fontFamily:"inherit" }}>
-              Angebot speichern
+                cursor: speichertLaedt ? "default" : "pointer", fontSize:14, fontFamily:"inherit",
+                display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+              {speichertLaedt ? <><Spinner size={14} /> Speichert…</> : "Angebot speichern"}
             </button>
           </div>
         )}
