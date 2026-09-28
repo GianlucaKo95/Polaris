@@ -258,11 +258,31 @@ Für "ep_id" ausschließlich eine id aus dem Katalog oben verwenden. Passt keine
   }
 }
 
-export async function kiTagesabschluss(diktat, projekt, kolonnen, wetter, session) {
+export async function kiTagesabschluss(diktat, projekt, kolonnen, wetter, aufgaben, session) {
   const heute = new Date().toLocaleDateString("de-DE");
+  const heuteISO = new Date().toISOString().slice(0,10);
   const wetterInfo = wetter
     ? `${wetter.temp}°C, Wind ${wetter.wind}km/h, Niederschlag ${wetter.rain}mm`
     : "keine Wetterdaten";
+
+  // Bereits in der App erfasste Aufgaben, die für den heutigen Tagesabschluss
+  // relevant sind — heute abgeschlossen, aktuell in Arbeit, oder heute zur
+  // Bestätigung vorgeschlagen. Ohne das kannte die KI nur, was im Diktat
+  // erwähnt wurde, und "vergaß" alles, was der Polier zu erwähnen vergaß,
+  // obwohl die App es längst wusste.
+  const aufgabenHeute = (aufgaben || []).filter(a =>
+    (a.status === "abgeschlossen" && a.updated_at?.slice(0,10) === heuteISO) ||
+    a.status === "in_arbeit" ||
+    a.status === "zur_pruefung"
+  );
+  const aufgabenInfo = aufgabenHeute.length
+    ? aufgabenHeute.map(a => {
+        const statusLabel = a.status === "abgeschlossen" ? "heute abgeschlossen"
+          : a.status === "zur_pruefung" ? "heute zur Bestätigung vorgeschlagen"
+          : "in Arbeit";
+        return `- ${a.titel} (${AUFGABEN_TYPEN[a.typ]?.label || a.typ}) — ${statusLabel}`;
+      }).join("\n")
+    : "keine erfassten Aufgaben mit Status-Änderung heute";
 
   const prompt = `Du bist ein erfahrener Polier-Assistent. Analysiere dieses Diktat vom Tagesabschluss und extrahiere strukturierte Daten.
 
@@ -270,6 +290,9 @@ Datum: ${heute}
 Projekt: ${projekt?.name || ""}
 Wetter heute: ${wetterInfo}
 Kolonnen: ${kolonnen.map(k=>k.name).join(", ")}
+
+Bereits in der App erfasste Aufgaben (in die Tätigkeitsbeschreibung einbeziehen, auch wenn im Diktat nicht erwähnt — für diese NICHT zusätzlich eine "neue_aufgabe" vorschlagen):
+${aufgabenInfo}
 
 Diktat des Poliers:
 "${diktat}"

@@ -168,7 +168,7 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
         <div style={{ color: "var(--text)", fontWeight:800, fontSize:13, paddingTop:6 }}>Einträge</div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
           <KITagesabschlussButton
-            projekt={projekt} kolonnen={kolonnen} wetter={wetter} session={session}
+            projekt={projekt} kolonnen={kolonnen} wetter={wetter} aufgaben={aufgaben} session={session}
             onErgebnis={result => {
               if (result?.bericht) {
                 setForm(p => ({ ...p,

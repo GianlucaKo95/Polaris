@@ -6,7 +6,7 @@ import { Spinner } from "../components/Spinner.jsx";
 import { AUFGABEN_TYPEN, AUFGABEN_PRIO } from "../config/konstanten.js";
 import { useBackButton } from "../hooks/useBackButton.js";
 
-export function KITagesabschlussButton({ projekt, kolonnen, wetter, onErgebnis, session }) {
+export function KITagesabschlussButton({ projekt, kolonnen, wetter, aufgaben = [], onErgebnis, session }) {
   const [offen,    setOffen]    = useState(false);
   useBackButton(offen, () => setOffen(false));
   const [diktat,   setDiktat]   = useState("");
@@ -38,7 +38,7 @@ export function KITagesabschlussButton({ projekt, kolonnen, wetter, onErgebnis, 
     setLaden(true);
     setFehler("");
     try {
-      const result = await kiTagesabschluss(diktat, projekt, kolonnen, wetter, session);
+      const result = await kiTagesabschluss(diktat, projekt, kolonnen, wetter, aufgaben, session);
       if (!result) { setFehler("KI-Antwort konnte nicht ausgewertet werden."); return; }
       setErgebnis(result);
     } catch (e) {
