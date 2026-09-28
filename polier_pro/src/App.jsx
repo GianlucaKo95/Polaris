@@ -1096,7 +1096,7 @@ export default function PolierApp() {
               setTab(tabId);
             }}
           />}
-        {tab === "aufgaben"      && <AufgabenView aufgaben={felder} setAufgaben={setFelder} kolonnen={kolonnen} sbConnected={sbConnected} darfBearbeiten={rolleConfig?.kannBearbeiten !== false} initialFilter={aufgabenFilter}
+        {tab === "aufgaben"      && <AufgabenView aufgaben={felder} setAufgaben={setFelder} kolonnen={kolonnen} sbConnected={sbConnected} darfBearbeiten={rolleConfig?.kannAufgabenBearbeiten !== false} initialFilter={aufgabenFilter}
             initialEditId={aufgabenEditId}
             kannVorschlagen={aktiveRolle === "facharbeiter"} onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}
             zeitbuchungen={zeitbuchungen} projekt={projekt} />}
