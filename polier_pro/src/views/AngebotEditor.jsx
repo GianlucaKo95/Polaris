@@ -8,8 +8,9 @@ import { druckePDF } from "../lib/pdf.jsx";
 import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { kiAngebotErstellen } from "../lib/ai.js";
+import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, projekt, eigeneFirma, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, session }) {
   const [a,         setA]         = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
@@ -19,6 +20,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [kiLaedt,   setKiLaedt]   = useState(false);
   const [kiFehler,  setKiFehler]  = useState("");
   const [speichertLaedt, setSpeichertLaedt] = useState(false);
+  const [wordLaedt, setWordLaedt] = useState(false);
 
   // Positions-Rabatt (pro Zeile) wirkt VOR dem Gesamt-Rabatt im
   // Einstellungen-Tab — beide sind unabhängig kombinierbar, ohne dass
@@ -241,6 +243,20 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
     link.click(); URL.revokeObjectURL(url);
   }
 
+  async function exportWord() {
+    if (wordLaedt) return;
+    setWordLaedt(true);
+    try {
+      const blob = await erzeugeAngebotDocx({ angebot: a, projekt, eigeneFirma, angebotVorlage });
+      const url  = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url; link.download = ("Angebot_"+a.titel.replace(/ /g,"_")+".docx");
+      link.click(); URL.revokeObjectURL(url);
+    } finally {
+      setWordLaedt(false);
+    }
+  }
+
   // ── KI-Angebotserstellung als eigener Screen ──
   if (vonKI) {
     return createPortal(
@@ -402,6 +418,13 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               border:"1.5px solid var(--border)", borderRadius:8,
               padding:"6px 10px", cursor:"pointer", fontSize:12,
               fontFamily:"inherit", display:"flex", alignItems:"center", gap:5 }}><ChartColumn size={12} /> CSV</button>
+          <button onClick={exportWord} disabled={wordLaedt}
+            style={{ background:"var(--surface2)", color:"var(--text)",
+              border:"1.5px solid var(--border)", borderRadius:8,
+              padding:"6px 10px", cursor: wordLaedt ? "default" : "pointer", fontSize:12,
+              fontFamily:"inherit", display:"flex", alignItems:"center", gap:5 }}>
+            {wordLaedt ? <Spinner size={12} /> : <FileText size={12} />} Word
+          </button>
           <button onClick={exportPDF}
             style={{ background:"var(--yellow)", color:"#1a1200", border:"none",
               borderRadius:8, padding:"6px 12px", fontWeight:700,

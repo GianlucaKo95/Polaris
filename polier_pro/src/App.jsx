@@ -157,6 +157,7 @@ export default function PolierApp() {
   const [zeitbuchungen, setZeitbuchungen] = useState([]);
   const [einheitspreise,setEinheitspreise]= useState(DEFAULT_EINHEITSPREISE);
   const [lvVorlagen,    setLvVorlagen]    = useState(DEFAULT_LV_VORLAGEN);
+  const [angebotVorlage,setAngebotVorlage]= useState(null);
   // Verhindert, dass der initiale Ladevorgang der Parameter aus Supabase
   // (setzt dieselben Werte, die gerade erst von dort kamen) sie sofort
   // wieder zurückschreibt, bevor der Nutzer überhaupt etwas geändert hat.
@@ -204,7 +205,7 @@ export default function PolierApp() {
       // ausgeschlossen, damit der KI-Key nie in den Client-State (firma/
       // eigeneFirma) gelangt. Er wird ausschließlich serverseitig in der
       // ki-proxy Edge Function gelesen (siehe supabase/functions/ki-proxy).
-      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen")
+      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage")
         .eq("id", auth.profil.firma_id)
         .then(({ data: d, error, status }) => {
           if (error) {
@@ -230,6 +231,7 @@ export default function PolierApp() {
             // gespeichert hat → sinnvolle Beispieldaten statt leerer Liste.
             setEinheitspreise(d[0].einheitspreise?.length ? d[0].einheitspreise : DEFAULT_EINHEITSPREISE);
             setLvVorlagen(d[0].lv_vorlagen?.length ? d[0].lv_vorlagen : DEFAULT_LV_VORLAGEN);
+            setAngebotVorlage(d[0].angebot_vorlage || null);
             setParameterGeladen(true);
           } else {
             setFirmaLadeFehler(`Keine Firma mit ID ${auth.profil.firma_id} gefunden — profile.firma_id zeigt ins Leere.`);
@@ -253,8 +255,8 @@ export default function PolierApp() {
   // Einheitspreise/LV-Vorlagen nach jeder Änderung in der Firma persistieren.
   useEffect(() => {
     if (!parameterGeladen || !firma?.id || !auth.session?.access_token) return;
-    sbFirmaParameterSpeichern(firma.id, einheitspreise, lvVorlagen, auth.session);
-  }, [einheitspreise, lvVorlagen]);
+    sbFirmaParameterSpeichern(firma.id, einheitspreise, lvVorlagen, angebotVorlage, auth.session);
+  }, [einheitspreise, lvVorlagen, angebotVorlage]);
 
   // Projekte aus Supabase laden, sobald die Firma bekannt ist.
   // Ohne dies existierten Baustellen nur im Browser-Speicher — Neuladen,
@@ -1121,8 +1123,8 @@ export default function PolierApp() {
             darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} session={auth.session} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
-        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
-        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} />}
+        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
+        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
         {tab === "profil"       && <MeinProfilView profil={aktiveProfil} session={auth.session} />}
       </div>

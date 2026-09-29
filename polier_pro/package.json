@@ -8,9 +8,11 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.3",
+    "docx": "^9.8.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.462.0",
+    "mammoth": "^1.13.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "write-excel-file": "^4.1.1"

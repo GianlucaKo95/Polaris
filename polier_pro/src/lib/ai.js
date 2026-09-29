@@ -261,6 +261,54 @@ Für "ep_id" ausschließlich eine id aus dem Katalog oben verwenden. Passt keine
   }
 }
 
+// ── KI-Vorlagenanalyse: Text/Struktur-Vorschläge aus einer hochgeladenen
+// .docx-Vorlage ──────────────────────────────────────────────────────────
+// Läuft EINMALIG beim Hochladen einer Vorlage, nicht bei jeder Angebots-
+// erstellung. Die KI bekommt nur den per mammoth extrahierten Rohtext der
+// Datei (nie die Originaldatei/XML selbst) und schlägt Einleitungs-/
+// Schlusstext sowie Tabellen-Spaltenbeschriftungen vor. Der Admin sieht die
+// Vorschläge vor dem Speichern und kann sie korrigieren — das tatsächliche
+// Angebots-Dokument wird später NIE aus dieser Datei heraus bearbeitet,
+// sondern sauber neu aus diesen (ggf. korrigierten) Textbausteinen
+// generiert (siehe lib/angebotVorlage.js). Nicht erkennbare Felder kommen
+// als leerer String zurück statt erfunden zu werden.
+export async function kiVorlageAnalysieren(text, session) {
+  const prompt = `Du analysierst den Text einer von einem Bauunternehmen hochgeladenen Word-Vorlage für Angebote und schlägst daraus wiederverwendbare Textbausteine für eine automatisch generierte Angebots-Vorlage vor.
+
+Text der hochgeladenen Datei:
+"""
+${(text || "").slice(0, 8000)}
+"""
+
+Erfinde NICHTS, was sich nicht aus dem Text ableiten lässt — nicht erkennbare Felder bleiben ein leerer String. Antworte NUR mit einem JSON-Objekt ohne Markdown:
+{
+  "intro_text": "Einleitungstext vor der Positionstabelle, falls erkennbar (z.B. 'Sehr geehrte Damen und Herren, hiermit unterbreiten wir Ihnen folgendes Angebot:'), sonst leerer String",
+  "footer_text": "Schluss-/Grußtext nach der Positionstabelle, falls erkennbar (z.B. Zahlungsbedingungen, Gültigkeitshinweis, Grußformel), sonst leerer String",
+  "spalte_bez": "Beschriftung der Bezeichnungs-Spalte falls abweichend vom Standard, sonst leerer String",
+  "spalte_menge": "Beschriftung der Mengen-Spalte falls abweichend vom Standard, sonst leerer String",
+  "spalte_einheit": "Beschriftung der Einheits-Spalte falls abweichend vom Standard, sonst leerer String",
+  "spalte_ep": "Beschriftung der Einzelpreis-Spalte falls abweichend vom Standard, sonst leerer String",
+  "spalte_gp": "Beschriftung der Gesamtpreis-Spalte falls abweichend vom Standard, sonst leerer String"
+}`;
+
+  const data = await rufeClaudeAuf(prompt, 1500, session);
+  const responseText = data.content?.find(b => b.type === "text")?.text || "{}";
+  try {
+    const r = JSON.parse(responseText.replace(/```json|```/g, "").trim());
+    return {
+      intro_text:    r.intro_text || "",
+      footer_text:   r.footer_text || "",
+      spalte_bez:    r.spalte_bez || "",
+      spalte_menge:  r.spalte_menge || "",
+      spalte_einheit:r.spalte_einheit || "",
+      spalte_ep:     r.spalte_ep || "",
+      spalte_gp:     r.spalte_gp || "",
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function kiTagesabschluss(diktat, projekt, kolonnen, wetter, aufgaben, session) {
   const heute = new Date().toLocaleDateString("de-DE");
   const heuteISO = new Date().toISOString().slice(0,10);
