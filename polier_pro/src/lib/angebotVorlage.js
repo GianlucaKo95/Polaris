@@ -1,30 +1,6 @@
-import mammoth from "mammoth";
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, AlignmentType, ImageRun, BorderStyle } from "docx";
-
-// Liest NUR den Text einer hochgeladenen .docx-Datei aus (read-only) — wird
-// einmalig beim Hochladen einer Vorlage an die KI geschickt, damit sie
-// Textbausteine vorschlagen kann. Die Datei selbst wird nie gespeichert
-// oder weiterverarbeitet; nach der Analyse ist sie nicht mehr nötig, weil
-// das eigentliche Angebots-Dokument später sauber neu generiert wird
-// (siehe erzeugeAngebotDocx unten), statt diese Datei zu bearbeiten.
-export async function extrahiereDocxText(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
-  return result.value || "";
-}
-
-function dataUrlZuBild(dataUrl) {
-  const match = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl || "");
-  if (!match) return null;
-  const typRoh = match[1].toLowerCase();
-  const typ = typRoh === "jpeg" ? "jpg" : typRoh;
-  if (!["png","jpg","gif","bmp"].includes(typ)) return null;
-  const binaer = atob(match[2]);
-  const bytes = new Uint8Array(binaer.length);
-  for (let i = 0; i < binaer.length; i++) bytes[i] = binaer.charCodeAt(i);
-  return { typ, bytes };
-}
+import { dataUrlZuBild } from "./docxUtils.js";
 
 const GELB = "F5C400";
 const DUNKEL = "1A1A1A";

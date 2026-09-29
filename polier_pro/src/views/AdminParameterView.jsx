@@ -1,65 +1,19 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, Upload, Sparkles, TriangleAlert } from "lucide-react";
+import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen } from "lucide-react";
 import { PreisFormular } from "./PreisFormular.jsx";
 import { VorlageFormular } from "./VorlageFormular.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
-import { inputStyle, Label } from "../components/Label.jsx";
-import { Spinner } from "../components/Spinner.jsx";
-import { extrahiereDocxText } from "../lib/angebotVorlage.js";
-import { kiVorlageAnalysieren } from "../lib/ai.js";
+import { VorlagenUploadPanel } from "../components/VorlagenUploadPanel.jsx";
+import { kiAngebotVorlageAnalysieren, kiTagebuchVorlageAnalysieren } from "../lib/ai.js";
 
-export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, session }) {
-  const [aktiv,    setAktiv]    = useState("preise"); // preise | vorlagen | angebotsvorlage
+export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, session }) {
+  const [aktiv,    setAktiv]    = useState("preise"); // preise | vorlagen | angebotsvorlage | tagebuchvorlage
   const [neuPreis, setNeuPreis] = useState(null);
   const [neuVorlage,setNeuVorlage] = useState(null);
   const [editPreis, setEditPreis] = useState(null);
-  const [vorlageLaedt, setVorlageLaedt] = useState(false);
-  const [vorlageFehler, setVorlageFehler] = useState("");
   useBackButton(neuPreis || editPreis, () => { setNeuPreis(null); setEditPreis(null); });
   useBackButton(neuVorlage, () => setNeuVorlage(null));
-
-  async function docxHochladen(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setVorlageFehler("");
-
-    if (!file.name.toLowerCase().endsWith(".docx")) {
-      setVorlageFehler(`Bitte eine .docx-Datei hochladen (erhalten: .${file.name.split(".").pop() || "?"}).`);
-      return;
-    }
-
-    setVorlageLaedt(true);
-
-    // Eigener try/catch fürs Auslesen, getrennt von der KI-Anfrage: mammoth
-    // wirft bei einer beschädigten/keiner echten .docx-Datei nur einen
-    // technischen Fehler (z.B. "end of central directory record signature
-    // not found") — der wäre für den Admin nicht verständlich, deshalb hier
-    // durch eine eigene, konkrete Meldung ersetzt statt 1:1 durchgereicht.
-    let text;
-    try {
-      text = await extrahiereDocxText(file);
-    } catch {
-      setVorlageFehler("Die Datei konnte nicht gelesen werden — ist es eine gültige, unbeschädigte .docx-Datei?");
-      setVorlageLaedt(false);
-      return;
-    }
-
-    try {
-      const vorschlag = await kiVorlageAnalysieren(text, session);
-      if (!vorschlag) {
-        setVorlageFehler("Konnte die Vorlage nicht auswerten. Bitte Felder unten manuell ausfüllen.");
-        setAngebotVorlage(v => v || {});
-        return;
-      }
-      setAngebotVorlage(vorschlag);
-    } catch (err) {
-      setVorlageFehler(err.message || "Analyse fehlgeschlagen.");
-    } finally {
-      setVorlageLaedt(false);
-    }
-  }
 
   function preisLoeschen(id) {
     setEinheitspreise(prev => prev.filter(p => p.id !== id));
@@ -83,7 +37,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
 
       {/* Tab-Toggle */}
       <div style={{ display:"flex", gap:6, marginBottom:12 }}>
-        {[["preise",Euro,"Einheitspreise"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"]].map(([k,Icon,l]) => (
+        {[["preise",Euro,"Einheitspreise"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
           <button key={k} onClick={() => setAktiv(k)}
             style={{ flex:1, background: aktiv===k ? "var(--yellow)" : "var(--surface2)",
               color: aktiv===k ? "#1a1200" : "var(--muted)",
@@ -185,75 +139,45 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
 
       {/* ANGEBOTS-VORLAGE */}
       {aktiv === "angebotsvorlage" && (
-        <div>
-          <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10, lineHeight:1.5 }}>
-            Word-Dokument (.docx) mit eurem gewohnten Angebotstext hochladen — die
-            KI schlägt daraus Einleitungs-/Schlusstext und Spaltenbeschriftungen
-            vor. Jedes künftige Angebot wird damit als eigenes, sauber
-            generiertes Word-Dokument exportierbar, nicht als Bearbeitung der
-            hochgeladenen Datei selbst.
-          </div>
+        <VorlagenUploadPanel
+          beschreibung="Word-Dokument (.docx) mit eurem gewohnten Angebotstext hochladen — die KI schlägt daraus Einleitungs-/Schlusstext und Spaltenbeschriftungen vor. Jedes künftige Angebot wird damit als eigenes, sauber generiertes Word-Dokument exportierbar, nicht als Bearbeitung der hochgeladenen Datei selbst."
+          analysiereFn={kiAngebotVorlageAnalysieren}
+          session={session}
+          vorlage={angebotVorlage}
+          setVorlage={setAngebotVorlage}
+          textFelder={[
+            ["Einleitungstext","intro_text"],
+            ["Schlusstext","footer_text"],
+          ]}
+          kurzFelder={[
+            ["Spalte Bezeichnung","spalte_bez","Bezeichnung"],
+            ["Spalte Menge","spalte_menge","Menge"],
+            ["Spalte Einheit","spalte_einheit","Einheit"],
+            ["Spalte EP","spalte_ep","EP (€)"],
+            ["Spalte GP","spalte_gp","GP (€)"],
+          ]}
+        />
+      )}
 
-          <label style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7,
-            background:"var(--surface2)", border:"1.5px dashed var(--border)",
-            borderRadius:10, padding:14, cursor: vorlageLaedt ? "default" : "pointer",
-            color:"var(--text)", fontSize:13, fontWeight:700, marginBottom:10 }}>
-            {vorlageLaedt
-              ? <><Spinner size={14} /> Analysiere Vorlage…</>
-              : <><Upload size={14} /> .docx hochladen &amp; analysieren</>}
-            <input type="file" accept=".docx" disabled={vorlageLaedt}
-              onChange={docxHochladen} style={{ display:"none" }} />
-          </label>
-
-          {vorlageFehler && (
-            <div style={{ color:"var(--red)", fontSize:12, marginBottom:10,
-              display:"flex", alignItems:"center", gap:5 }}>
-              <TriangleAlert size={13} /> {vorlageFehler}
-            </div>
-          )}
-
-          {angebotVorlage && (
-            <div style={{ background:"var(--surface)", borderRadius:12,
-              padding:"12px 14px", border:"1.5px solid var(--border)" }}>
-              <div style={{ color:"var(--yellow)", fontWeight:700, fontSize:12,
-                marginBottom:9, display:"flex", alignItems:"center", gap:5 }}>
-                <Sparkles size={12} /> Vorschlag prüfen &amp; anpassen
-              </div>
-              {[
-                ["Einleitungstext","intro_text"],
-                ["Schlusstext","footer_text"],
-              ].map(([l,k]) => (
-                <div key={k} style={{ marginBottom:9 }}>
-                  <Label>{l}</Label>
-                  <textarea value={angebotVorlage[k]||""} rows={3}
-                    onChange={e=>setAngebotVorlage(v=>({...v,[k]:e.target.value}))}
-                    style={{ ...inputStyle(), resize:"vertical", fontFamily:"inherit" }} />
-                </div>
-              ))}
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                {[
-                  ["Spalte Bezeichnung","spalte_bez","Bezeichnung"],
-                  ["Spalte Menge","spalte_menge","Menge"],
-                  ["Spalte Einheit","spalte_einheit","Einheit"],
-                  ["Spalte EP","spalte_ep","EP (€)"],
-                  ["Spalte GP","spalte_gp","GP (€)"],
-                ].map(([l,k,ph]) => (
-                  <div key={k} style={{ marginBottom:9 }}>
-                    <Label>{l}</Label>
-                    <input value={angebotVorlage[k]||""} placeholder={ph}
-                      onChange={e=>setAngebotVorlage(v=>({...v,[k]:e.target.value}))}
-                      style={inputStyle()} />
-                  </div>
-                ))}
-              </div>
-              <button onClick={() => setAngebotVorlage(null)}
-                style={{ background:"var(--rbg)", border:"1px solid var(--red)",
-                  color:"var(--red)", borderRadius:8, padding:"7px 12px",
-                  cursor:"pointer", fontSize:12, fontFamily:"inherit",
-                  display:"flex", alignItems:"center", gap:5 }}><X size={12} /> Vorlage entfernen</button>
-            </div>
-          )}
-        </div>
+      {/* BAUTAGEBUCH-VORLAGE */}
+      {aktiv === "tagebuchvorlage" && (
+        <VorlagenUploadPanel
+          beschreibung="Word-Dokument (.docx) mit eurem gewohnten Bautagebuch-Text hochladen — die KI schlägt daraus Einleitungs-/Schlusstext und Abschnittsbeschriftungen vor. Jeder künftige Tagesbericht wird damit als eigenes, sauber generiertes Word-Dokument exportierbar, nicht als Bearbeitung der hochgeladenen Datei selbst."
+          analysiereFn={kiTagebuchVorlageAnalysieren}
+          session={session}
+          vorlage={tagebuchVorlage}
+          setVorlage={setTagebuchVorlage}
+          textFelder={[
+            ["Einleitungstext","intro_text"],
+            ["Schlusstext","footer_text"],
+          ]}
+          kurzFelder={[
+            ["Abschnitt Tätigkeiten","label_taetigkeit","Tätigkeiten"],
+            ["Abschnitt Besonderheiten","label_besonderheiten","Besonderheiten / Mängel"],
+            ["Abschnitt Material","label_material","Materiallieferungen"],
+            ["Abschnitt Personal","label_personal","Personal & Stunden"],
+          ]}
+        />
       )}
 
       {/* Preis-Formular — als Portal gerendert, sonst derselbe

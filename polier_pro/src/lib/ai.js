@@ -276,7 +276,7 @@ Für "ep_id" ausschließlich eine id aus dem Katalog oben verwenden. Passt keine
 // sondern sauber neu aus diesen (ggf. korrigierten) Textbausteinen
 // generiert (siehe lib/angebotVorlage.js). Nicht erkennbare Felder kommen
 // als leerer String zurück statt erfunden zu werden.
-export async function kiVorlageAnalysieren(text, session) {
+export async function kiAngebotVorlageAnalysieren(text, session) {
   const prompt = `Du analysierst den Text einer von einem Bauunternehmen hochgeladenen Word-Vorlage für Angebote und schlägst daraus wiederverwendbare Textbausteine für eine automatisch generierte Angebots-Vorlage vor.
 
 Text der hochgeladenen Datei:
@@ -308,6 +308,49 @@ Erfinde NICHTS, was sich nicht aus dem Text ableiten lässt — nicht erkennbare
       spalte_einheit:r.spalte_einheit || "",
       spalte_ep:     r.spalte_ep || "",
       spalte_gp:     r.spalte_gp || "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── KI-Vorlagenanalyse: Text-Vorschläge für die Bautagebuch-Vorlage ──────
+// Gleiches Prinzip wie kiAngebotVorlageAnalysieren, aber für den
+// Bautagebuch-Export: statt Tabellen-Spaltenbeschriftungen (Bautagebuch hat
+// keine Positionstabelle) schlägt die KI hier Abschnitts-Beschriftungen vor
+// (z.B. "Tätigkeiten" → "Ausgeführte Leistungen"), plus Einleitungs-/
+// Schlusstext. Die hochgeladene Datei wird auch hier nie bearbeitet —
+// jeder Bericht wird sauber neu generiert (siehe lib/tagebuchVorlage.js).
+export async function kiTagebuchVorlageAnalysieren(text, session) {
+  const prompt = `Du analysierst den Text einer von einem Bauunternehmen hochgeladenen Word-Vorlage für Bautagebücher und schlägst daraus wiederverwendbare Textbausteine für eine automatisch generierte Bautagebuch-Vorlage vor.
+
+Text der hochgeladenen Datei:
+"""
+${(text || "").slice(0, 8000)}
+"""
+
+Erfinde NICHTS, was sich nicht aus dem Text ableiten lässt — nicht erkennbare Felder bleiben ein leerer String. Antworte NUR mit einem JSON-Objekt ohne Markdown:
+{
+  "intro_text": "Einleitungstext/Hinweis vor den Berichtsdaten, falls erkennbar, sonst leerer String",
+  "footer_text": "Schlusstext nach dem Bericht, z.B. Hinweis zur Rechtsverbindlichkeit oder Aufbewahrungspflicht, falls erkennbar, sonst leerer String",
+  "label_taetigkeit": "Beschriftung des Tätigkeiten-Abschnitts falls abweichend vom Standard 'Tätigkeiten', sonst leerer String",
+  "label_besonderheiten": "Beschriftung des Besonderheiten-Abschnitts falls abweichend vom Standard 'Besonderheiten / Mängel', sonst leerer String",
+  "label_material": "Beschriftung des Material-Abschnitts falls abweichend vom Standard 'Materiallieferungen', sonst leerer String",
+  "label_personal": "Beschriftung des Personal-Abschnitts falls abweichend vom Standard 'Personal & Stunden', sonst leerer String"
+}`;
+
+  const data = await rufeClaudeAuf(prompt, 1500, session,
+    "Bitte eine andere Vorlage hochladen oder die Felder unten manuell ausfüllen.");
+  const responseText = data.content?.find(b => b.type === "text")?.text || "{}";
+  try {
+    const r = JSON.parse(responseText.replace(/```json|```/g, "").trim());
+    return {
+      intro_text:           r.intro_text || "",
+      footer_text:          r.footer_text || "",
+      label_taetigkeit:     r.label_taetigkeit || "",
+      label_besonderheiten: r.label_besonderheiten || "",
+      label_material:       r.label_material || "",
+      label_personal:       r.label_personal || "",
     };
   } catch {
     return null;

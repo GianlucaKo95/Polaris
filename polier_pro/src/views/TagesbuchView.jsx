@@ -5,13 +5,14 @@ import { supabase } from "../lib/supabase.js";
 import { KITagesabschlussButton } from "./KITagesabschlussButton.jsx";
 import { leereAufgabe } from "../lib/utils.js";
 import { PDFExportButton } from "../components/PDFExportButton.jsx";
+import { WordExportButton } from "../components/WordExportButton.jsx";
 import { RevisionssichererExport } from "./RevisionssichererExport.jsx";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
 import { AUFGABEN_STATUS, AUFGABEN_PRIO } from "../config/konstanten.js";
 
-export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eigeneFirma, kolonnen, offlineSpeichern, aufgaben, setAufgaben, session, onNavigate }) {
+export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eigeneFirma, kolonnen, tagebuchVorlage, offlineSpeichern, aufgaben, setAufgaben, session, onNavigate }) {
   const [open,       setOpen]       = useState(false);
   const [detail,     setDetail]     = useState(null);
   const [form,       setForm]       = useState({ taetigkeit:"", besonderheiten:"", material:"", arbeiter:0, maengel:0 });
@@ -223,6 +224,7 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
             <div style={{ color: "var(--text)", fontWeight:700 }}>{b.datum}</div>
             <div style={{ display:"flex", gap:6, alignItems:"center" }} onClick={e => e.stopPropagation()}>
               <PDFExportButton bericht={b} projekt={projekt} eigeneFirma={eigeneFirma} wetter={b.wetterData || wetter} kolonnen={kolonnen} typ="bericht" />
+              <WordExportButton bericht={b} projekt={projekt} eigeneFirma={eigeneFirma} wetter={b.wetterData || wetter} kolonnen={kolonnen} tagebuchVorlage={tagebuchVorlage} />
               {b.bilder?.length > 0 && (
                 <div style={{ background: "var(--blue)"+"33", color: "var(--blue)", fontSize:10, padding:"2px 7px", display:"flex", alignItems:"center", gap:3 }}>
                   <Camera size={10} />{b.bilder.length}
