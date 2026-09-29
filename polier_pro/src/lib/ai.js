@@ -46,12 +46,16 @@ Erstelle daraus einen vollständigen, professionellen Bautagesbericht. Antworte 
 // die liest den Anthropic-Key der jeweiligen Firma serverseitig aus der
 // Datenbank (siehe supabase/functions/ki-proxy) und ruft Anthropic damit
 // auf — der Key selbst erreicht den Client nie.
-async function rufeClaudeAuf(prompt, maxTokens, session) {
-  const data = await rufeKiProxyAuf({ prompt, maxTokens }, session);
+async function rufeClaudeAuf(prompt, maxTokens, session, refusalHinweis) {
+  const data = await rufeKiProxyAuf({ prompt, maxTokens }, session, refusalHinweis);
   return data;
 }
 
-async function rufeKiProxyAuf(body, session) {
+// refusalHinweis passt die Meldung an den jeweiligen Aufrufer an ("Diktat
+// umformulieren" ergibt z.B. bei der Vorlagenanalyse keinen Sinn, weil da
+// gar nichts diktiert wird) — Default bleibt der Diktat-Text, weil das die
+// meisten Aufrufer dieser Funktion sind.
+async function rufeKiProxyAuf(body, session, refusalHinweis = "Bitte das Diktat umformulieren oder erneut versuchen.") {
   if (!session?.access_token) {
     throw new Error("Keine gültige Sitzung für KI-Anfrage.");
   }
@@ -74,7 +78,7 @@ async function rufeKiProxyAuf(body, session) {
   // diese Prüfung würden alle Aufrufer hier einfach ein leeres/falsches
   // Ergebnis weiterverarbeiten, statt einen sichtbaren Fehler zu zeigen.
   if (data.stop_reason === "refusal") {
-    throw new Error("Die KI konnte diese Anfrage nicht bearbeiten (vom Sicherheitsfilter abgelehnt). Bitte das Diktat umformulieren oder erneut versuchen.");
+    throw new Error(`Die KI konnte diese Anfrage nicht bearbeiten (vom Sicherheitsfilter abgelehnt). ${refusalHinweis}`);
   }
   return data;
 }
@@ -291,7 +295,8 @@ Erfinde NICHTS, was sich nicht aus dem Text ableiten lässt — nicht erkennbare
   "spalte_gp": "Beschriftung der Gesamtpreis-Spalte falls abweichend vom Standard, sonst leerer String"
 }`;
 
-  const data = await rufeClaudeAuf(prompt, 1500, session);
+  const data = await rufeClaudeAuf(prompt, 1500, session,
+    "Bitte eine andere Vorlage hochladen oder die Felder unten manuell ausfüllen.");
   const responseText = data.content?.find(b => b.type === "text")?.text || "{}";
   try {
     const r = JSON.parse(responseText.replace(/```json|```/g, "").trim());

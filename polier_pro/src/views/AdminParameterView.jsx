@@ -24,9 +24,29 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
     e.target.value = "";
     if (!file) return;
     setVorlageFehler("");
+
+    if (!file.name.toLowerCase().endsWith(".docx")) {
+      setVorlageFehler(`Bitte eine .docx-Datei hochladen (erhalten: .${file.name.split(".").pop() || "?"}).`);
+      return;
+    }
+
     setVorlageLaedt(true);
+
+    // Eigener try/catch fürs Auslesen, getrennt von der KI-Anfrage: mammoth
+    // wirft bei einer beschädigten/keiner echten .docx-Datei nur einen
+    // technischen Fehler (z.B. "end of central directory record signature
+    // not found") — der wäre für den Admin nicht verständlich, deshalb hier
+    // durch eine eigene, konkrete Meldung ersetzt statt 1:1 durchgereicht.
+    let text;
     try {
-      const text = await extrahiereDocxText(file);
+      text = await extrahiereDocxText(file);
+    } catch {
+      setVorlageFehler("Die Datei konnte nicht gelesen werden — ist es eine gültige, unbeschädigte .docx-Datei?");
+      setVorlageLaedt(false);
+      return;
+    }
+
+    try {
       const vorschlag = await kiVorlageAnalysieren(text, session);
       if (!vorschlag) {
         setVorlageFehler("Konnte die Vorlage nicht auswerten. Bitte Felder unten manuell ausfüllen.");
@@ -35,7 +55,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
       }
       setAngebotVorlage(vorschlag);
     } catch (err) {
-      setVorlageFehler(err.message || "Datei konnte nicht gelesen werden.");
+      setVorlageFehler(err.message || "Analyse fehlgeschlagen.");
     } finally {
       setVorlageLaedt(false);
     }
