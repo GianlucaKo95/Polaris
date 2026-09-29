@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building2, MapPin, User, Phone, Euro, RefreshCw, Pencil, Plus, CircleX, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Building2, MapPin, User, Phone, Euro, RefreshCw, Pencil, Plus, CircleX, Trash2, ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { sbClientMitToken, sbSubSpeichern, sbSubLoeschen } from "../lib/supabase.js";
 import { ALLE_GEWERKE, ONBOARDING_KEY } from "../config/konstanten.js";
 import { Chip } from "../components/Chip.jsx";
@@ -65,6 +65,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
           logo_url:          tmpFirma.logo || null,
           geschaeftsfuehrer: tmpFirma.geschaeftsfuehrer || "",
           gewerke:           tmpFirma.gewerke || [],
+          pin_pflicht:       !!tmpFirma.pin_pflicht,
         };
         if (neuerKiKey.trim()) payload.anthropic_api_key = neuerKiKey.trim();
         const { error } = await client.from("firmen").update(payload).eq("id", firmaId);
@@ -254,6 +255,30 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* App-Sperre für alle Mitarbeiter erzwingen */}
+          <div style={{ background:"var(--surface2)", border:"1px solid var(--border)",
+            borderRadius:10, padding:"12px 14px", marginBottom:14 }}>
+            <div onClick={() => setTmpFirma(p => ({ ...p, pin_pflicht: !p.pin_pflicht }))}
+              style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }}>
+              <div style={{ color:"var(--text)", fontWeight:700, fontSize:13,
+                display:"flex", alignItems:"center", gap:6 }}>
+                <Lock size={14} /> 4-stelliger App-Code verpflichtend
+              </div>
+              <div style={{ width:38, height:22, borderRadius:11,
+                background: tmpFirma.pin_pflicht ? "var(--yellow)" : "var(--border)",
+                position:"relative", transition:"background 0.15s", flexShrink:0 }}>
+                <div style={{ width:18, height:18, borderRadius:9, background:"#fff",
+                  position:"absolute", top:2, left: tmpFirma.pin_pflicht ? 18 : 2,
+                  transition:"left 0.15s" }} />
+              </div>
+            </div>
+            <div style={{ color:"var(--muted)", fontSize:11, marginTop:6, lineHeight:1.5 }}>
+              Aktiv: alle Mitarbeiter (außer Administratoren) müssen bei der Anmeldung
+              einen 4-stelligen App-Code einrichten, bevor sie die App nutzen können —
+              ohne diese Option ist die Einrichtung freiwillig.
             </div>
           </div>
 

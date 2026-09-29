@@ -46,12 +46,16 @@ Erstelle daraus einen vollständigen, professionellen Bautagesbericht. Antworte 
 // die liest den Anthropic-Key der jeweiligen Firma serverseitig aus der
 // Datenbank (siehe supabase/functions/ki-proxy) und ruft Anthropic damit
 // auf — der Key selbst erreicht den Client nie.
-async function rufeClaudeAuf(prompt, maxTokens, session) {
-  const data = await rufeKiProxyAuf({ prompt, maxTokens }, session);
+async function rufeClaudeAuf(prompt, maxTokens, session, refusalHinweis) {
+  const data = await rufeKiProxyAuf({ prompt, maxTokens }, session, refusalHinweis);
   return data;
 }
 
-async function rufeKiProxyAuf(body, session) {
+// refusalHinweis passt die Meldung an den jeweiligen Aufrufer an ("Diktat
+// umformulieren" ergibt z.B. bei der Vorlagenanalyse keinen Sinn, weil da
+// gar nichts diktiert wird) — Default bleibt der Diktat-Text, weil das die
+// meisten Aufrufer dieser Funktion sind.
+async function rufeKiProxyAuf(body, session, refusalHinweis = "Bitte das Diktat umformulieren oder erneut versuchen.") {
   if (!session?.access_token) {
     throw new Error("Keine gültige Sitzung für KI-Anfrage.");
   }
@@ -74,7 +78,7 @@ async function rufeKiProxyAuf(body, session) {
   // diese Prüfung würden alle Aufrufer hier einfach ein leeres/falsches
   // Ergebnis weiterverarbeiten, statt einen sichtbaren Fehler zu zeigen.
   if (data.stop_reason === "refusal") {
-    throw new Error("Die KI konnte diese Anfrage nicht bearbeiten (vom Sicherheitsfilter abgelehnt). Bitte das Diktat umformulieren oder erneut versuchen.");
+    throw new Error(`Die KI konnte diese Anfrage nicht bearbeiten (vom Sicherheitsfilter abgelehnt). ${refusalHinweis}`);
   }
   return data;
 }
@@ -232,11 +236,13 @@ Antworte NUR mit einem JSON-Objekt ohne Markdown:
       "bez": "Bezeichnung der Position",
       "menge": 0,
       "einheit": "m²|m³|m|t|h|Stk|pau",
-      "ep_id": 0
+      "ep_id": 0,
+      "rabatt": 0
     }
   ]
 }
-Für "ep_id" ausschließlich eine id aus dem Katalog oben verwenden. Passt keine Katalogposition zur Leistung, setze "ep_id": null — erfinde NIEMALS eine eigene id oder einen eigenen Preis.`;
+Für "ep_id" ausschließlich eine id aus dem Katalog oben verwenden. Passt keine Katalogposition zur Leistung, setze "ep_id": null — erfinde NIEMALS eine eigene id oder einen eigenen Preis.
+"rabatt" ist ein Prozentsatz (0-100) für diese eine Position — NUR setzen, wenn im Diktat für genau diese Position ausdrücklich ein Rabatt/Nachlass/Abschlag genannt wird (z.B. "10% Rabatt auf die Bodenplatte"), sonst 0. Nie einen Rabatt erfinden oder auf andere Positionen übertragen.`;
 
   const data = await rufeClaudeAuf(prompt, 1500, session);
   const text = data.content?.find(b => b.type === "text")?.text || "{}";
@@ -251,6 +257,7 @@ Für "ep_id" ausschließlich eine id aus dem Katalog oben verwenden. Passt keine
         menge: Number(p.menge) || 0,
         einheit: p.einheit || "Stk",
         ep_id: katalogIds.has(p.ep_id) ? p.ep_id : null,
+        rabatt: Math.min(100, Math.max(0, Number(p.rabatt) || 0)),
       })).filter(p => p.bez),
     };
   } catch {
@@ -258,11 +265,123 @@ Für "ep_id" ausschließlich eine id aus dem Katalog oben verwenden. Passt keine
   }
 }
 
-export async function kiTagesabschluss(diktat, projekt, kolonnen, wetter, session) {
+// ── KI-Vorlagenanalyse: Text/Struktur-Vorschläge aus einer hochgeladenen
+// .docx-Vorlage ──────────────────────────────────────────────────────────
+// Läuft EINMALIG beim Hochladen einer Vorlage, nicht bei jeder Angebots-
+// erstellung. Die KI bekommt nur den per mammoth extrahierten Rohtext der
+// Datei (nie die Originaldatei/XML selbst) und schlägt Einleitungs-/
+// Schlusstext sowie Tabellen-Spaltenbeschriftungen vor. Der Admin sieht die
+// Vorschläge vor dem Speichern und kann sie korrigieren — das tatsächliche
+// Angebots-Dokument wird später NIE aus dieser Datei heraus bearbeitet,
+// sondern sauber neu aus diesen (ggf. korrigierten) Textbausteinen
+// generiert (siehe lib/angebotVorlage.js). Nicht erkennbare Felder kommen
+// als leerer String zurück statt erfunden zu werden.
+export async function kiAngebotVorlageAnalysieren(text, session) {
+  const prompt = `Du analysierst den Text einer von einem Bauunternehmen hochgeladenen Word-Vorlage für Angebote und schlägst daraus wiederverwendbare Textbausteine für eine automatisch generierte Angebots-Vorlage vor.
+
+Text der hochgeladenen Datei:
+"""
+${(text || "").slice(0, 8000)}
+"""
+
+Erfinde NICHTS, was sich nicht aus dem Text ableiten lässt — nicht erkennbare Felder bleiben ein leerer String. Antworte NUR mit einem JSON-Objekt ohne Markdown:
+{
+  "intro_text": "Einleitungstext vor der Positionstabelle, falls erkennbar (z.B. 'Sehr geehrte Damen und Herren, hiermit unterbreiten wir Ihnen folgendes Angebot:'), sonst leerer String",
+  "footer_text": "Schluss-/Grußtext nach der Positionstabelle, falls erkennbar (z.B. Zahlungsbedingungen, Gültigkeitshinweis, Grußformel), sonst leerer String",
+  "spalte_bez": "Beschriftung der Bezeichnungs-Spalte falls abweichend vom Standard, sonst leerer String",
+  "spalte_menge": "Beschriftung der Mengen-Spalte falls abweichend vom Standard, sonst leerer String",
+  "spalte_einheit": "Beschriftung der Einheits-Spalte falls abweichend vom Standard, sonst leerer String",
+  "spalte_ep": "Beschriftung der Einzelpreis-Spalte falls abweichend vom Standard, sonst leerer String",
+  "spalte_gp": "Beschriftung der Gesamtpreis-Spalte falls abweichend vom Standard, sonst leerer String"
+}`;
+
+  const data = await rufeClaudeAuf(prompt, 1500, session,
+    "Bitte eine andere Vorlage hochladen oder die Felder unten manuell ausfüllen.");
+  const responseText = data.content?.find(b => b.type === "text")?.text || "{}";
+  try {
+    const r = JSON.parse(responseText.replace(/```json|```/g, "").trim());
+    return {
+      intro_text:    r.intro_text || "",
+      footer_text:   r.footer_text || "",
+      spalte_bez:    r.spalte_bez || "",
+      spalte_menge:  r.spalte_menge || "",
+      spalte_einheit:r.spalte_einheit || "",
+      spalte_ep:     r.spalte_ep || "",
+      spalte_gp:     r.spalte_gp || "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── KI-Vorlagenanalyse: Text-Vorschläge für die Bautagebuch-Vorlage ──────
+// Gleiches Prinzip wie kiAngebotVorlageAnalysieren, aber für den
+// Bautagebuch-Export: statt Tabellen-Spaltenbeschriftungen (Bautagebuch hat
+// keine Positionstabelle) schlägt die KI hier Abschnitts-Beschriftungen vor
+// (z.B. "Tätigkeiten" → "Ausgeführte Leistungen"), plus Einleitungs-/
+// Schlusstext. Die hochgeladene Datei wird auch hier nie bearbeitet —
+// jeder Bericht wird sauber neu generiert (siehe lib/tagebuchVorlage.js).
+export async function kiTagebuchVorlageAnalysieren(text, session) {
+  const prompt = `Du analysierst den Text einer von einem Bauunternehmen hochgeladenen Word-Vorlage für Bautagebücher und schlägst daraus wiederverwendbare Textbausteine für eine automatisch generierte Bautagebuch-Vorlage vor.
+
+Text der hochgeladenen Datei:
+"""
+${(text || "").slice(0, 8000)}
+"""
+
+Erfinde NICHTS, was sich nicht aus dem Text ableiten lässt — nicht erkennbare Felder bleiben ein leerer String. Antworte NUR mit einem JSON-Objekt ohne Markdown:
+{
+  "intro_text": "Einleitungstext/Hinweis vor den Berichtsdaten, falls erkennbar, sonst leerer String",
+  "footer_text": "Schlusstext nach dem Bericht, z.B. Hinweis zur Rechtsverbindlichkeit oder Aufbewahrungspflicht, falls erkennbar, sonst leerer String",
+  "label_taetigkeit": "Beschriftung des Tätigkeiten-Abschnitts falls abweichend vom Standard 'Tätigkeiten', sonst leerer String",
+  "label_besonderheiten": "Beschriftung des Besonderheiten-Abschnitts falls abweichend vom Standard 'Besonderheiten / Mängel', sonst leerer String",
+  "label_material": "Beschriftung des Material-Abschnitts falls abweichend vom Standard 'Materiallieferungen', sonst leerer String",
+  "label_personal": "Beschriftung des Personal-Abschnitts falls abweichend vom Standard 'Personal & Stunden', sonst leerer String"
+}`;
+
+  const data = await rufeClaudeAuf(prompt, 1500, session,
+    "Bitte eine andere Vorlage hochladen oder die Felder unten manuell ausfüllen.");
+  const responseText = data.content?.find(b => b.type === "text")?.text || "{}";
+  try {
+    const r = JSON.parse(responseText.replace(/```json|```/g, "").trim());
+    return {
+      intro_text:           r.intro_text || "",
+      footer_text:          r.footer_text || "",
+      label_taetigkeit:     r.label_taetigkeit || "",
+      label_besonderheiten: r.label_besonderheiten || "",
+      label_material:       r.label_material || "",
+      label_personal:       r.label_personal || "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function kiTagesabschluss(diktat, projekt, kolonnen, wetter, aufgaben, session) {
   const heute = new Date().toLocaleDateString("de-DE");
+  const heuteISO = new Date().toISOString().slice(0,10);
   const wetterInfo = wetter
     ? `${wetter.temp}°C, Wind ${wetter.wind}km/h, Niederschlag ${wetter.rain}mm`
     : "keine Wetterdaten";
+
+  // Bereits in der App erfasste Aufgaben, die für den heutigen Tagesabschluss
+  // relevant sind — heute abgeschlossen, aktuell in Arbeit, oder heute zur
+  // Bestätigung vorgeschlagen. Ohne das kannte die KI nur, was im Diktat
+  // erwähnt wurde, und "vergaß" alles, was der Polier zu erwähnen vergaß,
+  // obwohl die App es längst wusste.
+  const aufgabenHeute = (aufgaben || []).filter(a =>
+    (a.status === "abgeschlossen" && a.updated_at?.slice(0,10) === heuteISO) ||
+    a.status === "in_arbeit" ||
+    a.status === "zur_pruefung"
+  );
+  const aufgabenInfo = aufgabenHeute.length
+    ? aufgabenHeute.map(a => {
+        const statusLabel = a.status === "abgeschlossen" ? "heute abgeschlossen"
+          : a.status === "zur_pruefung" ? "heute zur Bestätigung vorgeschlagen"
+          : "in Arbeit";
+        return `- ${a.titel} (${AUFGABEN_TYPEN[a.typ]?.label || a.typ}) — ${statusLabel}`;
+      }).join("\n")
+    : "keine erfassten Aufgaben mit Status-Änderung heute";
 
   const prompt = `Du bist ein erfahrener Polier-Assistent. Analysiere dieses Diktat vom Tagesabschluss und extrahiere strukturierte Daten.
 
@@ -270,6 +389,9 @@ Datum: ${heute}
 Projekt: ${projekt?.name || ""}
 Wetter heute: ${wetterInfo}
 Kolonnen: ${kolonnen.map(k=>k.name).join(", ")}
+
+Bereits in der App erfasste Aufgaben (in die Tätigkeitsbeschreibung einbeziehen, auch wenn im Diktat nicht erwähnt — für diese NICHT zusätzlich eine "neue_aufgabe" vorschlagen):
+${aufgabenInfo}
 
 Diktat des Poliers:
 "${diktat}"

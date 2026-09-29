@@ -8,8 +8,9 @@ import { druckePDF } from "../lib/pdf.jsx";
 import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { kiAngebotErstellen } from "../lib/ai.js";
+import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, projekt, eigeneFirma, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, session }) {
   const [a,         setA]         = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
@@ -19,20 +20,26 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [kiLaedt,   setKiLaedt]   = useState(false);
   const [kiFehler,  setKiFehler]  = useState("");
   const [speichertLaedt, setSpeichertLaedt] = useState(false);
+  const [wordLaedt, setWordLaedt] = useState(false);
 
-  const netto   = a.positionen.reduce((s,p)=>s+(p.menge||0)*(p.ep||0),0);
+  // Positions-Rabatt (pro Zeile) wirkt VOR dem Gesamt-Rabatt im
+  // Einstellungen-Tab — beide sind unabhängig kombinierbar, ohne dass
+  // eine Zeile den Überblick verliert: gpOf() ist die einzige Stelle, die
+  // beide Zahlenwerte (Position + PDF/CSV/Summen-Banner) berechnet.
+  const gpOf = p => (p.menge||0) * (p.ep||0) * (1 - (p.rabatt||0)/100);
+  const netto   = a.positionen.reduce((s,p)=>s+gpOf(p),0);
   const rabattBetrag = netto * (a.rabatt||0)/100;
   const nettoNachRabatt = netto - rabattBetrag;
   const mwstBetrag = nettoNachRabatt * (a.mwst||19)/100;
   const bruttoGesamt = nettoNachRabatt + mwstBetrag;
 
   function addPosition(pos) {
-    setA(x => ({ ...x, positionen:[...x.positionen, { ...pos, id:Date.now() }] }));
+    setA(x => ({ ...x, positionen:[...x.positionen, { rabatt:0, ...pos, id:Date.now() }] }));
   }
 
   function updatePos(id, key, val) {
     setA(x => ({ ...x, positionen:x.positionen.map(p =>
-      p.id===id ? { ...p, [key]:key==="menge"||key==="ep" ? Number(val) : val } : p) }));
+      p.id===id ? { ...p, [key]:key==="menge"||key==="ep"||key==="rabatt" ? Number(val) : val } : p) }));
   }
 
   function removePos(id) {
@@ -76,7 +83,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       const neuPos = ergebnis.positionen.map(p => {
         const ep = einheitspreise.find(e => e.id === p.ep_id);
         return { id:Date.now()+Math.random(), bez:p.bez, einheit:p.einheit,
-          menge:p.menge, ep:ep?.preis || 0 };
+          menge:p.menge, ep:ep?.preis || 0, rabatt:p.rabatt || 0 };
       });
       setA(x => ({
         ...x,
@@ -110,8 +117,11 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 .page { width:210mm; padding:14mm 18mm; }
 .header { display:flex; justify-content:space-between; align-items:flex-start;
   border-bottom:3px solid #F5C400; padding-bottom:12px; margin-bottom:16px; }
-.logo { font-size:22pt; font-weight:900; letter-spacing:-1px; }
-.logo span { color:#F5C400; }
+.logo-img { width:56px; height:56px; object-fit:contain; flex-shrink:0; }
+.logo-mark { width:56px; height:56px; background:#F5C400; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:24px;
+  color:#1a1a1a; flex-shrink:0; }
+.firma-name { font-size:16pt; font-weight:900; letter-spacing:-0.5px; }
 .firma-info { font-size:9pt; color:#666; margin-top:3px; line-height:1.5; }
 .angebot-title { text-align:right; }
 .angebot-title h1 { font-size:16pt; font-weight:900; }
@@ -137,12 +147,17 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 </style></head><body><div class="page">
 
 <div class="header">
-  <div>
-    <div class="logo"><span>★</span> ${escapeHtml(eigeneFirma?.name)||"Polaris"}</div>
-    <div class="firma-info">
-      ${escapeHtml(eigeneFirma?.strasse)} · ${escapeHtml(eigeneFirma?.plz)} ${escapeHtml(eigeneFirma?.ort)}<br>
-      Tel: ${escapeHtml(eigeneFirma?.telefon)} · ${escapeHtml(eigeneFirma?.email)}<br>
-      ${eigeneFirma?.steuernummer ? "St-Nr: "+escapeHtml(eigeneFirma.steuernummer) : ""}
+  <div style="display:flex;gap:14px;align-items:center;">
+    ${eigeneFirma?.logo
+      ? `<img class="logo-img" src="${eigeneFirma.logo}" alt="Logo"/>`
+      : `<div class="logo-mark">★</div>`}
+    <div>
+      <div class="firma-name">${escapeHtml(eigeneFirma?.name)||"Polaris"}</div>
+      <div class="firma-info">
+        ${escapeHtml(eigeneFirma?.strasse)} · ${escapeHtml(eigeneFirma?.plz)} ${escapeHtml(eigeneFirma?.ort)}<br>
+        Tel: ${escapeHtml(eigeneFirma?.telefon)} · ${escapeHtml(eigeneFirma?.email)}<br>
+        ${eigeneFirma?.steuernummer ? "St-Nr: "+escapeHtml(eigeneFirma.steuernummer) : ""}
+      </div>
     </div>
   </div>
   <div class="angebot-title">
@@ -163,10 +178,11 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
   <thead>
     <tr>
       <th style="width:5%">Pos.</th>
-      <th style="width:45%">Bezeichnung</th>
-      <th style="width:10%">Menge</th>
-      <th style="width:10%">Einheit</th>
-      <th style="width:15%">EP (€)</th>
+      <th style="width:38%">Bezeichnung</th>
+      <th style="width:9%">Menge</th>
+      <th style="width:9%">Einheit</th>
+      <th style="width:13%">EP (€)</th>
+      <th style="width:11%">Rabatt</th>
       <th style="width:15%">GP (€)</th>
     </tr>
   </thead>
@@ -178,7 +194,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
       <td>${(p.menge||0).toLocaleString("de-DE")}</td>
       <td>${escapeHtml(p.einheit)}</td>
       <td>${(p.ep||0).toLocaleString("de-DE",{minimumFractionDigits:2})}</td>
-      <td><strong>${((p.menge||0)*(p.ep||0)).toLocaleString("de-DE",{minimumFractionDigits:2})}</strong></td>
+      <td>${p.rabatt > 0 ? p.rabatt+"%" : "–"}</td>
+      <td><strong>${gpOf(p).toLocaleString("de-DE",{minimumFractionDigits:2})}</strong></td>
     </tr>`).join("")}
   </tbody>
 </table>
@@ -209,14 +226,14 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 
   function exportCSV() {
     const rows = [
-      ["Pos.","Bezeichnung","Menge","Einheit","EP (€)","GP (€)"],
+      ["Pos.","Bezeichnung","Menge","Einheit","EP (€)","Rabatt (%)","GP (€)"],
       ...a.positionen.map((p,i) => [
         i+1, p.bez, p.menge||0, p.einheit,
-        (p.ep||0).toFixed(2), ((p.menge||0)*(p.ep||0)).toFixed(2)
+        (p.ep||0).toFixed(2), p.rabatt||0, gpOf(p).toFixed(2)
       ]),
-      ["","","","","Netto:", netto.toFixed(2)],
-      ["","","","","MwSt "+a.mwst+"%:", mwstBetrag.toFixed(2)],
-      ["","","","","GESAMT:", bruttoGesamt.toFixed(2)],
+      ["","","","","","Netto:", netto.toFixed(2)],
+      ["","","","","","MwSt "+a.mwst+"%:", mwstBetrag.toFixed(2)],
+      ["","","","","","GESAMT:", bruttoGesamt.toFixed(2)],
     ];
     const csv = rows.map(r => r.map(v => '"'+v+'"').join(";")).join("\n");
     const blob = new Blob(["﻿"+csv], { type:"text/csv;charset=utf-8;" });
@@ -224,6 +241,20 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
     const link = document.createElement("a");
     link.href = url; link.download = ("Angebot_"+a.titel.replace(/ /g,"_")+".csv");
     link.click(); URL.revokeObjectURL(url);
+  }
+
+  async function exportWord() {
+    if (wordLaedt) return;
+    setWordLaedt(true);
+    try {
+      const blob = await erzeugeAngebotDocx({ angebot: a, projekt, eigeneFirma, angebotVorlage });
+      const url  = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url; link.download = ("Angebot_"+a.titel.replace(/ /g,"_")+".docx");
+      link.click(); URL.revokeObjectURL(url);
+    } finally {
+      setWordLaedt(false);
+    }
   }
 
   // ── KI-Angebotserstellung als eigener Screen ──
@@ -249,7 +280,10 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
           <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10, lineHeight:1.5 }}>
             Beschreibe die Leistung — die KI wählt passende Positionen aus euren
             hinterlegten Einheitspreisen und schätzt die Mengen. Preise kommen
-            immer aus dem Katalog, nie von der KI selbst.
+            immer aus dem Katalog, nie von der KI selbst. Rabatt auf eine
+            einzelne Position kannst du mitdiktieren, z.B. "10% Rabatt auf die
+            Bodenplatte" — Rabatt lässt sich pro Position auch jederzeit von
+            Hand eintragen oder ändern.
           </div>
           <DiktierFeld label="Leistungsbeschreibung" value={kiDiktat} onChange={setKiDiktat} rows={4} />
           {kiFehler && (
@@ -384,6 +418,13 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               border:"1.5px solid var(--border)", borderRadius:8,
               padding:"6px 10px", cursor:"pointer", fontSize:12,
               fontFamily:"inherit", display:"flex", alignItems:"center", gap:5 }}><ChartColumn size={12} /> CSV</button>
+          <button onClick={exportWord} disabled={wordLaedt}
+            style={{ background:"var(--surface2)", color:"var(--text)",
+              border:"1.5px solid var(--border)", borderRadius:8,
+              padding:"6px 10px", cursor: wordLaedt ? "default" : "pointer", fontSize:12,
+              fontFamily:"inherit", display:"flex", alignItems:"center", gap:5 }}>
+            {wordLaedt ? <Spinner size={12} /> : <FileText size={12} />} Word
+          </button>
           <button onClick={exportPDF}
             style={{ background:"var(--yellow)", color:"#1a1200", border:"none",
               borderRadius:8, padding:"6px 12px", fontWeight:700,
@@ -506,10 +547,22 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                       style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
                   </div>
                 </div>
+                <div style={{ marginTop:6, width:"33%", minWidth:90 }}>
+                  <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Rabatt (%)</div>
+                  <input type="number" value={pos.rabatt||""}
+                    onChange={e=>updatePos(pos.id,"rabatt",e.target.value)}
+                    placeholder="0" min="0" max="100"
+                    style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
+                </div>
                 <div style={{ textAlign:"right", marginTop:6,
                   color:"var(--yellow)", fontWeight:800, fontSize:14 }}>
-                  {((pos.menge||0)*(pos.ep||0)).toLocaleString("de-DE",
-                    {minimumFractionDigits:2})} €
+                  {pos.rabatt > 0 && (
+                    <span style={{ color:"var(--muted)", fontWeight:600, fontSize:12, marginRight:7,
+                      textDecoration:"line-through" }}>
+                      {((pos.menge||0)*(pos.ep||0)).toLocaleString("de-DE",{minimumFractionDigits:2})} €
+                    </span>
+                  )}
+                  {gpOf(pos).toLocaleString("de-DE", {minimumFractionDigits:2})} €
                 </div>
               </div>
             ))}

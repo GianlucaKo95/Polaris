@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { Settings, Euro, ClipboardList, Pencil, X, Plus } from "lucide-react";
+import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen } from "lucide-react";
 import { PreisFormular } from "./PreisFormular.jsx";
 import { VorlageFormular } from "./VorlageFormular.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
+import { VorlagenUploadPanel } from "../components/VorlagenUploadPanel.jsx";
+import { kiAngebotVorlageAnalysieren, kiTagebuchVorlageAnalysieren } from "../lib/ai.js";
 
-export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen }) {
-  const [aktiv,    setAktiv]    = useState("preise"); // preise | vorlagen
+export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, session }) {
+  const [aktiv,    setAktiv]    = useState("preise"); // preise | vorlagen | angebotsvorlage | tagebuchvorlage
   const [neuPreis, setNeuPreis] = useState(null);
   const [neuVorlage,setNeuVorlage] = useState(null);
   const [editPreis, setEditPreis] = useState(null);
@@ -33,16 +35,19 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
         <Settings size={16} /> Angebots-Parameter
       </div>
 
-      {/* Tab-Toggle */}
-      <div style={{ display:"flex", gap:6, marginBottom:12 }}>
-        {[["preise",Euro,"Einheitspreise"],["vorlagen",ClipboardList,"LV-Vorlagen"]].map(([k,Icon,l]) => (
+      {/* Tab-Toggle — 2x2-Grid statt einer Reihe: bei 4 Tabs lief eine
+          gemeinsame flex:1-Reihe auf schmalen Bildschirmen aus dem
+          sichtbaren Bereich heraus (der letzte Tab war nicht mehr erreichbar). */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:12 }}>
+        {[["preise",Euro,"Einheitspreise"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
           <button key={k} onClick={() => setAktiv(k)}
-            style={{ flex:1, background: aktiv===k ? "var(--yellow)" : "var(--surface2)",
+            style={{ background: aktiv===k ? "var(--yellow)" : "var(--surface2)",
               color: aktiv===k ? "#1a1200" : "var(--muted)",
               border:`1.5px solid ${aktiv===k ? "var(--yellow)" : "var(--border)"}`,
               borderRadius:10, padding:10, fontWeight: aktiv===k ? 700 : 400,
               cursor:"pointer", fontSize:13, fontFamily:"inherit",
-              display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}><Icon size={13} /> {l}</button>
+              display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+              textAlign:"center" }}><Icon size={13} /> {l}</button>
         ))}
       </div>
 
@@ -133,6 +138,49 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
             </div>
           ))}
         </div>
+      )}
+
+      {/* ANGEBOTS-VORLAGE */}
+      {aktiv === "angebotsvorlage" && (
+        <VorlagenUploadPanel
+          beschreibung="Word-Dokument (.docx) mit eurem gewohnten Angebotstext hochladen — die KI schlägt daraus Einleitungs-/Schlusstext und Spaltenbeschriftungen vor. Jedes künftige Angebot wird damit als eigenes, sauber generiertes Word-Dokument exportierbar, nicht als Bearbeitung der hochgeladenen Datei selbst."
+          analysiereFn={kiAngebotVorlageAnalysieren}
+          session={session}
+          vorlage={angebotVorlage}
+          setVorlage={setAngebotVorlage}
+          textFelder={[
+            ["Einleitungstext","intro_text"],
+            ["Schlusstext","footer_text"],
+          ]}
+          kurzFelder={[
+            ["Spalte Bezeichnung","spalte_bez","Bezeichnung"],
+            ["Spalte Menge","spalte_menge","Menge"],
+            ["Spalte Einheit","spalte_einheit","Einheit"],
+            ["Spalte EP","spalte_ep","EP (€)"],
+            ["Spalte GP","spalte_gp","GP (€)"],
+          ]}
+        />
+      )}
+
+      {/* BAUTAGEBUCH-VORLAGE */}
+      {aktiv === "tagebuchvorlage" && (
+        <VorlagenUploadPanel
+          beschreibung="Word-Dokument (.docx) mit eurem gewohnten Bautagebuch-Text hochladen — die KI schlägt daraus Einleitungs-/Schlusstext und Abschnittsbeschriftungen vor. Jeder künftige Tagesbericht wird damit als eigenes, sauber generiertes Word-Dokument exportierbar, nicht als Bearbeitung der hochgeladenen Datei selbst."
+          analysiereFn={kiTagebuchVorlageAnalysieren}
+          session={session}
+          vorlage={tagebuchVorlage}
+          setVorlage={setTagebuchVorlage}
+          textFelder={[
+            ["Einleitungstext","intro_text"],
+            ["Schlusstext","footer_text"],
+          ]}
+          kurzFelder={[
+            ["Abschnitt Tätigkeiten","label_taetigkeit","Tätigkeiten"],
+            ["Abschnitt Besonderheiten","label_besonderheiten","Besonderheiten / Mängel"],
+            ["Abschnitt Material","label_material","Materiallieferungen"],
+            ["Abschnitt Personal","label_personal","Personal & Stunden"],
+          ]}
+        />
       )}
 
       {/* Preis-Formular — als Portal gerendert, sonst derselbe

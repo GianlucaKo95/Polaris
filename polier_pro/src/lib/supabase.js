@@ -129,8 +129,31 @@ export function sbClientMitToken(session) {
   });
 }
 
+// Ordnet einen fehlgeschlagenen Schreib-/Lösch-Versuch einer konkreten,
+// für den Nutzer verständlichen Meldung zu, statt pauschal "Verbindung
+// prüfen" zu zeigen — das verwirrt am meisten genau dann, wenn eine
+// RLS-Policy (z.B. rollenbasiert) den Zugriff verweigert, nicht das Netz.
+// Wichtig: Ein INSERT, das an "WITH CHECK" scheitert, wirft einen echten
+// Postgrest-Error (Code 42501). Ein UPDATE/DELETE, das an "USING"
+// scheitert, wirft dagegen KEINEN Error — die Zeile wird einfach lautlos
+// nicht getroffen (0 Zeilen zurück). Beide Fälle müssen separat erkannt
+// werden, sonst bleibt der zweite Fall (der hier häufigere) weiterhin nur
+// "Verbindung prüfen".
+function sbSchreibfehler(error, data, istAenderungAnBestehenderZeile) {
+  if (error) {
+    if (error.code === "42501" || /row-level security/i.test(error.message || "")) {
+      return "Keine Berechtigung für diese Aktion.";
+    }
+    return error.message || "Unbekannter Fehler beim Speichern.";
+  }
+  if (istAenderungAnBestehenderZeile && Array.isArray(data) && data.length === 0) {
+    return "Keine Berechtigung für diese Aktion.";
+  }
+  return null;
+}
+
 export async function sbAufgabeSpeichern(a, projektId, session, istNeu) {
-  if (!session?.access_token || !projektId) return null;
+  if (!session?.access_token || !projektId) return { daten: null, fehler: "Keine gültige Sitzung." };
   const payload = {
     projekt_id:         projektId,
     titel:               a.titel || "",
@@ -163,43 +186,47 @@ export async function sbAufgabeSpeichern(a, projektId, session, istNeu) {
       ? client.from("aufgaben").insert(payload).select()
       : client.from("aufgaben").update(payload).eq("id", a.id).select();
     const { data, error } = await query;
-    if (error) return null;
-    return data?.[0] || null;
-  } catch { return null; }
+    const fehler = sbSchreibfehler(error, data, !istNeu);
+    if (fehler) return { daten: null, fehler };
+    return { daten: data?.[0] || null, fehler: null };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
 export async function sbAufgabeLoeschen(id, session) {
-  if (!session?.access_token) return false;
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
   try {
     const client = sbClientMitToken(session);
-    const { error } = await client.from("aufgaben").delete().eq("id", id);
-    return !error;
-  } catch { return false; }
+    const { data, error } = await client.from("aufgaben").delete().eq("id", id).select();
+    const fehler = sbSchreibfehler(error, data, true);
+    return { ok: !fehler, fehler };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
-// Facharbeiter dürfen Aufgaben nicht direkt abschließen — diese beiden RPCs
-// laufen serverseitig als SECURITY DEFINER und prüfen Rolle + Firma selbst,
-// ganz ohne UPDATE-Grant auf die aufgaben-Tabelle für diese Rolle.
+// Facharbeiter/Vorarbeiter dürfen Aufgaben nicht direkt abschließen — diese
+// beiden RPCs laufen serverseitig als SECURITY DEFINER und prüfen Rolle +
+// Firma selbst, ganz ohne UPDATE-Grant auf die aufgaben-Tabelle für diese
+// Rollen. Die RPCs werfen bei fehlender Berechtigung bereits eine konkrete
+// Meldung (raise exception) — die wird hier durchgereicht statt verworfen.
 export async function sbAufgabeVorschlagen(id, session) {
-  if (!session?.access_token) return false;
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
   try {
     const client = sbClientMitToken(session);
     const { error } = await client.rpc("aufgabe_vorschlagen_erledigt", { p_aufgabe_id: id });
-    return !error;
-  } catch { return false; }
+    return { ok: !error, fehler: error ? (error.message || "Vorschlag fehlgeschlagen.") : null };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
 export async function sbAufgabeVorschlagEntscheiden(id, akzeptiert, session) {
-  if (!session?.access_token) return false;
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
   try {
     const client = sbClientMitToken(session);
     const { error } = await client.rpc("aufgabe_vorschlag_entscheiden", { p_aufgabe_id: id, p_akzeptiert: akzeptiert });
-    return !error;
-  } catch { return false; }
+    return { ok: !error, fehler: error ? (error.message || "Entscheidung fehlgeschlagen.") : null };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
 export async function sbKolonneSpeichern(k, projektId, session, istNeu) {
-  if (!session?.access_token || !projektId) return null;
+  if (!session?.access_token || !projektId) return { daten: null, fehler: "Keine gültige Sitzung." };
   const payload = {
     projekt_id:   projektId,
     name:         k.name || "",
@@ -212,18 +239,20 @@ export async function sbKolonneSpeichern(k, projektId, session, istNeu) {
       ? client.from("kolonnen").insert(payload).select()
       : client.from("kolonnen").update(payload).eq("id", k.id).select();
     const { data, error } = await query;
-    if (error) return null;
-    return data?.[0] || null;
-  } catch { return null; }
+    const fehler = sbSchreibfehler(error, data, !istNeu);
+    if (fehler) return { daten: null, fehler };
+    return { daten: data?.[0] || null, fehler: null };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
 export async function sbKolonneLoeschen(id, session) {
-  if (!session?.access_token) return false;
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
   try {
     const client = sbClientMitToken(session);
-    const { error } = await client.from("kolonnen").delete().eq("id", id);
-    return !error;
-  } catch { return false; }
+    const { data, error } = await client.from("kolonnen").delete().eq("id", id).select();
+    const fehler = sbSchreibfehler(error, data, true);
+    return { ok: !fehler, fehler };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
 export async function sbSubSpeichern(s, firmaId, session, istNeu) {
@@ -298,19 +327,19 @@ export async function sbProjektKostenSpeichern(projektId, budgetPositionen, stun
 
 // Einheitspreise + LV-Vorlagen sind Firmen-weite Konfiguration (nicht
 // projektgebunden), deshalb auf der firmen-Zeile statt einer eigenen Tabelle.
-export async function sbFirmaParameterSpeichern(firmaId, einheitspreise, lvVorlagen, session) {
+export async function sbFirmaParameterSpeichern(firmaId, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, session) {
   if (!session?.access_token || !firmaId) return false;
   try {
     const client = sbClientMitToken(session);
     const { error } = await client.from("firmen")
-      .update({ einheitspreise, lv_vorlagen: lvVorlagen })
+      .update({ einheitspreise, lv_vorlagen: lvVorlagen, angebot_vorlage: angebotVorlage, tagebuch_vorlage: tagebuchVorlage })
       .eq("id", firmaId);
     return !error;
   } catch { return false; }
 }
 
 export async function sbBerichtSpeichern(b, projektId, session) {
-  if (!session?.access_token || !projektId) return null;
+  if (!session?.access_token || !projektId) return { daten: null, fehler: "Keine gültige Sitzung." };
   const payload = {
     projekt_id:      projektId,
     datum:           b.datumRaw || new Date().toISOString().slice(0,10),
@@ -326,9 +355,10 @@ export async function sbBerichtSpeichern(b, projektId, session) {
   try {
     const client = sbClientMitToken(session);
     const { data, error } = await client.from("tagesberichte").insert(payload).select();
-    if (error) return null;
-    return data?.[0] || null;
-  } catch { return null; }
+    const fehler = sbSchreibfehler(error, data, false);
+    if (fehler) return { daten: null, fehler };
+    return { daten: data?.[0] || null, fehler: null };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
 // Schreibt den beim revisionssicheren Export berechneten Inhalts-Hash ins
@@ -371,6 +401,12 @@ export async function sbSignOut(token) {
   await supabase.auth.signOut();
 }
 
+// Gibt { profil, sessionUngueltig } statt nur profil|null zurück: ein
+// fehlgeschlagener Request kann entweder heißen "Token vom Server wirklich
+// abgelehnt" (status 401 — Session ist tot) oder "gerade nicht erreichbar"
+// (Netzwerkfehler, Timeout, 5xx — Session ist weiterhin gültig, nur der
+// Check ist fehlgeschlagen). useAuth.js darf nur im ersten Fall abmelden,
+// sonst würde ein Funkloch auf der Baustelle wie ein Logout wirken.
 export async function sbGetProfile(token, userId) {
   const client = sbClientMitToken({ access_token: token });
   // Explizit nach der eigenen id filtern statt sich allein auf RLS + limit(1)
@@ -383,7 +419,11 @@ export async function sbGetProfile(token, userId) {
   // Login fälschlich im Konto des ursprünglichen Admins landeten.
   let query = client.from("profile").select("*");
   query = userId ? query.eq("id", userId) : query.limit(1);
-  const { data, error } = await query;
-  if (error) return null;
-  return data?.[0] || null;
+  try {
+    const { data, error, status } = await query;
+    if (error) return { profil: null, sessionUngueltig: status === 401 };
+    return { profil: data?.[0] || null, sessionUngueltig: false };
+  } catch {
+    return { profil: null, sessionUngueltig: false };
+  }
 }

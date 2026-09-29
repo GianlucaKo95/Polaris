@@ -30,24 +30,44 @@ export function useAuth() {
     }
   }, []);
 
+  // Lädt das Profil zur aktuellen Session. Schlägt der Check nur wegen eines
+  // Netzwerkfehlers/Timeouts fehl (sessionUngueltig:false), wird die Session
+  // NICHT beendet — stattdessen in Kürze erneut versucht. Nur ein vom Server
+  // bestätigtes 401 (Token wirklich abgelehnt) führt zum Abmelden. Ohne diese
+  // Unterscheidung würde jedes Funkloch auf der Baustelle wie ein Logout wirken.
   useEffect(() => {
-    if (session?.access_token) {
-      sbGetProfile(session.access_token, session.user?.id).then(p => {
-        if (p) setProfil(p);
-        else { localStorage.removeItem("polaris-session"); setSession(null); }
-      });
+    if (!session?.access_token) return;
+    let abgebrochen = false;
+    let retryTimer;
+
+    async function ladeProfil() {
+      const { profil: p, sessionUngueltig } = await sbGetProfile(session.access_token, session.user?.id);
+      if (abgebrochen) return;
+      if (p) { setProfil(p); return; }
+      if (sessionUngueltig) {
+        localStorage.removeItem("polaris-session");
+        setSession(null);
+        return;
+      }
+      retryTimer = setTimeout(ladeProfil, 5000);
     }
+    ladeProfil();
+
+    return () => { abgebrochen = true; clearTimeout(retryTimer); };
   }, [session?.access_token]);
 
   // Automatischer Token-Refresh vor Ablauf (Supabase Tokens laufen nach 1h ab)
   useEffect(() => {
     if (!session?.refresh_token) return;
+    let abgebrochen = false;
+    let timer;
 
     async function refreshSession() {
       try {
         const { data, error } = await supabase.auth.refreshSession({
           refresh_token: session.refresh_token,
         });
+        if (abgebrochen) return;
         if (!error && data.session?.access_token) {
           const neueSession = {
             access_token:  data.session.access_token,
@@ -57,14 +77,20 @@ export function useAuth() {
           };
           localStorage.setItem("polaris-session", JSON.stringify(neueSession));
           setSession(neueSession);
-        } else {
-          // Refresh fehlgeschlagen → Session ist ungültig, abmelden
+          return;
+        }
+        if (error?.status === 400 || error?.status === 401) {
+          // Refresh-Token vom Server wirklich abgelehnt (widerrufen/ungültig) — abmelden.
           localStorage.removeItem("polaris-session");
           setSession(null);
           setProfil(null);
+          return;
         }
+        // Sonstiger Fehler (Netzwerk, 5xx) — Session behalten, in Kürze erneut
+        // versuchen statt den Nutzer bei einer vorübergehenden Störung auszuloggen.
+        timer = setTimeout(refreshSession, 30 * 1000);
       } catch {
-        // Netzwerkfehler beim Refresh — Session vorerst behalten, nächster Versuch folgt
+        if (!abgebrochen) timer = setTimeout(refreshSession, 30 * 1000);
       }
     }
 
@@ -72,17 +98,18 @@ export function useAuth() {
     // expires_in gibt die Gültigkeitsdauer in Sekunden an; wir erneuern 5 Minuten vorher.
     const expiresInMs = (session.expires_in || 3600) * 1000;
     const refreshInMs = Math.max(expiresInMs - 5 * 60 * 1000, 30 * 1000);
-    const timer = setTimeout(refreshSession, refreshInMs);
-    return () => clearTimeout(timer);
+    timer = setTimeout(refreshSession, refreshInMs);
+    return () => { abgebrochen = true; clearTimeout(timer); };
   }, [session?.access_token, session?.refresh_token]);
 
-  // Bei Wiederherstellung des Tabs (App aus Hintergrund geholt): Session sofort prüfen
+  // Bei Wiederherstellung des Tabs (App aus Hintergrund geholt): Session prüfen —
+  // aber nur bei einem bestätigten 401 abmelden, nicht bei einem bloßen
+  // Netzwerkfehler direkt nach dem Aufwecken (z.B. WLAN noch nicht reconnected).
   useEffect(() => {
     function handleVisibility() {
       if (document.visibilityState === "visible" && session?.access_token) {
-        sbGetProfile(session.access_token, session.user?.id).then(p => {
-          if (!p) {
-            // Token ist ungültig geworden (z.B. abgelaufen während App im Hintergrund war)
+        sbGetProfile(session.access_token, session.user?.id).then(({ sessionUngueltig }) => {
+          if (sessionUngueltig) {
             localStorage.removeItem("polaris-session");
             setSession(null);
             setProfil(null);
@@ -97,20 +124,18 @@ export function useAuth() {
   // 401-Handler: bei ungültigem Token die Session verifizieren bevor abgemeldet wird.
   // Ein einzelner fehlgeschlagener Request (z.B. RLS-Policy verweigert Zugriff auf
   // eine bestimmte Tabelle) ist kein Beweis dass die gesamte Session ungültig ist —
-  // nur ein zusätzlicher fehlgeschlagener Profil-Check rechtfertigt den Logout.
+  // nur ein vom Server bestätigtes 401 beim Profil-Check rechtfertigt den Logout;
+  // ein Netzwerkfehler beim Check selbst führt zu keiner Aktion.
   useEffect(() => {
     async function handleAuthInvalid() {
       if (!session?.access_token) return;
-      const p = await sbGetProfile(session.access_token, session.user?.id);
-      if (!p) {
-        // Session wirklich ungültig — jetzt abmelden
+      const { sessionUngueltig } = await sbGetProfile(session.access_token, session.user?.id);
+      if (sessionUngueltig) {
         localStorage.removeItem("polaris-session");
         setSession(null);
         setProfil(null);
         setFehler("Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.");
       }
-      // Profil ließ sich laden → Session ist gültig, der 401 kam von einer
-      // einzelnen Tabelle/RLS-Policy. Kein Logout nötig.
     }
     window.addEventListener("polaris-auth-invalid", handleAuthInvalid);
     return () => window.removeEventListener("polaris-auth-invalid", handleAuthInvalid);
@@ -181,6 +206,14 @@ export function useAuth() {
     setSession(null); setProfil(null);
   }
 
+  // Merged Felder direkt in den lokalen Profil-State, z.B. nachdem die PIN
+  // oder pin_abgefragt serverseitig gespeichert wurde — ohne das würden
+  // Änderungen aus MeinProfilView/ErstePinAbfrageScreen erst nach einem
+  // Seiten-Reload sichtbar (App.jsx prüft z.B. profil.pin für die Sperre).
+  function profilAktualisieren(felder) {
+    setProfil(p => p ? { ...p, ...felder } : p);
+  }
+
   const rolle = profil?.rolle || null;
   const rolleConfig = rolle ? ROLLEN[rolle] : null;
 
@@ -188,6 +221,6 @@ export function useAuth() {
   const supabaseKonfiguriert = !SUPABASE_URL.includes("DEIN");
 
   return { session, profil, rolle, rolleConfig, loading, fehler,
-    anmelden, abmelden, supabaseKonfiguriert,
+    anmelden, abmelden, profilAktualisieren, supabaseKonfiguriert,
     inviteToken, inviteType, passwortSetzen, passwortVergessen };
 }

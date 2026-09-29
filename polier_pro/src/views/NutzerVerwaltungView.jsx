@@ -190,8 +190,12 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
             position:"relative", overflow:"hidden" }}>
             <div style={{ position:"absolute", top:0, left:0, right:0,
               height:3, background:c }} />
+            {/* overflowWrap: mehrwortige Labels ("Aktive Nutzer") brechen am
+                Leerzeichen von selbst um, aber ein einzelnes langes Wort ohne
+                Leerzeichen ("Änderungen") hat sonst keine Umbruchstelle und
+                wird vom overflow:hidden der Karte einfach abgeschnitten. */}
             <div style={{ color:"var(--muted)", fontSize:10, fontWeight:700,
-              textTransform:"uppercase", marginBottom:4 }}>{l}</div>
+              textTransform:"uppercase", marginBottom:4, overflowWrap:"anywhere" }}>{l}</div>
             <div style={{ color:"var(--text)", fontWeight:900, fontSize:22 }}>{v}</div>
           </div>
         ))}

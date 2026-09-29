@@ -12,6 +12,7 @@ import { usePushNotifications } from "./hooks/usePushNotifications.js";
 import { useOfflineSync } from "./hooks/useOfflineSync.js";
 import { sbClientMitToken, SUPABASE_URL, sbAufgabeSpeichern, sbAufgabeLoeschen, sbAufgabeVorschlagen, sbAufgabeVorschlagEntscheiden, sbBerichtSpeichern, sbKolonneSpeichern, sbKolonneLoeschen, sbFirmaParameterSpeichern, sbAngebotSpeichern } from "./lib/supabase.js";
 import { PasswortSetzenScreen } from "./views/PasswortSetzenScreen.jsx";
+import { ErstePinAbfrageScreen } from "./views/ErstePinAbfrageScreen.jsx";
 import { EinladungScreen } from "./views/EinladungScreen.jsx";
 import { RegistrierungScreen } from "./views/RegistrierungScreen.jsx";
 import { LoginScreen } from "./views/LoginScreen.jsx";
@@ -151,12 +152,14 @@ export default function PolierApp() {
   const [editProjekt,   setEditProjekt] = useState(false);
   useBackButton(neuProjekt,  () => setNeuProjekt(false));
   useBackButton(editProjekt, () => setEditProjekt(false));
-  const [eigeneFirma,   setEigeneFirma] = useState({ name:"", strasse:"", plz:"", ort:"", telefon:"", email:"", geschaeftsfuehrer:"", steuernummer:"", gewerke:[], logo:null });
+  const [eigeneFirma,   setEigeneFirma] = useState({ name:"", strasse:"", plz:"", ort:"", telefon:"", email:"", geschaeftsfuehrer:"", steuernummer:"", gewerke:[], logo:null, pin_pflicht:false });
   const [subs,          setSubs]        = useState([]);
   const [homeTab,       setHomeTab]     = useState("projekte");
   const [zeitbuchungen, setZeitbuchungen] = useState([]);
   const [einheitspreise,setEinheitspreise]= useState(DEFAULT_EINHEITSPREISE);
   const [lvVorlagen,    setLvVorlagen]    = useState(DEFAULT_LV_VORLAGEN);
+  const [angebotVorlage,setAngebotVorlage]= useState(null);
+  const [tagebuchVorlage,setTagebuchVorlage]= useState(null);
   // Verhindert, dass der initiale Ladevorgang der Parameter aus Supabase
   // (setzt dieselben Werte, die gerade erst von dort kamen) sie sofort
   // wieder zurückschreibt, bevor der Nutzer überhaupt etwas geändert hat.
@@ -204,7 +207,7 @@ export default function PolierApp() {
       // ausgeschlossen, damit der KI-Key nie in den Client-State (firma/
       // eigeneFirma) gelangt. Er wird ausschließlich serverseitig in der
       // ki-proxy Edge Function gelesen (siehe supabase/functions/ki-proxy).
-      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen")
+      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage, pin_pflicht")
         .eq("id", auth.profil.firma_id)
         .then(({ data: d, error, status }) => {
           if (error) {
@@ -225,11 +228,14 @@ export default function PolierApp() {
               logo:              d[0].logo_url || null,
               geschaeftsfuehrer: d[0].geschaeftsfuehrer || "",
               gewerke:           d[0].gewerke || [],
+              pin_pflicht:       d[0].pin_pflicht || false,
             }));
             // Leere Liste = neue Firma, die noch nie eigene Parameter
             // gespeichert hat → sinnvolle Beispieldaten statt leerer Liste.
             setEinheitspreise(d[0].einheitspreise?.length ? d[0].einheitspreise : DEFAULT_EINHEITSPREISE);
             setLvVorlagen(d[0].lv_vorlagen?.length ? d[0].lv_vorlagen : DEFAULT_LV_VORLAGEN);
+            setAngebotVorlage(d[0].angebot_vorlage || null);
+            setTagebuchVorlage(d[0].tagebuch_vorlage || null);
             setParameterGeladen(true);
           } else {
             setFirmaLadeFehler(`Keine Firma mit ID ${auth.profil.firma_id} gefunden — profile.firma_id zeigt ins Leere.`);
@@ -253,8 +259,8 @@ export default function PolierApp() {
   // Einheitspreise/LV-Vorlagen nach jeder Änderung in der Firma persistieren.
   useEffect(() => {
     if (!parameterGeladen || !firma?.id || !auth.session?.access_token) return;
-    sbFirmaParameterSpeichern(firma.id, einheitspreise, lvVorlagen, auth.session);
-  }, [einheitspreise, lvVorlagen]);
+    sbFirmaParameterSpeichern(firma.id, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, auth.session);
+  }, [einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage]);
 
   // Projekte aus Supabase laden, sobald die Firma bekannt ist.
   // Ohne dies existierten Baustellen nur im Browser-Speicher — Neuladen,
@@ -448,6 +454,20 @@ export default function PolierApp() {
       onAbmelden={abmelden} />;
   }
 
+  // ── Erste PIN-Abfrage ── einmalig direkt nach der ersten Anmeldung (echter
+  // Login, kein Demo-Modus) für alle Rollen außer Administrator. War die
+  // PIN-Pflicht vom Administrator aktiviert, wird der Screen bei jedem Login
+  // erneut gezeigt, bis eine PIN gesetzt ist — sonst nur einmal (Feld
+  // pin_abgefragt merkt sich das dauerhaft). Wartet auf firma?.id, damit
+  // pin_pflicht sicher bekannt ist, bevor entschieden wird ob übersprungen
+  // werden darf.
+  if (auth.profil && auth.profil.rolle !== "administrator" && !auth.profil.pin && firma?.id
+      && (firma.pin_pflicht || !auth.profil.pin_abgefragt)) {
+    return <ErstePinAbfrageScreen profil={auth.profil} session={auth.session}
+      pflicht={!!firma.pin_pflicht}
+      onFertig={felder => auth.profilAktualisieren(felder)} />;
+  }
+
   // ── Facharbeiter → nur Stempeluhr ──
   async function handleOnboardingComplete(firmaDaten, ersterPolier) {
     setEigeneFirma(prev => ({ ...prev, ...firmaDaten }));
@@ -541,17 +561,17 @@ export default function PolierApp() {
     const neueIds = new Set(neu.map(a => a.id));
 
     setSpeicherFehler("");
-    let fehler = false;
+    let fehlermeldung = "";
     const gespeichert = [];
     for (const a of neu) {
       const istNeu = !alteIds.has(a.id) || typeof a.id !== "number" || a.id > 1e12;
-      const ergebnis = await sbAufgabeSpeichern(a, aktivId, auth.session, istNeu);
-      if (!ergebnis) { fehler = true; gespeichert.push(a); continue; }
+      const { daten, fehler } = await sbAufgabeSpeichern(a, aktivId, auth.session, istNeu);
+      if (!daten) { fehlermeldung = fehlermeldung || fehler; gespeichert.push(a); continue; }
       // Nach einem Insert die client-seitige Date.now()-ID durch die echte
       // Server-ID ersetzen — sonst hält sie jede Folge-Bearbeitung weiter
       // für "neu" (id > 1e12) und erzeugt bei jedem Speichern einen neuen
       // Datensatz statt eines Updates (genau der Kolonnen-Vervielfachungs-Bug).
-      gespeichert.push(istNeu ? { ...a, id: ergebnis.id } : a);
+      gespeichert.push(istNeu ? { ...a, id: daten.id } : a);
     }
     for (const alteId of alteIds) {
       if (!neueIds.has(alteId)) await sbAufgabeLoeschen(alteId, auth.session);
@@ -560,8 +580,10 @@ export default function PolierApp() {
     // Die lokale Ansicht wird trotzdem aktualisiert (kein Datenverlust in der
     // UI), aber der Nutzer erfährt, dass die Änderung nicht auf dem Server
     // angekommen ist — vorher wurde ein fehlgeschlagenes Speichern still als
-    // Erfolg behandelt.
-    if (fehler) setSpeicherFehler("Eine Aufgabe konnte nicht gespeichert werden — bitte Verbindung prüfen und erneut versuchen.");
+    // Erfolg behandelt. Die Meldung kommt jetzt konkret vom Server (z.B.
+    // "Keine Berechtigung für diese Aktion"), statt pauschal auf die
+    // Verbindung zu verweisen — das war bei RLS-Ablehnungen irreführend.
+    if (fehlermeldung) setSpeicherFehler(`Eine Aufgabe konnte nicht gespeichert werden: ${fehlermeldung}`);
   }
 
   // Facharbeiter schlagen eine Aufgabe nur als erledigt vor (Status
@@ -571,8 +593,8 @@ export default function PolierApp() {
   // Full-Row-Save würde an der RLS scheitern.
   async function aufgabeVorschlagen(a) {
     setSpeicherFehler("");
-    const ok = await sbAufgabeVorschlagen(a.id, auth.session);
-    if (!ok) { setSpeicherFehler("Vorschlag konnte nicht gespeichert werden — bitte Verbindung prüfen."); return; }
+    const { ok, fehler } = await sbAufgabeVorschlagen(a.id, auth.session);
+    if (!ok) { setSpeicherFehler(fehler || "Vorschlag konnte nicht gespeichert werden."); return; }
     setAktProjektAufgaben(prev => prev.map(x => x.id === a.id
       ? { ...x, status:"zur_pruefung", vorschlag_von: auth.session?.user?.id, vorschlag_am: new Date().toISOString() }
       : x));
@@ -580,8 +602,8 @@ export default function PolierApp() {
 
   async function aufgabeEntscheiden(a, akzeptiert) {
     setSpeicherFehler("");
-    const ok = await sbAufgabeVorschlagEntscheiden(a.id, akzeptiert, auth.session);
-    if (!ok) { setSpeicherFehler("Entscheidung konnte nicht gespeichert werden — bitte Verbindung prüfen."); return; }
+    const { ok, fehler } = await sbAufgabeVorschlagEntscheiden(a.id, akzeptiert, auth.session);
+    if (!ok) { setSpeicherFehler(fehler || "Entscheidung konnte nicht gespeichert werden."); return; }
     setAktProjektAufgaben(prev => prev.map(x => x.id === a.id
       ? { ...x, status: akzeptiert ? "abgeschlossen" : "offen", vorschlag_von:null, vorschlag_am:null }
       : x));
@@ -592,15 +614,15 @@ export default function PolierApp() {
     const neu = typeof fn === "function" ? fn(berichte) : fn;
     const alteIds = new Set(berichte.map(b => b.id));
     setSpeicherFehler("");
-    let fehler = false;
+    let fehlermeldung = "";
     for (const b of neu) {
       if (!alteIds.has(b.id)) {
-        const ok = await sbBerichtSpeichern(b, aktivId, auth.session);
-        if (!ok) fehler = true;
+        const { daten, fehler } = await sbBerichtSpeichern(b, aktivId, auth.session);
+        if (!daten) fehlermeldung = fehlermeldung || fehler;
       }
     }
     setAktProjektBerichte(neu);
-    if (fehler) setSpeicherFehler("Der Tagesbericht konnte nicht gespeichert werden — bitte Verbindung prüfen und erneut versuchen.");
+    if (fehlermeldung) setSpeicherFehler(`Der Tagesbericht konnte nicht gespeichert werden: ${fehlermeldung}`);
   }
 
   // ── Kolonnen: laden + speichern direkt gegen Supabase ──
@@ -610,20 +632,20 @@ export default function PolierApp() {
     const neueIds = new Set(neu.map(k => k.id));
 
     setSpeicherFehler("");
-    let fehler = false;
+    let fehlermeldung = "";
     const gespeichert = [];
     for (const k of neu) {
       const istNeu = !alteIds.has(k.id) || typeof k.id !== "number" || k.id > 1e12;
-      const ergebnis = await sbKolonneSpeichern(k, aktivId, auth.session, istNeu);
-      if (!ergebnis) { fehler = true; gespeichert.push(k); continue; }
+      const { daten, fehler } = await sbKolonneSpeichern(k, aktivId, auth.session, istNeu);
+      if (!daten) { fehlermeldung = fehlermeldung || fehler; gespeichert.push(k); continue; }
       // Nach einem Insert die client-seitige Date.now()-ID durch die echte
       // Server-ID ersetzen — sonst hält sie jede Folge-Bearbeitung (z.B.
       // "Mitarbeiter hinzufügen") weiter für "neu" (id > 1e12) und erzeugt
       // bei jedem Speichern einen weiteren Datensatz statt eines Updates.
       // Das war der Grund für die Kolonnen-Vervielfachung im UI.
-      gespeichert.push(istNeu ? { ...k, id: ergebnis.id } : k);
+      gespeichert.push(istNeu ? { ...k, id: daten.id } : k);
     }
-    if (fehler) setSpeicherFehler("Eine Kolonne konnte nicht gespeichert werden — bitte Verbindung prüfen und erneut versuchen.");
+    if (fehlermeldung) setSpeicherFehler(`Eine Kolonne konnte nicht gespeichert werden: ${fehlermeldung}`);
     for (const alteId of alteIds) {
       if (!neueIds.has(alteId)) await sbKolonneLoeschen(alteId, auth.session);
     }
@@ -1087,6 +1109,7 @@ export default function PolierApp() {
         {tab === "tagebuch"  && <TagesbuchView
             berichte={berichte} setBerichte={setBerichte} sbConnected={sbConnected}
             projekt={projekt} eigeneFirma={eigeneFirma} kolonnen={kolonnen}
+            tagebuchVorlage={tagebuchVorlage}
             offlineSpeichern={offline.speichereOffline}
             aufgaben={felder} setAufgaben={setFelder}
             session={auth.session}
@@ -1119,10 +1142,10 @@ export default function PolierApp() {
             darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} session={auth.session} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
-        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
-        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} />}
+        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
+        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
-        {tab === "profil"       && <MeinProfilView profil={aktiveProfil} session={auth.session} />}
+        {tab === "profil"       && <MeinProfilView profil={aktiveProfil} session={auth.session} onProfilAktualisiert={auth.profilAktualisieren} pinPflicht={!!firma?.pin_pflicht} />}
       </div>
       </PlanGuard>
 
