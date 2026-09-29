@@ -82,17 +82,21 @@ export function ErstePinAbfrageScreen({ profil, session, pflicht, onFertig }) {
         )}
 
         <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+          {/* letterSpacing nur bei tatsächlicher Eingabe — sonst sprengt es den
+              Platzhaltertext ("Wiederholen") in der schmalen Hälfte des Feldes. */}
           <input value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,4))}
             placeholder="Neue PIN" type="password" inputMode="numeric" maxLength={4}
-            style={{ flex:1, textAlign:"center", letterSpacing:6, background:"var(--surface2)",
+            style={{ flex:1, minWidth:0, textAlign:"center", letterSpacing: pin ? 6 : "normal",
+              background:"var(--surface2)",
               color:"var(--text)", border:"1.5px solid var(--border)", borderRadius:10,
-              padding:"12px 14px", fontSize:16, boxSizing:"border-box", fontFamily:"inherit" }} />
+              padding:"12px 8px", fontSize:15, boxSizing:"border-box", fontFamily:"inherit" }} />
           <input value={pin2} onChange={e=>setPin2(e.target.value.replace(/\D/g,"").slice(0,4))}
             placeholder="Wiederholen" type="password" inputMode="numeric" maxLength={4}
             onKeyDown={e => e.key==="Enter" && pinEinrichten()}
-            style={{ flex:1, textAlign:"center", letterSpacing:6, background:"var(--surface2)",
+            style={{ flex:1, minWidth:0, textAlign:"center", letterSpacing: pin2 ? 6 : "normal",
+              background:"var(--surface2)",
               color:"var(--text)", border:`1.5px solid ${pin2 && pin !== pin2 ? "var(--red)" : "var(--border)"}`,
-              borderRadius:10, padding:"12px 14px", fontSize:16, boxSizing:"border-box", fontFamily:"inherit" }} />
+              borderRadius:10, padding:"12px 8px", fontSize:15, boxSizing:"border-box", fontFamily:"inherit" }} />
         </div>
 
         <button onClick={pinEinrichten} disabled={!valid || speichert}

@@ -35,16 +35,19 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
         <Settings size={16} /> Angebots-Parameter
       </div>
 
-      {/* Tab-Toggle */}
-      <div style={{ display:"flex", gap:6, marginBottom:12 }}>
+      {/* Tab-Toggle — 2x2-Grid statt einer Reihe: bei 4 Tabs lief eine
+          gemeinsame flex:1-Reihe auf schmalen Bildschirmen aus dem
+          sichtbaren Bereich heraus (der letzte Tab war nicht mehr erreichbar). */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:12 }}>
         {[["preise",Euro,"Einheitspreise"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
           <button key={k} onClick={() => setAktiv(k)}
-            style={{ flex:1, background: aktiv===k ? "var(--yellow)" : "var(--surface2)",
+            style={{ background: aktiv===k ? "var(--yellow)" : "var(--surface2)",
               color: aktiv===k ? "#1a1200" : "var(--muted)",
               border:`1.5px solid ${aktiv===k ? "var(--yellow)" : "var(--border)"}`,
               borderRadius:10, padding:10, fontWeight: aktiv===k ? 700 : 400,
               cursor:"pointer", fontSize:13, fontFamily:"inherit",
-              display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}><Icon size={13} /> {l}</button>
+              display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+              textAlign:"center" }}><Icon size={13} /> {l}</button>
         ))}
       </div>
 

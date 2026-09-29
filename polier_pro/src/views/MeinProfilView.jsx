@@ -189,11 +189,11 @@ export function MeinProfilView({ profil, session, onProfilAktualisiert, pinPflic
             <div style={{ display:"flex", gap:8 }}>
               <input value={pinNeu} onChange={e=>setPinNeu(e.target.value.replace(/\D/g,"").slice(0,4))}
                 placeholder="Neue PIN" type="password" inputMode="numeric" maxLength={4}
-                style={{ flex:1, textAlign:"center", letterSpacing:6, ...inputStyle() }} />
+                style={{ flex:1, minWidth:0, textAlign:"center", letterSpacing: pinNeu ? 6 : "normal", ...inputStyle() }} />
               <input value={pinNeu2} onChange={e=>setPinNeu2(e.target.value.replace(/\D/g,"").slice(0,4))}
                 placeholder="Wiederholen" type="password" inputMode="numeric" maxLength={4}
                 onKeyDown={e => e.key==="Enter" && pinSpeichern()}
-                style={{ flex:1, textAlign:"center", letterSpacing:6, ...inputStyle() }} />
+                style={{ flex:1, minWidth:0, textAlign:"center", letterSpacing: pinNeu2 ? 6 : "normal", ...inputStyle() }} />
             </div>
             {pinFehler && (
               <div style={{ color:"var(--red)", fontSize:11, marginTop:6 }}>{pinFehler}</div>
