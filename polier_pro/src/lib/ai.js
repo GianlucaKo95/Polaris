@@ -232,11 +232,13 @@ Antworte NUR mit einem JSON-Objekt ohne Markdown:
       "bez": "Bezeichnung der Position",
       "menge": 0,
       "einheit": "m²|m³|m|t|h|Stk|pau",
-      "ep_id": 0
+      "ep_id": 0,
+      "rabatt": 0
     }
   ]
 }
-Für "ep_id" ausschließlich eine id aus dem Katalog oben verwenden. Passt keine Katalogposition zur Leistung, setze "ep_id": null — erfinde NIEMALS eine eigene id oder einen eigenen Preis.`;
+Für "ep_id" ausschließlich eine id aus dem Katalog oben verwenden. Passt keine Katalogposition zur Leistung, setze "ep_id": null — erfinde NIEMALS eine eigene id oder einen eigenen Preis.
+"rabatt" ist ein Prozentsatz (0-100) für diese eine Position — NUR setzen, wenn im Diktat für genau diese Position ausdrücklich ein Rabatt/Nachlass/Abschlag genannt wird (z.B. "10% Rabatt auf die Bodenplatte"), sonst 0. Nie einen Rabatt erfinden oder auf andere Positionen übertragen.`;
 
   const data = await rufeClaudeAuf(prompt, 1500, session);
   const text = data.content?.find(b => b.type === "text")?.text || "{}";
@@ -251,6 +253,7 @@ Für "ep_id" ausschließlich eine id aus dem Katalog oben verwenden. Passt keine
         menge: Number(p.menge) || 0,
         einheit: p.einheit || "Stk",
         ep_id: katalogIds.has(p.ep_id) ? p.ep_id : null,
+        rabatt: Math.min(100, Math.max(0, Number(p.rabatt) || 0)),
       })).filter(p => p.bez),
     };
   } catch {

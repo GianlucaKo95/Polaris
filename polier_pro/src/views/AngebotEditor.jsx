@@ -20,19 +20,24 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [kiFehler,  setKiFehler]  = useState("");
   const [speichertLaedt, setSpeichertLaedt] = useState(false);
 
-  const netto   = a.positionen.reduce((s,p)=>s+(p.menge||0)*(p.ep||0),0);
+  // Positions-Rabatt (pro Zeile) wirkt VOR dem Gesamt-Rabatt im
+  // Einstellungen-Tab — beide sind unabhängig kombinierbar, ohne dass
+  // eine Zeile den Überblick verliert: gpOf() ist die einzige Stelle, die
+  // beide Zahlenwerte (Position + PDF/CSV/Summen-Banner) berechnet.
+  const gpOf = p => (p.menge||0) * (p.ep||0) * (1 - (p.rabatt||0)/100);
+  const netto   = a.positionen.reduce((s,p)=>s+gpOf(p),0);
   const rabattBetrag = netto * (a.rabatt||0)/100;
   const nettoNachRabatt = netto - rabattBetrag;
   const mwstBetrag = nettoNachRabatt * (a.mwst||19)/100;
   const bruttoGesamt = nettoNachRabatt + mwstBetrag;
 
   function addPosition(pos) {
-    setA(x => ({ ...x, positionen:[...x.positionen, { ...pos, id:Date.now() }] }));
+    setA(x => ({ ...x, positionen:[...x.positionen, { rabatt:0, ...pos, id:Date.now() }] }));
   }
 
   function updatePos(id, key, val) {
     setA(x => ({ ...x, positionen:x.positionen.map(p =>
-      p.id===id ? { ...p, [key]:key==="menge"||key==="ep" ? Number(val) : val } : p) }));
+      p.id===id ? { ...p, [key]:key==="menge"||key==="ep"||key==="rabatt" ? Number(val) : val } : p) }));
   }
 
   function removePos(id) {
@@ -76,7 +81,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       const neuPos = ergebnis.positionen.map(p => {
         const ep = einheitspreise.find(e => e.id === p.ep_id);
         return { id:Date.now()+Math.random(), bez:p.bez, einheit:p.einheit,
-          menge:p.menge, ep:ep?.preis || 0 };
+          menge:p.menge, ep:ep?.preis || 0, rabatt:p.rabatt || 0 };
       });
       setA(x => ({
         ...x,
@@ -163,10 +168,11 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
   <thead>
     <tr>
       <th style="width:5%">Pos.</th>
-      <th style="width:45%">Bezeichnung</th>
-      <th style="width:10%">Menge</th>
-      <th style="width:10%">Einheit</th>
-      <th style="width:15%">EP (€)</th>
+      <th style="width:38%">Bezeichnung</th>
+      <th style="width:9%">Menge</th>
+      <th style="width:9%">Einheit</th>
+      <th style="width:13%">EP (€)</th>
+      <th style="width:11%">Rabatt</th>
       <th style="width:15%">GP (€)</th>
     </tr>
   </thead>
@@ -178,7 +184,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
       <td>${(p.menge||0).toLocaleString("de-DE")}</td>
       <td>${escapeHtml(p.einheit)}</td>
       <td>${(p.ep||0).toLocaleString("de-DE",{minimumFractionDigits:2})}</td>
-      <td><strong>${((p.menge||0)*(p.ep||0)).toLocaleString("de-DE",{minimumFractionDigits:2})}</strong></td>
+      <td>${p.rabatt > 0 ? p.rabatt+"%" : "–"}</td>
+      <td><strong>${gpOf(p).toLocaleString("de-DE",{minimumFractionDigits:2})}</strong></td>
     </tr>`).join("")}
   </tbody>
 </table>
@@ -209,14 +216,14 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 
   function exportCSV() {
     const rows = [
-      ["Pos.","Bezeichnung","Menge","Einheit","EP (€)","GP (€)"],
+      ["Pos.","Bezeichnung","Menge","Einheit","EP (€)","Rabatt (%)","GP (€)"],
       ...a.positionen.map((p,i) => [
         i+1, p.bez, p.menge||0, p.einheit,
-        (p.ep||0).toFixed(2), ((p.menge||0)*(p.ep||0)).toFixed(2)
+        (p.ep||0).toFixed(2), p.rabatt||0, gpOf(p).toFixed(2)
       ]),
-      ["","","","","Netto:", netto.toFixed(2)],
-      ["","","","","MwSt "+a.mwst+"%:", mwstBetrag.toFixed(2)],
-      ["","","","","GESAMT:", bruttoGesamt.toFixed(2)],
+      ["","","","","","Netto:", netto.toFixed(2)],
+      ["","","","","","MwSt "+a.mwst+"%:", mwstBetrag.toFixed(2)],
+      ["","","","","","GESAMT:", bruttoGesamt.toFixed(2)],
     ];
     const csv = rows.map(r => r.map(v => '"'+v+'"').join(";")).join("\n");
     const blob = new Blob(["﻿"+csv], { type:"text/csv;charset=utf-8;" });
@@ -249,7 +256,10 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
           <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10, lineHeight:1.5 }}>
             Beschreibe die Leistung — die KI wählt passende Positionen aus euren
             hinterlegten Einheitspreisen und schätzt die Mengen. Preise kommen
-            immer aus dem Katalog, nie von der KI selbst.
+            immer aus dem Katalog, nie von der KI selbst. Rabatt auf eine
+            einzelne Position kannst du mitdiktieren, z.B. "10% Rabatt auf die
+            Bodenplatte" — Rabatt lässt sich pro Position auch jederzeit von
+            Hand eintragen oder ändern.
           </div>
           <DiktierFeld label="Leistungsbeschreibung" value={kiDiktat} onChange={setKiDiktat} rows={4} />
           {kiFehler && (
@@ -506,10 +516,22 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                       style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
                   </div>
                 </div>
+                <div style={{ marginTop:6, width:"33%", minWidth:90 }}>
+                  <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Rabatt (%)</div>
+                  <input type="number" value={pos.rabatt||""}
+                    onChange={e=>updatePos(pos.id,"rabatt",e.target.value)}
+                    placeholder="0" min="0" max="100"
+                    style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
+                </div>
                 <div style={{ textAlign:"right", marginTop:6,
                   color:"var(--yellow)", fontWeight:800, fontSize:14 }}>
-                  {((pos.menge||0)*(pos.ep||0)).toLocaleString("de-DE",
-                    {minimumFractionDigits:2})} €
+                  {pos.rabatt > 0 && (
+                    <span style={{ color:"var(--muted)", fontWeight:600, fontSize:12, marginRight:7,
+                      textDecoration:"line-through" }}>
+                      {((pos.menge||0)*(pos.ep||0)).toLocaleString("de-DE",{minimumFractionDigits:2})} €
+                    </span>
+                  )}
+                  {gpOf(pos).toLocaleString("de-DE", {minimumFractionDigits:2})} €
                 </div>
               </div>
             ))}
