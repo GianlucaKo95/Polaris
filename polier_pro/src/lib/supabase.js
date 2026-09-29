@@ -401,6 +401,12 @@ export async function sbSignOut(token) {
   await supabase.auth.signOut();
 }
 
+// Gibt { profil, sessionUngueltig } statt nur profil|null zurück: ein
+// fehlgeschlagener Request kann entweder heißen "Token vom Server wirklich
+// abgelehnt" (status 401 — Session ist tot) oder "gerade nicht erreichbar"
+// (Netzwerkfehler, Timeout, 5xx — Session ist weiterhin gültig, nur der
+// Check ist fehlgeschlagen). useAuth.js darf nur im ersten Fall abmelden,
+// sonst würde ein Funkloch auf der Baustelle wie ein Logout wirken.
 export async function sbGetProfile(token, userId) {
   const client = sbClientMitToken({ access_token: token });
   // Explizit nach der eigenen id filtern statt sich allein auf RLS + limit(1)
@@ -413,7 +419,11 @@ export async function sbGetProfile(token, userId) {
   // Login fälschlich im Konto des ursprünglichen Admins landeten.
   let query = client.from("profile").select("*");
   query = userId ? query.eq("id", userId) : query.limit(1);
-  const { data, error } = await query;
-  if (error) return null;
-  return data?.[0] || null;
+  try {
+    const { data, error, status } = await query;
+    if (error) return { profil: null, sessionUngueltig: status === 401 };
+    return { profil: data?.[0] || null, sessionUngueltig: false };
+  } catch {
+    return { profil: null, sessionUngueltig: false };
+  }
 }
