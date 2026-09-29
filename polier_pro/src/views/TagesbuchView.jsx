@@ -4,7 +4,6 @@ import { Mic, Camera, PenLine, CloudSun, CloudRain, Users, TriangleAlert } from 
 import { supabase } from "../lib/supabase.js";
 import { KITagesabschlussButton } from "./KITagesabschlussButton.jsx";
 import { leereAufgabe } from "../lib/utils.js";
-import { PDFExportButton } from "../components/PDFExportButton.jsx";
 import { WordExportButton } from "../components/WordExportButton.jsx";
 import { RevisionssichererExport } from "./RevisionssichererExport.jsx";
 import { Label, inputStyle } from "../components/Label.jsx";
@@ -223,7 +222,6 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
           <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6, alignItems:"flex-start" }}>
             <div style={{ color: "var(--text)", fontWeight:700 }}>{b.datum}</div>
             <div style={{ display:"flex", gap:6, alignItems:"center" }} onClick={e => e.stopPropagation()}>
-              <PDFExportButton bericht={b} projekt={projekt} eigeneFirma={eigeneFirma} wetter={b.wetterData || wetter} kolonnen={kolonnen} typ="bericht" />
               <WordExportButton bericht={b} projekt={projekt} eigeneFirma={eigeneFirma} wetter={b.wetterData || wetter} kolonnen={kolonnen} tagebuchVorlage={tagebuchVorlage} />
               {b.bilder?.length > 0 && (
                 <div style={{ background: "var(--blue)"+"33", color: "var(--blue)", fontSize:10, padding:"2px 7px", display:"flex", alignItems:"center", gap:3 }}>

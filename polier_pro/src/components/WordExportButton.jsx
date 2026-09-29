@@ -23,10 +23,10 @@ export function WordExportButton({ bericht, projekt, eigeneFirma, wetter, kolonn
 
   return (
     <button onClick={handleExport} disabled={laedt}
-      style={{ background: "var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)",
+      style={{ background: "var(--yellow)", color:"#1a1200", border:"none",
         borderRadius:8, padding:"6px 14px", fontWeight:700, cursor: laedt ? "default" : "pointer", fontSize:13,
         display:"flex", alignItems:"center", gap:6 }}>
-      {laedt ? <Spinner size={13} /> : <FileText size={13} />} Word
+      {laedt ? <><Spinner size={13} /> Generiere…</> : <><FileText size={13} /> Generieren</>}
     </button>
   );
 }
