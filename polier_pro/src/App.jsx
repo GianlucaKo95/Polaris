@@ -12,6 +12,7 @@ import { usePushNotifications } from "./hooks/usePushNotifications.js";
 import { useOfflineSync } from "./hooks/useOfflineSync.js";
 import { sbClientMitToken, SUPABASE_URL, sbAufgabeSpeichern, sbAufgabeLoeschen, sbAufgabeVorschlagen, sbAufgabeVorschlagEntscheiden, sbBerichtSpeichern, sbKolonneSpeichern, sbKolonneLoeschen, sbFirmaParameterSpeichern, sbAngebotSpeichern } from "./lib/supabase.js";
 import { PasswortSetzenScreen } from "./views/PasswortSetzenScreen.jsx";
+import { ErstePinAbfrageScreen } from "./views/ErstePinAbfrageScreen.jsx";
 import { EinladungScreen } from "./views/EinladungScreen.jsx";
 import { RegistrierungScreen } from "./views/RegistrierungScreen.jsx";
 import { LoginScreen } from "./views/LoginScreen.jsx";
@@ -151,7 +152,7 @@ export default function PolierApp() {
   const [editProjekt,   setEditProjekt] = useState(false);
   useBackButton(neuProjekt,  () => setNeuProjekt(false));
   useBackButton(editProjekt, () => setEditProjekt(false));
-  const [eigeneFirma,   setEigeneFirma] = useState({ name:"", strasse:"", plz:"", ort:"", telefon:"", email:"", geschaeftsfuehrer:"", steuernummer:"", gewerke:[], logo:null });
+  const [eigeneFirma,   setEigeneFirma] = useState({ name:"", strasse:"", plz:"", ort:"", telefon:"", email:"", geschaeftsfuehrer:"", steuernummer:"", gewerke:[], logo:null, pin_pflicht:false });
   const [subs,          setSubs]        = useState([]);
   const [homeTab,       setHomeTab]     = useState("projekte");
   const [zeitbuchungen, setZeitbuchungen] = useState([]);
@@ -206,7 +207,7 @@ export default function PolierApp() {
       // ausgeschlossen, damit der KI-Key nie in den Client-State (firma/
       // eigeneFirma) gelangt. Er wird ausschließlich serverseitig in der
       // ki-proxy Edge Function gelesen (siehe supabase/functions/ki-proxy).
-      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage")
+      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage, pin_pflicht")
         .eq("id", auth.profil.firma_id)
         .then(({ data: d, error, status }) => {
           if (error) {
@@ -227,6 +228,7 @@ export default function PolierApp() {
               logo:              d[0].logo_url || null,
               geschaeftsfuehrer: d[0].geschaeftsfuehrer || "",
               gewerke:           d[0].gewerke || [],
+              pin_pflicht:       d[0].pin_pflicht || false,
             }));
             // Leere Liste = neue Firma, die noch nie eigene Parameter
             // gespeichert hat → sinnvolle Beispieldaten statt leerer Liste.
@@ -450,6 +452,20 @@ export default function PolierApp() {
     return <PinSperreScreen profil={aktiveProfil}
       onEntsperrt={() => setGesperrt(false)}
       onAbmelden={abmelden} />;
+  }
+
+  // ── Erste PIN-Abfrage ── einmalig direkt nach der ersten Anmeldung (echter
+  // Login, kein Demo-Modus) für alle Rollen außer Administrator. War die
+  // PIN-Pflicht vom Administrator aktiviert, wird der Screen bei jedem Login
+  // erneut gezeigt, bis eine PIN gesetzt ist — sonst nur einmal (Feld
+  // pin_abgefragt merkt sich das dauerhaft). Wartet auf firma?.id, damit
+  // pin_pflicht sicher bekannt ist, bevor entschieden wird ob übersprungen
+  // werden darf.
+  if (auth.profil && auth.profil.rolle !== "administrator" && !auth.profil.pin && firma?.id
+      && (firma.pin_pflicht || !auth.profil.pin_abgefragt)) {
+    return <ErstePinAbfrageScreen profil={auth.profil} session={auth.session}
+      pflicht={!!firma.pin_pflicht}
+      onFertig={felder => auth.profilAktualisieren(felder)} />;
   }
 
   // ── Facharbeiter → nur Stempeluhr ──
@@ -1129,7 +1145,7 @@ export default function PolierApp() {
         {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
         {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
-        {tab === "profil"       && <MeinProfilView profil={aktiveProfil} session={auth.session} />}
+        {tab === "profil"       && <MeinProfilView profil={aktiveProfil} session={auth.session} onProfilAktualisiert={auth.profilAktualisieren} pinPflicht={!!firma?.pin_pflicht} />}
       </div>
       </PlanGuard>
 

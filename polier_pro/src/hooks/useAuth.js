@@ -206,6 +206,14 @@ export function useAuth() {
     setSession(null); setProfil(null);
   }
 
+  // Merged Felder direkt in den lokalen Profil-State, z.B. nachdem die PIN
+  // oder pin_abgefragt serverseitig gespeichert wurde — ohne das würden
+  // Änderungen aus MeinProfilView/ErstePinAbfrageScreen erst nach einem
+  // Seiten-Reload sichtbar (App.jsx prüft z.B. profil.pin für die Sperre).
+  function profilAktualisieren(felder) {
+    setProfil(p => p ? { ...p, ...felder } : p);
+  }
+
   const rolle = profil?.rolle || null;
   const rolleConfig = rolle ? ROLLEN[rolle] : null;
 
@@ -213,6 +221,6 @@ export function useAuth() {
   const supabaseKonfiguriert = !SUPABASE_URL.includes("DEIN");
 
   return { session, profil, rolle, rolleConfig, loading, fehler,
-    anmelden, abmelden, supabaseKonfiguriert,
+    anmelden, abmelden, profilAktualisieren, supabaseKonfiguriert,
     inviteToken, inviteType, passwortSetzen, passwortVergessen };
 }

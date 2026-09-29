@@ -16,7 +16,7 @@ const STATUS_ANZEIGE = {
 // sich deshalb nicht sofort aus, sondern landen als Anfrage beim
 // Administrator. Serverseitig erzwungen über einen Datenbank-Trigger
 // (profile_sensible_felder_schuetzen), nicht nur hier in der UI.
-export function MeinProfilView({ profil, session }) {
+export function MeinProfilView({ profil, session, onProfilAktualisiert, pinPflicht }) {
   const [anfragen, setAnfragen] = useState([]);
   const [laden,    setLaden]    = useState(true);
   const [form,     setForm]     = useState({ strasse:"", plz:"", ort:"", iban:"", kontoinhaber:"" });
@@ -66,6 +66,7 @@ export function MeinProfilView({ profil, session }) {
     setPinBearbeiten(false);
     setPinNeu(""); setPinNeu2("");
     setPinErfolg("PIN gespeichert — gilt ab dem nächsten Öffnen der App.");
+    onProfilAktualisiert?.({ pin: hash });
   }
 
   async function pinEntfernen() {
@@ -80,6 +81,7 @@ export function MeinProfilView({ profil, session }) {
     if (!ok?.length) { setPinFehler("PIN konnte nicht entfernt werden."); return; }
     setPinAktiv(false);
     setPinErfolg("App-Sperre deaktiviert.");
+    onProfilAktualisiert?.({ pin: null });
   }
 
   async function ladeAnfragen() {
@@ -134,6 +136,7 @@ export function MeinProfilView({ profil, session }) {
 
   if (!profil) return null;
   const rolle = ROLLEN[profil.rolle] || ROLLEN.facharbeiter;
+  const pinPflichtGiltFuerMich = pinPflicht && profil.rolle !== "administrator";
 
   return (
     <div>
@@ -178,6 +181,7 @@ export function MeinProfilView({ profil, session }) {
           {pinAktiv
             ? "Aktiv — beim Öffnen der App und nach längerer Zeit im Hintergrund wird die PIN abgefragt."
             : "Noch nicht eingerichtet — schneller Schutz, falls das Handy in fremde Hände gerät."}
+          {pinPflichtGiltFuerMich && " Von eurem Administrator verpflichtend eingestellt."}
         </div>
 
         {pinBearbeiten && (
@@ -211,7 +215,7 @@ export function MeinProfilView({ profil, session }) {
           </div>
         )}
 
-        {pinAktiv && !pinBearbeiten && (
+        {pinAktiv && !pinBearbeiten && !pinPflichtGiltFuerMich && (
           <button onClick={pinEntfernen} disabled={pinSpeichert}
             style={{ background:"none", border:"none", color:"var(--red)",
               cursor:"pointer", fontSize:11, marginTop:8, fontFamily:"inherit",
