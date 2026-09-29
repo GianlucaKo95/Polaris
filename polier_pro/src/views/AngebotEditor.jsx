@@ -115,8 +115,11 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 .page { width:210mm; padding:14mm 18mm; }
 .header { display:flex; justify-content:space-between; align-items:flex-start;
   border-bottom:3px solid #F5C400; padding-bottom:12px; margin-bottom:16px; }
-.logo { font-size:22pt; font-weight:900; letter-spacing:-1px; }
-.logo span { color:#F5C400; }
+.logo-img { width:56px; height:56px; object-fit:contain; flex-shrink:0; }
+.logo-mark { width:56px; height:56px; background:#F5C400; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:24px;
+  color:#1a1a1a; flex-shrink:0; }
+.firma-name { font-size:16pt; font-weight:900; letter-spacing:-0.5px; }
 .firma-info { font-size:9pt; color:#666; margin-top:3px; line-height:1.5; }
 .angebot-title { text-align:right; }
 .angebot-title h1 { font-size:16pt; font-weight:900; }
@@ -142,12 +145,17 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 </style></head><body><div class="page">
 
 <div class="header">
-  <div>
-    <div class="logo"><span>★</span> ${escapeHtml(eigeneFirma?.name)||"Polaris"}</div>
-    <div class="firma-info">
-      ${escapeHtml(eigeneFirma?.strasse)} · ${escapeHtml(eigeneFirma?.plz)} ${escapeHtml(eigeneFirma?.ort)}<br>
-      Tel: ${escapeHtml(eigeneFirma?.telefon)} · ${escapeHtml(eigeneFirma?.email)}<br>
-      ${eigeneFirma?.steuernummer ? "St-Nr: "+escapeHtml(eigeneFirma.steuernummer) : ""}
+  <div style="display:flex;gap:14px;align-items:center;">
+    ${eigeneFirma?.logo
+      ? `<img class="logo-img" src="${eigeneFirma.logo}" alt="Logo"/>`
+      : `<div class="logo-mark">★</div>`}
+    <div>
+      <div class="firma-name">${escapeHtml(eigeneFirma?.name)||"Polaris"}</div>
+      <div class="firma-info">
+        ${escapeHtml(eigeneFirma?.strasse)} · ${escapeHtml(eigeneFirma?.plz)} ${escapeHtml(eigeneFirma?.ort)}<br>
+        Tel: ${escapeHtml(eigeneFirma?.telefon)} · ${escapeHtml(eigeneFirma?.email)}<br>
+        ${eigeneFirma?.steuernummer ? "St-Nr: "+escapeHtml(eigeneFirma.steuernummer) : ""}
+      </div>
     </div>
   </div>
   <div class="angebot-title">
