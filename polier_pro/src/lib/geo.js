@@ -120,15 +120,45 @@ export function naechstesRisiko(stundenDaten) {
   return null;
 }
 
-// Bestes zusammenhängendes Arbeitszeitfenster (Standard: 2 Stunden) für
-// Betonage an einem Tag, gemittelt über den Eignungswert je Stunde.
+// Bestes zusammenhängendes Arbeitszeitfenster für Betonage an einem Tag.
+// Sucht zuerst den längsten zusammenhängenden Lauf von Stunden auf dem
+// höchsten vorkommenden Eignungswert — ein festes 2h-Fenster (frühere
+// Version) hätte bei z.B. sechs Stunden am Stück mit 100% Eignung nur
+// die ERSTEN zwei davon gezeigt ("6:00–8:00 Uhr (100%)"), obwohl noch
+// bis 14 Uhr dieselbe Bestwertung galt — das wirkte wie das einzige
+// gute Fenster, obwohl der ganze Vormittag gleich gut war. Erst wenn
+// kein Lauf mindestens fensterGroesse (Standard 2) Stunden lang ist,
+// fällt die Funktion auf das alte gleitende Durchschnittsfenster zurück.
 export function besteZeitfenster(stundenDaten, fensterGroesse = 2) {
   const arbeitsstunden = (stundenDaten || []).filter(s => s.stunde >= 6 && s.stunde <= 18);
+  if (arbeitsstunden.length === 0) return null;
+  const werte = arbeitsstunden.map(s => betonageEignung(s).wert);
+
+  const maxWert = Math.max(...werte);
+  let bestLauf = null, laufStart = null;
+  for (let i = 0; i <= werte.length; i++) {
+    if (i < werte.length && werte[i] === maxWert) {
+      if (laufStart === null) laufStart = i;
+    } else if (laufStart !== null) {
+      const laenge = i - laufStart;
+      if (!bestLauf || laenge > bestLauf.laenge) bestLauf = { start: laufStart, ende: i - 1, laenge };
+      laufStart = null;
+    }
+  }
+
+  if (bestLauf && bestLauf.laenge >= fensterGroesse) {
+    return {
+      start: arbeitsstunden[bestLauf.start].stunde,
+      ende: arbeitsstunden[bestLauf.ende].stunde + 1,
+      avg: maxWert,
+    };
+  }
+
   let bestes = null;
   for (let i = 0; i <= arbeitsstunden.length - fensterGroesse; i++) {
     const fenster = arbeitsstunden.slice(i, i + fensterGroesse);
-    const werte = fenster.map(s => betonageEignung(s).wert);
-    const avg = werte.reduce((a, b) => a + b, 0) / werte.length;
+    const fensterWerte = werte.slice(i, i + fensterGroesse);
+    const avg = fensterWerte.reduce((a, b) => a + b, 0) / fensterWerte.length;
     if (!bestes || avg > bestes.avg) {
       bestes = { start: fenster[0].stunde, ende: fenster[fenster.length - 1].stunde + 1, avg: Math.round(avg) };
     }

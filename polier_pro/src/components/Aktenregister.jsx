@@ -4,8 +4,12 @@ export function Aktenregister({ projekte, aktivId, onSelect, onNeu }) {
   return (
     <div style={{ background:"var(--surface)", borderBottom:"3px solid var(--yellow)",
       flexShrink:0 }}>
-      <div style={{ display:"flex", overflowX:"auto", padding:"0 12px",
-        scrollbarWidth:"none", msOverflowStyle:"none" }}>
+      {/* overflowY:"hidden" + touchAction:"pan-x": ohne das ließ eine diagonale
+          Wischgeste hier die ganze Seite mit nach oben/unten scrollen, statt
+          die Geste auf horizontales Blättern zwischen Baustellen zu beschränken. */}
+      <div style={{ display:"flex", overflowX:"auto", overflowY:"hidden", padding:"0 12px",
+        scrollbarWidth:"none", msOverflowStyle:"none",
+        touchAction:"pan-x", WebkitOverflowScrolling:"touch" }}>
         {projekte.map((p, i) => {
           const aktiv   = p.id === aktivId;
           return (

@@ -8,6 +8,7 @@ export function KolonneKarte({ k, zeitdaten, vonDatum, bisDatum, zeitenGeladen, 
   const [expanded, setExpanded] = useState(false);
   const [neuerName, setNeuerName] = useState("");
   const [neuePin,  setNeuePin]  = useState("");
+  const [hinzufuegenFehler, setHinzufuegenFehler] = useState("");
   const mas = k.mitarbeiter || [];
   const totalMann = mas.length;
 
@@ -21,7 +22,10 @@ export function KolonneKarte({ k, zeitdaten, vonDatum, bisDatum, zeitenGeladen, 
   // Sammelstempeln selbst, statt dass der Vorarbeiter einfach für sie
   // abhaken kann.
   async function mitarbeiterHinzufuegen() {
-    if (!neuerName.trim() || !/^\d{4}$/.test(neuePin) || !setKolonnen) return;
+    if (!setKolonnen) return;
+    setHinzufuegenFehler("");
+    if (!neuerName.trim()) { setHinzufuegenFehler("Bitte einen Namen eingeben."); return; }
+    if (!/^\d{4}$/.test(neuePin)) { setHinzufuegenFehler("Bitte eine 4-stellige PIN eingeben."); return; }
     const neu = { id: Date.now(), name: neuerName.trim(), pinHash: await sha256Hex(neuePin) };
     setKolonnen(prev => prev.map(kol =>
       kol.id === k.id ? { ...kol, mitarbeiter: [...(kol.mitarbeiter||[]), neu] } : kol
@@ -144,12 +148,14 @@ export function KolonneKarte({ k, zeitdaten, vonDatum, bisDatum, zeitenGeladen, 
           {darfBearbeiten && setKolonnen && (
             <div style={{ marginTop:10 }}>
               <div style={{ display:"flex", gap:6 }}>
-                <input value={neuerName} onChange={e=>setNeuerName(e.target.value)}
+                <input value={neuerName}
+                  onChange={e=>{ setNeuerName(e.target.value); setHinzufuegenFehler(""); }}
                   placeholder="Name des Mitarbeiters"
                   style={{ flex:1, background:"var(--surface)", color:"var(--text)",
                     border:"1px solid var(--border)", borderRadius:8,
                     padding:"7px 10px", fontSize:12, fontFamily:"inherit" }} />
-                <input value={neuePin} onChange={e=>setNeuePin(e.target.value.replace(/\D/g,"").slice(0,4))}
+                <input value={neuePin}
+                  onChange={e=>{ setNeuePin(e.target.value.replace(/\D/g,"").slice(0,4)); setHinzufuegenFehler(""); }}
                   placeholder="PIN" type="password" inputMode="numeric" maxLength={4}
                   onKeyDown={e => e.key==="Enter" && mitarbeiterHinzufuegen()}
                   style={{ width:64, background:"var(--surface)", color:"var(--text)",
@@ -157,15 +163,18 @@ export function KolonneKarte({ k, zeitdaten, vonDatum, bisDatum, zeitenGeladen, 
                     padding:"7px 10px", fontSize:12, fontFamily:"inherit", textAlign:"center" }} />
               </div>
               <div style={{ color:"var(--muted)", fontSize:10, marginTop:4 }}>
-                4-stellige PIN, mit der sich {neuerName.trim() || "die Person"} beim Sammelstempeln selbst bestätigt.
+                4-stellige PIN (Pflichtfeld), mit der sich {neuerName.trim() || "die Person"} beim Sammelstempeln selbst bestätigt.
               </div>
+              {hinzufuegenFehler && (
+                <div style={{ color:"var(--red)", fontSize:11, marginTop:4, fontWeight:600 }}>
+                  {hinzufuegenFehler}
+                </div>
+              )}
               <button onClick={mitarbeiterHinzufuegen}
-                disabled={!neuerName.trim() || !/^\d{4}$/.test(neuePin)}
                 style={{ width:"100%", marginTop:6,
-                  background: neuerName.trim() && /^\d{4}$/.test(neuePin) ? "var(--yellow)" : "var(--border)",
-                  color: neuerName.trim() && /^\d{4}$/.test(neuePin) ? "#1a1200" : "var(--muted)",
+                  background: "var(--yellow)", color:"#1a1200",
                   border:"none", borderRadius:8, padding:"7px 14px",
-                  cursor: neuerName.trim() && /^\d{4}$/.test(neuePin) ? "pointer" : "default", fontSize:12,
+                  cursor:"pointer", fontSize:12,
                   fontWeight:700, fontFamily:"inherit" }}>
                 + Hinzufügen
               </button>

@@ -30,11 +30,46 @@ export function useAuth() {
     }
   }, []);
 
+  // Versucht, eine per bestätigtem 401 als ungültig erkannte Session über den
+  // (separaten) Refresh-Token zu retten, BEVOR abgemeldet wird. Der
+  // Access-Token kann bereits abgelaufen sein, während der länger gültige
+  // Refresh-Token noch funktioniert — etwa wenn eine im Hintergrund/gesperrt
+  // liegende PWA von iOS so lange pausiert wurde, dass der separate
+  // Vorab-Refresh-Timer unten keine Chance hatte zu feuern, bevor der
+  // Access-Token schon abgelaufen war. Rückgabe: "ok" (Session gerettet,
+  // bereits gesetzt), "ungueltig" (Refresh-Token vom Server wirklich
+  // abgelehnt — abmelden gerechtfertigt) oder "fehler" (der Rettungsversuch
+  // selbst scheiterte nur an Netzwerk/Timeout — NICHT abmelden, bestehende
+  // Session behalten).
+  async function versucheTokenErneuern(aktuelleSession) {
+    if (!aktuelleSession?.refresh_token) return "ungueltig";
+    try {
+      const { data, error } = await supabase.auth.refreshSession({
+        refresh_token: aktuelleSession.refresh_token,
+      });
+      if (!error && data.session?.access_token) {
+        const neueSession = {
+          access_token:  data.session.access_token,
+          refresh_token: data.session.refresh_token,
+          expires_in:    data.session.expires_in,
+          user:          data.user,
+        };
+        localStorage.setItem("polaris-session", JSON.stringify(neueSession));
+        setSession(neueSession);
+        return "ok";
+      }
+      if (error?.status === 400 || error?.status === 401) return "ungueltig";
+      return "fehler";
+    } catch {
+      return "fehler";
+    }
+  }
+
   // Lädt das Profil zur aktuellen Session. Schlägt der Check nur wegen eines
   // Netzwerkfehlers/Timeouts fehl (sessionUngueltig:false), wird die Session
-  // NICHT beendet — stattdessen in Kürze erneut versucht. Nur ein vom Server
-  // bestätigtes 401 (Token wirklich abgelehnt) führt zum Abmelden. Ohne diese
-  // Unterscheidung würde jedes Funkloch auf der Baustelle wie ein Logout wirken.
+  // NICHT beendet — stattdessen in Kürze erneut versucht. Ein vom Server
+  // bestätigtes 401 (Access-Token wirklich abgelehnt) führt erst zum Abmelden,
+  // NACHDEM auch ein Rettungsversuch über den Refresh-Token fehlgeschlagen ist.
   useEffect(() => {
     if (!session?.access_token) return;
     let abgebrochen = false;
@@ -45,8 +80,15 @@ export function useAuth() {
       if (abgebrochen) return;
       if (p) { setProfil(p); return; }
       if (sessionUngueltig) {
-        localStorage.removeItem("polaris-session");
-        setSession(null);
+        const ergebnis = await versucheTokenErneuern(session);
+        if (abgebrochen) return;
+        if (ergebnis === "ungueltig") {
+          localStorage.removeItem("polaris-session");
+          setSession(null);
+        } else if (ergebnis === "fehler") {
+          retryTimer = setTimeout(ladeProfil, 5000);
+        }
+        // "ok": neue Session gesetzt — dieser Effect läuft mit dem neuen Token erneut.
         return;
       }
       retryTimer = setTimeout(ladeProfil, 5000);
@@ -63,35 +105,18 @@ export function useAuth() {
     let timer;
 
     async function refreshSession() {
-      try {
-        const { data, error } = await supabase.auth.refreshSession({
-          refresh_token: session.refresh_token,
-        });
-        if (abgebrochen) return;
-        if (!error && data.session?.access_token) {
-          const neueSession = {
-            access_token:  data.session.access_token,
-            refresh_token: data.session.refresh_token,
-            expires_in:    data.session.expires_in,
-            user:          data.user,
-          };
-          localStorage.setItem("polaris-session", JSON.stringify(neueSession));
-          setSession(neueSession);
-          return;
-        }
-        if (error?.status === 400 || error?.status === 401) {
-          // Refresh-Token vom Server wirklich abgelehnt (widerrufen/ungültig) — abmelden.
-          localStorage.removeItem("polaris-session");
-          setSession(null);
-          setProfil(null);
-          return;
-        }
-        // Sonstiger Fehler (Netzwerk, 5xx) — Session behalten, in Kürze erneut
-        // versuchen statt den Nutzer bei einer vorübergehenden Störung auszuloggen.
-        timer = setTimeout(refreshSession, 30 * 1000);
-      } catch {
-        if (!abgebrochen) timer = setTimeout(refreshSession, 30 * 1000);
+      const ergebnis = await versucheTokenErneuern(session);
+      if (abgebrochen) return;
+      if (ergebnis === "ok") return;
+      if (ergebnis === "ungueltig") {
+        localStorage.removeItem("polaris-session");
+        setSession(null);
+        setProfil(null);
+        return;
       }
+      // "fehler" (Netzwerk, 5xx) — Session behalten, in Kürze erneut
+      // versuchen statt den Nutzer bei einer vorübergehenden Störung auszuloggen.
+      timer = setTimeout(refreshSession, 30 * 1000);
     }
 
     // Supabase Tokens laufen typischerweise nach 3600s ab.
@@ -103,13 +128,18 @@ export function useAuth() {
   }, [session?.access_token, session?.refresh_token]);
 
   // Bei Wiederherstellung des Tabs (App aus Hintergrund geholt): Session prüfen —
-  // aber nur bei einem bestätigten 401 abmelden, nicht bei einem bloßen
-  // Netzwerkfehler direkt nach dem Aufwecken (z.B. WLAN noch nicht reconnected).
+  // ein bestätigtes 401 löst erst einen Rettungsversuch über den Refresh-Token
+  // aus, bevor abgemeldet wird (genau der Fall einer lange gesperrten/im
+  // Hintergrund pausierten PWA, deren Access-Token in der Zwischenzeit
+  // abgelaufen ist). Ein bloßer Netzwerkfehler beim Check selbst (z.B. WLAN
+  // noch nicht reconnected) führt zu keiner Aktion.
   useEffect(() => {
     function handleVisibility() {
       if (document.visibilityState === "visible" && session?.access_token) {
-        sbGetProfile(session.access_token, session.user?.id).then(({ sessionUngueltig }) => {
-          if (sessionUngueltig) {
+        sbGetProfile(session.access_token, session.user?.id).then(async ({ sessionUngueltig }) => {
+          if (!sessionUngueltig) return;
+          const ergebnis = await versucheTokenErneuern(session);
+          if (ergebnis === "ungueltig") {
             localStorage.removeItem("polaris-session");
             setSession(null);
             setProfil(null);
@@ -121,16 +151,20 @@ export function useAuth() {
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [session?.access_token]);
 
-  // 401-Handler: bei ungültigem Token die Session verifizieren bevor abgemeldet wird.
-  // Ein einzelner fehlgeschlagener Request (z.B. RLS-Policy verweigert Zugriff auf
-  // eine bestimmte Tabelle) ist kein Beweis dass die gesamte Session ungültig ist —
-  // nur ein vom Server bestätigtes 401 beim Profil-Check rechtfertigt den Logout;
-  // ein Netzwerkfehler beim Check selbst führt zu keiner Aktion.
+  // 401-Handler: bei ungültigem Token zunächst über den Refresh-Token retten,
+  // bevor abgemeldet wird. Ein einzelner fehlgeschlagener Request (z.B. eine
+  // RLS-Policy verweigert Zugriff auf eine bestimmte Tabelle) ist kein Beweis,
+  // dass die gesamte Session ungültig ist — nur ein vom Server bestätigtes
+  // 401 beim Profil-Check UND ein anschließend gescheiterter Refresh-Versuch
+  // rechtfertigen den Logout; ein Netzwerkfehler bei einem der beiden Checks
+  // führt zu keiner Aktion.
   useEffect(() => {
     async function handleAuthInvalid() {
       if (!session?.access_token) return;
       const { sessionUngueltig } = await sbGetProfile(session.access_token, session.user?.id);
-      if (sessionUngueltig) {
+      if (!sessionUngueltig) return;
+      const ergebnis = await versucheTokenErneuern(session);
+      if (ergebnis === "ungueltig") {
         localStorage.removeItem("polaris-session");
         setSession(null);
         setProfil(null);

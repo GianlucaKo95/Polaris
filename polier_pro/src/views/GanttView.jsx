@@ -149,7 +149,12 @@ export function GanttView({ felder, onAufgabeKlick }) {
                       </div>
                     )}
                   </div>
-                  <div style={{ flex:1, position:"relative", height:54 }}>
+                  {/* overflow:"hidden": ein Balken, dessen Fälligkeitsdatum mehr
+                      als die sichtbaren 14 Tage in der Vergangenheit liegt,
+                      bekommt sonst eine negative left-Position und rutscht
+                      optisch in die "Feld"-Spalte links hinein, statt am
+                      Zeitachsen-Rand sauber abgeschnitten zu werden. */}
+                  <div style={{ flex:1, position:"relative", height:54, overflow:"hidden" }}>
                     {/* Today line */}
                     <div style={{ position:"absolute", left: todayOffset * DAY_W, top:0, bottom:0, width:2, background: "var(--yellow)", opacity:0.7, zIndex:10 }} />
 
