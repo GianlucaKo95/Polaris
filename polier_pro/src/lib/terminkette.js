@@ -4,13 +4,13 @@
 // und ob sie auf dem kritischen Pfad liegt (Puffer <= 0) — reine Berechnung
 // aus echten Projektdaten, keine KI-Schätzung.
 
-function alsTag(datum) {
+export function alsTag(datum) {
   const d = datum ? new Date(datum) : new Date();
   d.setHours(0, 0, 0, 0);
   return d;
 }
 
-function tageAddieren(datum, tage) {
+export function tageAddieren(datum, tage) {
   const d = new Date(datum);
   d.setDate(d.getDate() + Math.round(tage));
   return d;
