@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { FlaskConical, CloudRain, Clock3, Users, TriangleAlert, CircleCheckBig, ArrowRightLeft } from "lucide-react";
-import { terminprognose } from "../lib/terminkette.js";
+import { terminprognose, alsTag, tageAddieren } from "../lib/terminkette.js";
 import { sbClientMitToken } from "../lib/supabase.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 
@@ -159,16 +159,21 @@ export function SimulationView({ aufgaben = [], kolonnen = [], projekt, projekte
         : x);
       betroffen = [a.titel];
     } else {
-      const start = new Date(wetterStart);
-      const ende = new Date(start); ende.setDate(ende.getDate() + Number(wetterTage) - 1);
+      const start = alsTag(wetterStart);
+      const ende = tageAddieren(start, Number(wetterTage) - 1);
       simAufgaben = aufgaben.map(x => {
-        if (x.typ !== "beton" || x.status === "abgeschlossen" || !x.faellig_am) return x;
-        const faellig = new Date(x.faellig_am);
-        if (faellig >= start && faellig <= ende) {
-          betroffen.push(x.titel);
-          return { ...x, dauer_tage: (x.dauer_tage && x.dauer_tage > 0 ? x.dauer_tage : 1) + Number(wetterTage) };
-        }
-        return x;
+        if (x.typ !== "beton" || x.status === "abgeschlossen") return x;
+        // Gegen das von der Terminketten-Engine TATSÄCHLICH berechnete
+        // Zeitfenster prüfen (startFrueh/endeFrueh), nicht gegen faellig_am:
+        // eine überfällige Aufgabe (z.B. weil eine Vorgänger-Aufgabe noch
+        // "in Arbeit" ist) hat ein veraltetes faellig_am in der Vergangenheit,
+        // während ihr echter, von der Engine berechneter Betonage-Zeitraum
+        // mitten im simulierten Regenfenster liegen kann — mit faellig_am
+        // als Filter wurde genau dieser Fall silently übersehen.
+        const geplant = basis.proAufgabe.get(x.id);
+        if (!geplant || geplant.endeFrueh < start || geplant.startFrueh > ende) return x;
+        betroffen.push(x.titel);
+        return { ...x, dauer_tage: (x.dauer_tage && x.dauer_tage > 0 ? x.dauer_tage : 1) + Number(wetterTage) };
       });
     }
 
@@ -231,7 +236,8 @@ export function SimulationView({ aufgaben = [], kolonnen = [], projekt, projekte
             <input type="number" min="1" value={wetterTage} onChange={e => setWetterTage(e.target.value)} style={inputStyle()} />
           </div>
           <div style={{ gridColumn:"1 / -1", color:"var(--muted)", fontSize:11 }}>
-            Betrifft alle offenen Betonage-Aufgaben mit Fälligkeitsdatum in diesem Zeitraum.
+            Betrifft alle offenen Betonage-Aufgaben, deren von der Terminkette berechneter
+            Zeitraum sich mit diesem Fenster überschneidet (auch bei überfälligem Fälligkeitsdatum).
           </div>
         </div>
       )}
