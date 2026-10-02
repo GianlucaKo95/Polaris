@@ -334,30 +334,60 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
 
                     {/* Baustellen-Zugriff — nur für Rollen, die nicht ohnehin
                         alle Baustellen sehen (z.B. Polier): steuert u.a., wessen
-                        Stunden im Stunden-Export sichtbar sind. */}
+                        Stunden im Stunden-Export sichtbar sind. Für Vorarbeiter/
+                        Facharbeiter ergibt sich der Zugriff automatisch aus der
+                        zugewiesenen Kolonne und deren Baustelle (serverseitig per
+                        RLS über kolonne_id durchgesetzt) — nur für Polier, die
+                        keiner einzelnen Kolonne zugeordnet sind, bleibt der
+                        Zugriff eine manuelle Vergabe je Baustelle. */}
                     {projekte.length > 0 && ROLLEN[n.rolle]?.siehtAlleProjekte === false && (
-                      <div>
-                        <div style={{ color:"var(--muted)", fontSize:11,
-                          fontWeight:600, marginBottom:4, display:"flex",
-                          alignItems:"center", gap:4 }}>
-                          <MapPin size={11} /> Baustellen-Zugriff
+                      ROLLEN[n.rolle]?.baustellenZugriffUeberKolonne ? (
+                        <div>
+                          <div style={{ color:"var(--muted)", fontSize:11,
+                            fontWeight:600, marginBottom:4, display:"flex",
+                            alignItems:"center", gap:4 }}>
+                            <MapPin size={11} /> Baustellen-Zugriff
+                          </div>
+                          {kolonne ? (
+                            (() => {
+                              const kolonneProjekt = projekte.find(p => p.id === kolonne.projekt_id);
+                              return (
+                                <div style={{ background:"var(--surface2)", border:"1px solid var(--border)",
+                                  borderRadius:8, padding:"7px 10px", fontSize:13, color:"var(--text)" }}>
+                                  Automatisch über Kolonne „{kolonne.name}“: {kolonneProjekt?.name || "Baustelle nicht gefunden"}
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            <div style={{ color:"var(--muted)", fontSize:12.5 }}>
+                              Ohne zugewiesene Kolonne (siehe oben) hat {n.vorname || "dieser Nutzer"} aktuell keinen Baustellen-Zugriff.
+                            </div>
+                          )}
                         </div>
-                        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                          {projekte.map(p => {
-                            const hatZugriff = projektZugriffe.some(z => z.profil_id === n.id && z.projekt_id === p.id);
-                            return (
-                              <label key={p.id} style={{ display:"flex", alignItems:"center", gap:8,
-                                background:"var(--surface2)", border:"1px solid var(--border)",
-                                borderRadius:8, padding:"7px 10px", fontSize:13,
-                                color:"var(--text)", cursor:"pointer" }}>
-                                <input type="checkbox" checked={hatZugriff}
-                                  onChange={() => projektZugriffUmschalten(n.id, p.id, hatZugriff)} />
-                                {p.name}
-                              </label>
-                            );
-                          })}
+                      ) : (
+                        <div>
+                          <div style={{ color:"var(--muted)", fontSize:11,
+                            fontWeight:600, marginBottom:4, display:"flex",
+                            alignItems:"center", gap:4 }}>
+                            <MapPin size={11} /> Baustellen-Zugriff
+                          </div>
+                          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                            {projekte.map(p => {
+                              const hatZugriff = projektZugriffe.some(z => z.profil_id === n.id && z.projekt_id === p.id);
+                              return (
+                                <label key={p.id} style={{ display:"flex", alignItems:"center", gap:8,
+                                  background:"var(--surface2)", border:"1px solid var(--border)",
+                                  borderRadius:8, padding:"7px 10px", fontSize:13,
+                                  color:"var(--text)", cursor:"pointer" }}>
+                                  <input type="checkbox" checked={hatZugriff}
+                                    onChange={() => projektZugriffUmschalten(n.id, p.id, hatZugriff)} />
+                                  {p.name}
+                                </label>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
+                      )
                     )}
 
                     <button onClick={() => aktivitaetToggle(n.id, n.aktiv !== false)}
