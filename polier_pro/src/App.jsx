@@ -997,6 +997,15 @@ export default function PolierApp() {
     { id:"angebot",       icon:"📄",  label:"Angebot",     rollen:["administrator","geschaeftsfuehrer"] },
     { id:"admin_params",  icon:"⚙️",  label:"Parameter",   rollen:["administrator"] },
     { id:"nutzer",        icon:"👥",  label:"Nutzer",      rollen:["administrator"] },
+    // Fehlte bisher komplett in dieser Liste, obwohl ROLLEN.administrator.tabs
+    // (konstanten.js) "firmen" längst als vorgesehenen Tab führt — dadurch
+    // gab es innerhalb einer Baustelle überhaupt keinen Weg zu "Unternehmen"
+    // mehr: homeTab==="firmen" (FirmenView) ist nur auf dem Übersicht-Screen
+    // sichtbar (!aktivId), und nirgends in der App wird aktivId je wieder auf
+    // null gesetzt, um dorthin zurückzukommen — nur der native Zurück-Button
+    // (Browser/Android) tat das zufällig mit, in einer installierten iOS-PWA
+    // ganz ohne Browser-Chrome also faktisch nie.
+    { id:"firmen",        icon:"🏢",  label:"Unternehmen", rollen:["administrator"] },
     { id:"profil",        icon:"👤",  label:"Mein Profil", rollen:["geschaeftsfuehrer","bauleiter","polier","vorarbeiter","facharbeiter"] },
   ];
   const TABS = ALLE_TABS.filter(t => !aktiveRolle || t.rollen.includes(aktiveRolle));
@@ -1016,7 +1025,7 @@ export default function PolierApp() {
   const aktivInMehr = mehrTabs.some(t => t.id === tab);
   const TAB_ICONS = { dashboard:LayoutGrid, aufgaben:CircleCheckBig, tagebuch:NotebookPen,
     kolonnen:Users, stempeln:Clock, gantt:Calendar, kosten:Euro, wetter:CloudSun,
-    stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, profil:User, ki_frage:Sparkles, simulation:FlaskConical };
+    stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, firmen:Building2, profil:User, ki_frage:Sparkles, simulation:FlaskConical };
 
   return (
     // position:fixed auf html/body war der Bug (siehe theme.css) — aber
@@ -1145,6 +1154,8 @@ export default function PolierApp() {
         {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
         {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
+        {tab === "firmen"       && <FirmenView owneFirma={eigeneFirma} setEigeneFirma={setEigeneFirma} subs={subs} setSubs={setSubs}
+            onOnboardingReset={() => setOnboardingDone(false)} session={auth.session} firmaId={firma?.id} />}
         {tab === "profil"       && <MeinProfilView profil={aktiveProfil} session={auth.session} onProfilAktualisiert={auth.profilAktualisieren} pinPflicht={!!firma?.pin_pflicht} />}
       </div>
       </PlanGuard>
