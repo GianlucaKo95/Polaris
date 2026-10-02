@@ -296,6 +296,10 @@ export const ROLLEN = {
     kannNutzerVerwalten: false,
     kannKolonneLoeschen: false,
     siehtAlleProjekte: false,
+    // Ein Polier führt eine ganze Baustelle, nicht eine einzelne Kolonne
+    // (kolonne_id bleibt bei dieser Rolle immer leer) — Baustellen-Zugriff
+    // muss hier weiterhin manuell je Baustelle vergeben werden.
+    baustellenZugriffUeberKolonne: false,
   },
   // Aufgaben-Bearbeitung bewusst NICHT erlaubt (Stand: Absprache mit dem
   // Kunden) — nur Polier, Admin, Geschäftsführer und Bauleiter dürfen
@@ -311,6 +315,9 @@ export const ROLLEN = {
     kannNutzerVerwalten: false,
     kannKolonneLoeschen: false,
     siehtAlleProjekte: false,
+    // Zugriff ergibt sich automatisch aus der zugewiesenen Kolonne und deren
+    // Baustelle — kein manueller Schritt nötig (siehe NutzerVerwaltungView).
+    baustellenZugriffUeberKolonne: true,
   },
   facharbeiter: {
     label: "Facharbeiter",
@@ -322,6 +329,7 @@ export const ROLLEN = {
     kannNutzerVerwalten: false,
     kannKolonneLoeschen: false,
     siehtAlleProjekte: false,
+    baustellenZugriffUeberKolonne: true,
   },
 };
 
