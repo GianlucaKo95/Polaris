@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Pencil, Plus, X, Check, TriangleAlert, Sparkles } from "lucide-react";
 import { leerProjekt } from "../lib/utils.js";
@@ -7,6 +7,7 @@ import { PROJEKTTYPEN, ALLE_GEWERKE } from "../config/konstanten.js";
 import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { kiBaustelleAnlegen } from "../lib/ai.js";
+import { sbFetch } from "../lib/supabase.js";
 
 export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherFehler = "", session, istAdmin = false }) {
   const [p, setP] = useState(initial || leerProjekt());
@@ -15,8 +16,43 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
   const [kiLaedt,   setKiLaedt]   = useState(false);
   const [kiFehler,  setKiFehler]  = useState("");
   const [kiErfolg,  setKiErfolg]  = useState(false);
+  const [poliere,            setPoliere]            = useState([]);
+  const [zugewiesenePoliere, setZugewiesenePoliere] = useState(new Set());
   const FARBEN = ["#F5C400","#4A9EE0","#2EAF6A","#C45C2A","#9B59B6","#E84393"];
   const valid = p.name.trim().length > 0;
+
+  // Lädt die Liste aller Polier-Nutzer der Firma plus (beim Bearbeiten) den
+  // bereits bestehenden Baustellen-Zugriff dieses Projekts, damit die
+  // Checkliste unten vorbelegt ist. Nur für Admins relevant — Vergabe von
+  // Baustellen-Zugriff ist ein Admin-Thema (siehe Nutzerverwaltung).
+  useEffect(() => {
+    if (!session?.access_token || !istAdmin) return;
+    let abgebrochen = false;
+    (async () => {
+      const [profile, zugriffe] = await Promise.all([
+        sbFetch("profile?select=id,vorname,nachname&rolle=eq.polier&order=vorname.asc", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        }),
+        initial?.id
+          ? sbFetch(`projekt_zugriff?select=profil_id&projekt_id=eq.${initial.id}`, {
+              headers: { Authorization: `Bearer ${session.access_token}` },
+            })
+          : Promise.resolve([]),
+      ]);
+      if (abgebrochen) return;
+      setPoliere(profile || []);
+      setZugewiesenePoliere(new Set((zugriffe || []).map(z => z.profil_id)));
+    })();
+    return () => { abgebrochen = true; };
+  }, [session?.access_token, istAdmin, initial?.id]);
+
+  function togglePolier(id) {
+    setZugewiesenePoliere(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   async function kiUebernehmen() {
     if (!kiDiktat.trim() || kiLaedt) return;
@@ -38,7 +74,10 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
   async function speichernKlick() {
     if (!valid) return;
     setWirdGespeichert(true);
-    await onSave(p);
+    await onSave({ ...p,
+      polierIds: Array.from(zugewiesenePoliere),
+      polierOptionenIds: poliere.map(u => u.id),
+    });
     // Formular schließt sich nur bei Erfolg (onClose wird vom Parent via
     // setNeuProjekt(false) ausgelöst) — bei Fehler bleibt wirdGespeichert
     // kurz sichtbar und die Fehlermeldung erscheint über speicherFehler.
@@ -229,6 +268,40 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
                       </div>
                     </div>
                     <div style={{ display:"flex", color: aktiv ? "var(--blue)" : "var(--muted)" }}>
+                      {aktiv ? <Check size={16} /> : "○"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Polier zuweisen — vergibt automatisch Baustellen-Zugriff
+            (projekt_zugriff), ohne das danach manuell in der
+            Nutzerverwaltung nachtragen zu müssen. */}
+        {istAdmin && poliere.length > 0 && (
+          <div style={{ marginBottom:14 }}>
+            <Label>Polier zuweisen</Label>
+            <div style={{ color:"var(--muted)", fontSize:10.5, marginTop:2, marginBottom:8, lineHeight:1.4 }}>
+              Zugewiesene Poliere bekommen automatisch Baustellen-Zugriff für diese Baustelle —
+              ohne das zusätzlich in der Nutzerverwaltung nachzutragen.
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              {poliere.map(u => {
+                const aktiv = zugewiesenePoliere.has(u.id);
+                return (
+                  <div key={u.id} onClick={() => togglePolier(u.id)}
+                    style={{ display:"flex", justifyContent:"space-between",
+                      alignItems:"center",
+                      background: aktiv ? "var(--ybg)" : "var(--surface2)",
+                      border:`1.5px solid ${aktiv ? "var(--yellow)" : "var(--border)"}`,
+                      borderRadius:10, padding:"7px 12px", cursor:"pointer" }}>
+                    <div style={{ color:"var(--text)", fontSize:13,
+                      fontWeight: aktiv ? 700 : 400 }}>
+                      {u.vorname || "—"} {u.nachname || ""}
+                    </div>
+                    <div style={{ display:"flex", color: aktiv ? "var(--ydark)" : "var(--muted)" }}>
                       {aktiv ? <Check size={16} /> : "○"}
                     </div>
                   </div>

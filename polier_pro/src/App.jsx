@@ -712,6 +712,33 @@ export default function PolierApp() {
         else setProjekte(prev => prev.map(x => x.id===p.id ? normalisiert : x));
         setNeuProjekt(false); setEditProjekt(false);
         if (!aktivId) setAktivId(normalisiert.id);
+
+        // Im Formular ausgewählte Polier-Zuweisung in projekt_zugriff
+        // übernehmen — auf polierOptionenIds eingegrenzt (die im Formular
+        // geladene Liste aller Polier-Nutzer), damit hier nie versehentlich
+        // ein Zugriff einer anderen Rolle auf dieses Projekt entfernt wird.
+        if (Array.isArray(p.polierIds) && Array.isArray(p.polierOptionenIds)) {
+          try {
+            const sollIds = new Set(p.polierIds);
+            const { data: bestehend } = await client.from("projekt_zugriff")
+              .select("profil_id").eq("projekt_id", gespeichert.id)
+              .in("profil_id", p.polierOptionenIds);
+            const bestehendeIds = new Set((bestehend || []).map(z => z.profil_id));
+            const hinzuzufuegen = p.polierOptionenIds.filter(id => sollIds.has(id) && !bestehendeIds.has(id));
+            const zuEntfernen   = [...bestehendeIds].filter(id => !sollIds.has(id));
+            await Promise.all([
+              ...(hinzuzufuegen.length
+                ? [client.from("projekt_zugriff").insert(hinzuzufuegen.map(id => ({ profil_id:id, projekt_id:gespeichert.id })))]
+                : []),
+              ...zuEntfernen.map(id => client.from("projekt_zugriff").delete().eq("profil_id", id).eq("projekt_id", gespeichert.id)),
+            ]);
+          } catch (e) {
+            // Baustelle ist bereits gespeichert — nur die Zugriffsvergabe
+            // separat melden, statt das als kompletten Speicherfehler
+            // darzustellen (das würde einen erfolgreichen Save verschleiern).
+            setProjekteLadeFehler("Baustelle gespeichert, aber Polier-Zugriff konnte nicht aktualisiert werden: " + e.message);
+          }
+        }
       }
     } catch (e) {
       setProjekteLadeFehler("Netzwerkfehler beim Speichern der Baustelle: " + e.message);
@@ -962,6 +989,8 @@ export default function PolierApp() {
         onSave={handleSaveProjekt}
         onClose={() => setEditProjekt(false)}
         speicherFehler={projekteLadeFehler}
+        session={auth.session}
+        istAdmin={aktiveRolle === "administrator"}
       />
     );
   }
