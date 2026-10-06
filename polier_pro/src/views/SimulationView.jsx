@@ -229,7 +229,7 @@ export function SimulationView({ aufgaben = [], kolonnen = [], projekt, projekte
           <div>
             <Label>Regen ab</Label>
             <input type="date" value={wetterStart} onChange={e => setWetterStart(e.target.value)}
-              style={{ ...inputStyle(), padding:"11px 12px" }} />
+              style={inputStyle()} />
           </div>
           <div>
             <Label>Anzahl Tage</Label>
