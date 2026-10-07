@@ -37,6 +37,11 @@ export function RevisionssichererExport({ bericht, projekt, eigeneFirma, wetter,
   async function exportPDF() {
     if (!hash) return;
     const offeneMaengel = (maengel||[]).filter(m=>m.status!=="abgeschlossen");
+    const fotos = bericht?.bilder || [];
+    // Max. 6 Kacheln (3×2) sichtbar — bei mehr Fotos zeigt die letzte Kachel
+    // "+N weitere" statt das Dokument beliebig in die Länge zu ziehen.
+    const fotosSichtbar = fotos.length > 6 ? fotos.slice(0, 5) : fotos;
+    const fotosRest = fotos.length > 6 ? fotos.length - 5 : 0;
     const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -52,6 +57,13 @@ body { font-family:Arial,sans-serif; font-size:11pt; color:#1a1a1a; }
 .doc-title .meta { font-size:9pt; color:#666; margin-top:3px; }
 .hash-badge { background:#1a1a1a; color:#F5C400; padding:4px 10px;
   border-radius:4px; font-size:9pt; font-family:monospace; margin-top:4px; display:inline-block; }
+.kennzahlen { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
+.kz { background:#f8f8f8; border-radius:6px; padding:9px 10px 8px; position:relative; overflow:hidden; }
+.kz::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:#F5C400; }
+.kz.warn::before { background:#DC2626; }
+.kz-val { font-size:19pt; font-weight:900; line-height:1; }
+.kz.warn .kz-val { color:#DC2626; }
+.kz-label { font-size:7.5pt; color:#888; text-transform:uppercase; letter-spacing:0.3px; margin-top:4px; font-weight:bold; }
 .section { margin-bottom:14px; }
 .section-title { font-size:10pt; font-weight:bold; color:#F5C400;
   border-left:3px solid #F5C400; padding-left:8px; margin-bottom:8px;
@@ -64,18 +76,23 @@ body { font-family:Arial,sans-serif; font-size:11pt; color:#1a1a1a; }
 .text-block { background:#f8f8f8; border-radius:5px; padding:10px 12px;
   font-size:11pt; line-height:1.6; min-height:40px; }
 .mangel-row { background:#fff0f0; border-left:3px solid #DC2626;
-  padding:8px 12px; margin-bottom:6px; border-radius:0 5px 5px 0; }
+  padding:8px 12px; margin-bottom:6px; border-radius:0 5px 5px 0; font-size:10.5pt; }
+.mangel-row strong { font-size:11pt; }
+.mangel-meta { color:#888; font-size:9pt; margin-top:2px; }
+.foto-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.foto-item img { width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:6px; display:block; }
+.foto-caption { font-size:8pt; color:#888; margin-top:3px; text-align:center; }
+.foto-mehr { display:flex; align-items:center; justify-content:center; aspect-ratio:4/3;
+  background:#f8f8f8; border-radius:6px; color:#888; font-size:10pt; font-weight:bold; }
 .sig-area { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:10px; }
 .sig-box { }
 .sig-label { font-size:9pt; color:#666; margin-bottom:4px; }
-.sig-img { border:1px solid #ccc; border-radius:5px; height:80px;
+.sig-img { border:1px solid #ccc; border-radius:5px; height:70px;
   display:flex; align-items:center; justify-content:center; }
-.sig-img img { max-height:76px; max-width:100%; }
+.sig-img img { max-height:66px; max-width:100%; }
 .sig-name { font-size:8pt; color:#888; margin-top:4px; text-align:center; }
 .footer { border-top:1px solid #ddd; margin-top:16px; padding-top:8px;
-  font-size:7pt; color:#aaa; display:flex; justify-content:space-between; }
-.revision-stamp { background:#1a1a1a; color:#F5C400; padding:6px 12px;
-  border-radius:4px; font-size:8pt; font-family:monospace; text-align:center; }
+  font-size:7.5pt; color:#aaa; display:flex; justify-content:space-between; font-family:monospace; }
 </style></head><body><div class="page">
 
 <div class="header">
@@ -93,10 +110,19 @@ body { font-family:Arial,sans-serif; font-size:11pt; color:#1a1a1a; }
   </div>
 </div>
 
+<!-- Kennzahlen auf einen Blick — die wichtigsten Zahlen des Tages sofort
+     sichtbar, statt sie erst aus den Abschnitten weiter unten zusammen-
+     suchen zu müssen. -->
+<div class="kennzahlen">
+  <div class="kz"><div class="kz-val">${bericht?.arbeiter ?? 0}</div><div class="kz-label">Arbeiter</div></div>
+  <div class="kz"><div class="kz-val">${wetter ? wetter.temp+"°C" : "—"}</div><div class="kz-label">Temperatur</div></div>
+  <div class="kz${offeneMaengel.length>0?" warn":""}"><div class="kz-val">${offeneMaengel.length}</div><div class="kz-label">Offene Mängel</div></div>
+  <div class="kz"><div class="kz-val">${fotos.length}</div><div class="kz-label">Fotos</div></div>
+</div>
+
 <div class="section">
   <div class="section-title">Baustellendaten</div>
-  <div class="grid3">
-    <div class="field"><div class="field-label">Baustelle</div><div class="field-value">${escapeHtml(projekt?.name)||"—"}</div></div>
+  <div class="grid2">
     <div class="field"><div class="field-label">Bauleiter</div><div class="field-value">${escapeHtml(projekt?.bauleiter)||"—"}</div></div>
     <div class="field"><div class="field-label">Auftraggeber</div><div class="field-value">${escapeHtml(projekt?.auftraggeber)||"—"}</div></div>
   </div>
@@ -116,6 +142,11 @@ ${wetter ? `<div class="section">
   <div class="text-block">${escapeHtml(bericht?.taetigkeit)||"—"}</div>
 </div>
 
+${bericht?.material ? `<div class="section">
+  <div class="section-title">Materiallieferungen</div>
+  <div class="text-block">${escapeHtml(bericht.material)}</div>
+</div>` : ""}
+
 ${bericht?.besonderheiten ? `<div class="section">
   <div class="section-title">Besonderheiten</div>
   <div class="text-block">${escapeHtml(bericht.besonderheiten)}</div>
@@ -125,9 +156,19 @@ ${offeneMaengel.length > 0 ? `<div class="section">
   <div class="section-title">Offene Mängel (${offeneMaengel.length})</div>
   ${offeneMaengel.map(m=>`<div class="mangel-row">
     <strong>${escapeHtml(m.titel)}</strong>
-    ${m.mangel_verursacher ? ` · ${escapeHtml(m.mangel_verursacher)}` : ""}
-    · Status: ${escapeHtml(m.status)}
+    <div class="mangel-meta">${m.mangel_verursacher ? `Verursacher: ${escapeHtml(m.mangel_verursacher)} · ` : ""}Status: ${escapeHtml(m.status)}</div>
   </div>`).join("")}
+</div>` : ""}
+
+${fotos.length > 0 ? `<div class="section">
+  <div class="section-title">Fotodokumentation (${fotos.length})</div>
+  <div class="foto-grid">
+    ${fotosSichtbar.map((url,i)=>`<div class="foto-item">
+      <img src="${url}" alt="Foto ${i+1}" />
+      <div class="foto-caption">Foto ${i+1} · ${escapeHtml(datum||new Date().toLocaleDateString("de-DE"))}</div>
+    </div>`).join("")}
+    ${fotosRest > 0 ? `<div class="foto-mehr">+${fotosRest} weitere</div>` : ""}
+  </div>
 </div>` : ""}
 
 <div class="section">
@@ -152,7 +193,7 @@ ${offeneMaengel.length > 0 ? `<div class="section">
 
 <div class="footer">
   <span>Erstellt mit Polaris · ${new Date().toLocaleString("de-DE")} · Revisionssicher</span>
-  <div class="revision-stamp">DOC-${hash}</div>
+  <span>DOC-${hash}</span>
 </div>
 
 </div></body></html>`;
