@@ -10,6 +10,12 @@ import { Spinner } from "../components/Spinner.jsx";
 import { kiAngebotErstellen } from "../lib/ai.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 
+// Beton wird branchenüblich nach Volumen abgerechnet (m³), nicht nach
+// Fläche — der Einheitspreis-Katalog führt für "Betonage" beide Varianten
+// (m² und m³), ohne diese Vorgabe hätte find() immer den ersten, zufällig
+// sortierten Treffer genommen.
+const BEVORZUGTE_EINHEIT = { beton: "m³" };
+
 export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, session }) {
   const [a,         setA]         = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
@@ -57,13 +63,23 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   }
 
   function aufgabeImportieren(aufgabe) {
-    const typ   = aufgabe.typ;
-    const ep    = einheitspreise.find(e =>
+    const typ = aufgabe.typ;
+    // Mehrere Katalogeinträge können zum selben Gewerk passen (z.B. Beton
+    // mit m²- und m³-Einträgen) — ohne bevorzugte Einheit je Typ nahm
+    // find() immer den ersten Treffer, unabhängig von dessen Einheit.
+    const gewerkTreffer = einheitspreise.filter(e =>
       e.gewerk.toLowerCase().includes(typ) || typ.includes(e.gewerk.toLowerCase())
     );
+    const bevorzugt = BEVORZUGTE_EINHEIT[typ];
+    const ep = gewerkTreffer.find(e => e.einheit === bevorzugt) || gewerkTreffer[0];
     addPosition({
       bez:      aufgabe.titel,
-      einheit:  aufgabe.m2 ? "m²" : "h",
+      // Die Einheit des gefundenen Katalogeintrags übernehmen statt sie zu
+      // verwerfen — vorher wurde hier unabhängig vom Gewerk immer "m²"
+      // (bzw. "h" ohne m2-Wert) erzwungen, auch wenn der Katalog für genau
+      // dieses Gewerk bereits die richtige Einheit kannte (z.B. "t" bei
+      // Bewehrung).
+      einheit:  ep?.einheit || (aufgabe.m2 ? "m²" : "h"),
       menge:    aufgabe.m2 || 0,
       ep:       ep?.preis || 0,
     });
