@@ -90,6 +90,8 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
         session={session}
         firmaId={firmaId}
         profil={profil}
+        darfEntscheiden={darfEntscheiden}
+        onEntscheiden={onEntscheiden}
       />
     );
   }

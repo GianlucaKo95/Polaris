@@ -615,12 +615,13 @@ export default function PolierApp() {
   // ab. Läuft über eigene RPCs statt sbAufgabeSpeichern — ein Facharbeiter
   // hat kein UPDATE-Recht auf die aufgaben-Tabelle, und ein normaler
   // Full-Row-Save würde an der RLS scheitern.
-  async function aufgabeVorschlagen(a) {
+  async function aufgabeVorschlagen(a, behebungFotos = null) {
     setSpeicherFehler("");
-    const { ok, fehler } = await sbAufgabeVorschlagen(a.id, auth.session);
+    const { ok, fehler } = await sbAufgabeVorschlagen(a.id, auth.session, behebungFotos);
     if (!ok) { setSpeicherFehler(fehler || "Vorschlag konnte nicht gespeichert werden."); return; }
     setAktProjektAufgaben(prev => prev.map(x => x.id === a.id
-      ? { ...x, status:"zur_pruefung", vorschlag_von: auth.session?.user?.id, vorschlag_am: new Date().toISOString() }
+      ? { ...x, status:"zur_pruefung", vorschlag_von: auth.session?.user?.id, vorschlag_am: new Date().toISOString(),
+          behebung_fotos: behebungFotos ?? x.behebung_fotos }
       : x));
   }
 

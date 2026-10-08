@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Calendar, CalendarX, User, Ruler, Camera, TriangleAlert } from "lucide-react";
 import { AUFGABEN_TYPEN, AUFGABEN_STATUS, AUFGABEN_PRIO } from "../config/konstanten.js";
 import { SwipeToDelete } from "./SwipeToDelete.jsx";
+import { MangelBehebenDialog } from "./MangelBehebenDialog.jsx";
 
 export function AufgabenKarte({ aufgabe, onClick, kolonnen, onDelete, onToggleErledigt, onVorschlagen, onEntscheiden, istStunden = 0 }) {
+  const [zeigeMangelDialog, setZeigeMangelDialog] = useState(false);
   const typ    = AUFGABEN_TYPEN[aufgabe.typ]    || AUFGABEN_TYPEN.allgemein;
   const status = AUFGABEN_STATUS[aufgabe.status] || AUFGABEN_STATUS.offen;
   const prio   = AUFGABEN_PRIO[aufgabe.prioritaet] || AUFGABEN_PRIO.mittel;
@@ -24,11 +27,20 @@ export function AufgabenKarte({ aufgabe, onClick, kolonnen, onDelete, onToggleEr
 
   // Facharbeiter dürfen eine offene Aufgabe nur zur Bestätigung vorschlagen
   // (kein direktes "erledigt"); wer voll bearbeiten darf, schaltet wie bisher direkt um.
+  const istVorschlagenFlow = !onToggleErledigt && onVorschlagen && !erledigt && !wartetAufBestaetigung;
+  // Bei einem Mangel erzwingt der Vorschlagen-Weg zusätzlich ein Nachweis-
+  // Foto über den Dialog, statt wie bisher mit einem einzigen Tap komplett
+  // ohne Beleg "erledigt" zu melden — der direkte Weg (onToggleErledigt,
+  // für Rollen mit vollem Bearbeitungsrecht) bleibt bewusst unverändert,
+  // da diese Rollen das Nachweisfoto alternativ im vollen Formular pflegen können.
   const checkboxKlick = onToggleErledigt
     ? () => onToggleErledigt(aufgabe)
-    : (onVorschlagen && !erledigt && !wartetAufBestaetigung ? () => onVorschlagen(aufgabe) : undefined);
+    : istVorschlagenFlow
+      ? (aufgabe.ist_mangel ? () => setZeigeMangelDialog(true) : () => onVorschlagen(aufgabe))
+      : undefined;
 
   return (
+    <>
     <SwipeToDelete style={{ marginBottom:6 }}
       onDelete={onDelete ? () => onDelete(aufgabe) : undefined}
       onClick={onClick}>
@@ -127,5 +139,12 @@ export function AufgabenKarte({ aufgabe, onClick, kolonnen, onDelete, onToggleEr
       </div>
       </div>
     </SwipeToDelete>
+    {zeigeMangelDialog && (
+      <MangelBehebenDialog
+        onAbbrechen={() => setZeigeMangelDialog(false)}
+        onBestaetigen={fotos => { setZeigeMangelDialog(false); onVorschlagen(aufgabe, fotos); }}
+      />
+    )}
+    </>
   );
 }

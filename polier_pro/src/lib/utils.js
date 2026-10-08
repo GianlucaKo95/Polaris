@@ -56,6 +56,7 @@ export function leereAufgabe() {
     abhaengig_von: [],
     beschreibung: "",
     fotos:        [],
+    behebung_fotos: [],
     ist_mangel:   false,
     plan_x:       null,
     plan_y:       null,

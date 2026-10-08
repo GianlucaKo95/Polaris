@@ -169,6 +169,7 @@ export async function sbAufgabeSpeichern(a, projektId, session, istNeu) {
     abhaengig_von:       Array.isArray(a.abhaengig_von) ? a.abhaengig_von.filter(id => typeof id === "number" && id < 1e12) : [],
     beschreibung:        a.beschreibung || "",
     fotos:               a.fotos || [],
+    behebung_fotos:      a.behebung_fotos || [],
     ist_mangel:          !!a.ist_mangel,
     mangel_verursacher:  a.mangel_verursacher || "",
     plan_x:              a.plan_x ?? null,
@@ -207,11 +208,15 @@ export async function sbAufgabeLoeschen(id, session) {
 // Firma selbst, ganz ohne UPDATE-Grant auf die aufgaben-Tabelle für diese
 // Rollen. Die RPCs werfen bei fehlender Berechtigung bereits eine konkrete
 // Meldung (raise exception) — die wird hier durchgereicht statt verworfen.
-export async function sbAufgabeVorschlagen(id, session) {
+// behebungFotos: Nachweis-Foto(s), dass ein Mangel tatsächlich behoben
+// wurde — bisher lief die Bestätigung durch eine leitende Rolle komplett
+// blind auf Zuruf. Optional (null bei normalen, nicht-Mangel-Aufgaben).
+export async function sbAufgabeVorschlagen(id, session, behebungFotos = null) {
   if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
   try {
     const client = sbClientMitToken(session);
-    const { error } = await client.rpc("aufgabe_vorschlagen_erledigt", { p_aufgabe_id: id });
+    const { error } = await client.rpc("aufgabe_vorschlagen_erledigt",
+      { p_aufgabe_id: id, p_behebung_fotos: behebungFotos });
     return { ok: !error, fehler: error ? (error.message || "Vorschlag fehlgeschlagen.") : null };
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }

@@ -7,13 +7,14 @@ import { AUFGABEN_TYPEN, AUFGABEN_STATUS, AUFGABEN_PRIO, extraFeldLabelFuer,
 import { AufgabenKommentare } from "../components/AufgabenKommentare.jsx";
 
 export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave, onClose, projektTyp,
-  session, firmaId, profil }) {
+  session, firmaId, profil, darfEntscheiden = true, onEntscheiden }) {
   const [a,       setA]       = useState(initial || leereAufgabe());
   const extraLabel = extraFeldLabelFuer(projektTyp);
   const immerExtraFelder = PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN.includes(projektTyp);
   const [bilder,  setBilder]  = useState([]);
   const [planMode,setPlanMode]= useState(false);
   const fileRef               = useRef(null);
+  const behebungFileRef       = useRef(null);
   const planRef               = useRef(null);
   const scrollRef              = useRef(null);
 
@@ -38,6 +39,26 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
       r.onload = ev => setA(p => ({ ...p, fotos:[...p.fotos, ev.target.result] }));
       r.readAsDataURL(file);
     });
+  }
+
+  function handleBehebungBild(e) {
+    Array.from(e.target.files).forEach(file => {
+      const r = new FileReader();
+      r.onload = ev => setA(p => ({ ...p, behebung_fotos:[...(p.behebung_fotos||[]), ev.target.result] }));
+      r.readAsDataURL(file);
+    });
+  }
+
+  // Direkte Bestätigung/Ablehnung aus dem vollen Formular heraus — bisher
+  // ging das nur blind über die zwei kleinen ✓/✕-Buttons auf der Karte,
+  // ohne Beschreibung oder Nachweisfotos zu sehen. Ruft denselben
+  // onEntscheiden-Callback wie die Karte (App.jsx: aufgabeEntscheiden), statt
+  // selbst eine Kopie der RPC-Logik zu pflegen — der normale onSave-Weg
+  // (voller Zeilen-Save) würde vorschlag_von/vorschlag_am nicht zurücksetzen,
+  // da sbAufgabeSpeichern diese Felder gar nicht ins Payload aufnimmt.
+  function entscheiden(akzeptiert) {
+    onEntscheiden?.(a, akzeptiert);
+    onClose();
   }
 
   function handlePlanKlick(e) {
@@ -319,6 +340,71 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
                     r.readAsDataURL(f);
                   }}
                   style={{ marginTop:6, fontSize:12, color:"var(--muted)" }} />
+              </div>
+            )}
+
+            {/* Behebungsnachweis — getrennt von den Mangel-Fotos oben, da
+                diese den Schaden zeigen und diese hier den Beleg der
+                Behebung (Vorher/Nachher). Wird über den Mangel-Beheben-
+                Dialog auf der Karte normalerweise schon befüllt, kann hier
+                aber auch direkt ergänzt/eingesehen werden. */}
+            <div style={{ marginTop:10 }}>
+              <Label>Behebungsnachweis ({a.behebung_fotos?.length || 0})</Label>
+              <input ref={behebungFileRef} type="file" accept="image/*" multiple
+                style={{ display:"none" }} onChange={handleBehebungBild} />
+              <button onClick={() => behebungFileRef.current.click()}
+                style={{ background:"var(--surface)", color:"var(--red)",
+                  border:"1.5px dashed var(--red)", borderRadius:10,
+                  padding:"8px 16px", cursor:"pointer", fontSize:12,
+                  fontFamily:"inherit", marginTop:6 }}>
+                📷 Nachweisfoto hinzufügen
+              </button>
+              {a.behebung_fotos?.length > 0 && (
+                <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+                  {a.behebung_fotos.map((url, i) => (
+                    <div key={i} style={{ position:"relative" }}>
+                      <img src={url} alt="" style={{ width:56, height:56,
+                        borderRadius:8, objectFit:"cover" }} />
+                      <button onClick={() => setA(p=>({...p,
+                        behebung_fotos:p.behebung_fotos.filter((_,j)=>j!==i)}))}
+                        style={{ position:"absolute", top:-4, right:-4,
+                          width:18, height:18, borderRadius:9,
+                          background:"var(--red)", color:"#fff", border:"none",
+                          cursor:"pointer", fontSize:10, padding:0 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Zur-Prüfung-Banner: Bestätigung/Ablehnung mit vollem Kontext
+            (Beschreibung, alle Fotos inkl. Behebungsnachweis) statt blind
+            von der Kartenliste aus. */}
+        {a.status === "zur_pruefung" && (
+          <div style={{ background:"var(--bbg)", border:"1px solid var(--blue)", borderRadius:12,
+            padding:12, marginBottom:12 }}>
+            <div style={{ color:"var(--blue)", fontWeight:700, fontSize:12.5, marginBottom: darfEntscheiden ? 8 : 0 }}>
+              ⏳ Wartet auf Bestätigung
+              {a.ist_mangel && !a.behebung_fotos?.length && (
+                <span style={{ display:"block", color:"var(--red)", fontWeight:600, marginTop:4, fontSize:11.5 }}>
+                  Kein Nachweisfoto vorhanden — vor dem Bestätigen prüfen.
+                </span>
+              )}
+            </div>
+            {darfEntscheiden && (
+              <div style={{ display:"flex", gap:10 }}>
+                <button onClick={() => entscheiden(false)}
+                  style={{ flex:1, background:"var(--red)", color:"#fff", border:"none",
+                    padding:10, fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:13 }}>
+                  ✕ Ablehnen
+                </button>
+                <button onClick={() => entscheiden(true)}
+                  style={{ flex:1, background:"var(--green)", color:"#fff", border:"none",
+                    padding:10, fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:13 }}>
+                  ✓ Bestätigen
+                </button>
               </div>
             )}
           </div>
