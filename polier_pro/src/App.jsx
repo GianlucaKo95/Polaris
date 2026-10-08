@@ -14,6 +14,7 @@ import { sbClientMitToken, SUPABASE_URL, sbAufgabeSpeichern, sbAufgabeLoeschen, 
 import { PasswortSetzenScreen } from "./views/PasswortSetzenScreen.jsx";
 import { ErstePinAbfrageScreen } from "./views/ErstePinAbfrageScreen.jsx";
 import { EinladungScreen } from "./views/EinladungScreen.jsx";
+import { KundenportalScreen } from "./views/KundenportalScreen.jsx";
 import { RegistrierungScreen } from "./views/RegistrierungScreen.jsx";
 import { LoginScreen } from "./views/LoginScreen.jsx";
 import { PinSperreScreen } from "./views/PinSperreScreen.jsx";
@@ -217,6 +218,12 @@ export default function PolierApp() {
     ? new URLSearchParams(window.location.search).get("einladung")
     : null;
 
+  // Kundenportal-Token aus URL erkennen — komplett unabhängig von Login/
+  // Session, da der Bauherr keinen Account hat.
+  const kundenportalToken = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("kunde")
+    : null;
+
   // Firma laden wenn eingeloggt — und lokalen eigeneFirma-State (der für
   // PDFs, Onboarding-Anzeige etc. verwendet wird) mit den echten Daten
   // aus der firmen-Tabelle synchronisieren. Ohne dieses Mapping blieb
@@ -415,6 +422,11 @@ export default function PolierApp() {
     document.addEventListener("visibilitychange", beiSichtbarkeitswechsel);
     return () => document.removeEventListener("visibilitychange", beiSichtbarkeitswechsel);
   }, [aktiveProfil?.pin]);
+
+  // ── Kundenportal (öffentlich, ohne Login) ──
+  if (kundenportalToken) {
+    return <KundenportalScreen token={kundenportalToken} />;
+  }
 
   // ── Passwort-Setzen nach Einladung ──
   if (auth.inviteToken) {
@@ -1048,6 +1060,8 @@ export default function PolierApp() {
         speicherFehler={projekteLadeFehler}
         session={auth.session}
         istAdmin={aktiveRolle === "administrator"}
+        firmaId={firma?.id}
+        profil={aktiveProfil}
       />
     );
   }

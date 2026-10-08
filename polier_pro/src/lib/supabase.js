@@ -308,6 +308,54 @@ export async function sbKolonneLoeschen(id, session) {
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
+// ── Kundenportal: Bauherren-Freigabe-Link ──
+export async function sbKundenportalLaden(projektId, session) {
+  if (!session?.access_token || !projektId) return null;
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("kundenportal_freigaben")
+      .select("id, token, aktiv").eq("projekt_id", projektId).eq("aktiv", true)
+      .order("created_at", { ascending: false }).limit(1);
+    if (error) return null;
+    return data?.[0] || null;
+  } catch { return null; }
+}
+
+export async function sbKundenportalErstellen(projektId, firmaId, profilId, session) {
+  if (!session?.access_token || !projektId || !firmaId) return { daten: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("kundenportal_freigaben")
+      .insert({ projekt_id: projektId, firma_id: firmaId, erstellt_von: profilId || null })
+      .select("id, token, aktiv");
+    const fehler = sbSchreibfehler(error, data, false);
+    if (fehler) return { daten: null, fehler };
+    return { daten: data?.[0] || null, fehler: null };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbKundenportalDeaktivieren(id, session) {
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("kundenportal_freigaben")
+      .update({ aktiv: false }).eq("id", id).select();
+    const fehler = sbSchreibfehler(error, data, true);
+    return { ok: !fehler, fehler };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// Öffentlicher Abruf ohne Session — läuft über eine SECURITY DEFINER-RPC,
+// die gezielt nur die für den Kunden freigegebenen, kuratierten Felder
+// liefert (kein Zugriff auf echte Tabellen für anon, siehe Migration).
+export async function sbKundenportalDaten(token) {
+  try {
+    const { data, error } = await supabase.rpc("kundenportal_daten", { p_token: token });
+    if (error || !data?.length) return null;
+    return data[0];
+  } catch { return null; }
+}
+
 export async function sbSubSpeichern(s, firmaId, session, istNeu) {
   if (!session?.access_token || !firmaId) return null;
   const payload = {
