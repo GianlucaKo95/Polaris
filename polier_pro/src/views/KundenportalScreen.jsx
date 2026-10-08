@@ -49,6 +49,12 @@ export function KundenportalScreen({ token }) {
     ? Math.round((daten.aufgaben_fertig / daten.aufgaben_gesamt) * 100)
     : 0;
   const typInfo = PROJEKTTYPEN[daten.projekt_typ];
+  // Die RPC coalesced tagesberichte serverseitig bereits auf '[]'::jsonb,
+  // aber defensiv bleiben wie der Rest der App (bericht.bilder in
+  // RevisionssichererExport.jsx, pdf.jsx, tagebuchVorlage.js) — sonst würde
+  // diese öffentliche, loginfreie Seite bei einem unerwarteten null
+  // komplett leer abstürzen statt den "Noch keine Berichte"-Hinweis zu zeigen.
+  const tagesberichte = daten.tagesberichte || [];
 
   return (
     <div style={{ minHeight:"100dvh", background:"var(--bg)", color:"var(--text)", fontFamily:"inherit" }}>
@@ -99,12 +105,12 @@ export function KundenportalScreen({ token }) {
 
         {/* Tagesberichte */}
         <div style={{ fontWeight:800, fontSize:13, marginBottom:10 }}>Baustellenberichte</div>
-        {daten.tagesberichte.length === 0 && (
+        {tagesberichte.length === 0 && (
           <div style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"20px 0" }}>
             Noch keine Berichte veröffentlicht.
           </div>
         )}
-        {daten.tagesberichte.map((b, i) => (
+        {tagesberichte.map((b, i) => (
           <div key={i} style={{ background:"var(--surface)", border:"1px solid var(--border)",
             padding:"12px 14px", marginBottom:9 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>

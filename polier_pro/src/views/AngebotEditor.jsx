@@ -10,11 +10,17 @@ import { Spinner } from "../components/Spinner.jsx";
 import { kiAngebotErstellen } from "../lib/ai.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 
-// Beton wird branchenüblich nach Volumen abgerechnet (m³), nicht nach
-// Fläche — der Einheitspreis-Katalog führt für "Betonage" beide Varianten
-// (m² und m³), ohne diese Vorgabe hätte find() immer den ersten, zufällig
-// sortierten Treffer genommen.
-const BEVORZUGTE_EINHEIT = { beton: "m³" };
+// Aufgaben erfassen aktuell ausschließlich eine Fläche (aufgabe.m2,
+// Formularlabel "Fläche (m²)", einziges Mengenfeld im gesamten Aufgaben-
+// Formular) — nie ein Volumen oder Gewicht. Beim Import MUSS der
+// Katalogeintrag deshalb zu dieser Einheit passen (m²), sonst entsteht ein
+// Einheiten/Mengen-Mismatch: eine frühere Fassung bevorzugte hier für Beton
+// den m³-Eintrag (branchenüblich wird Beton nach Volumen abgerechnet),
+// ohne menge mit umzurechnen — aus "50 m²" wurde dadurch fälschlich
+// "50 m³" zum m³-Preis, ein ca. 2,6-facher Aufpreis auf dem Angebot. Bis
+// es ein eigenes Mengenfeld für Volumen gibt, ist m² die einzige Einheit,
+// zu der die tatsächlich erfasste Menge passt.
+const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
 export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, session }) {
   const [a,         setA]         = useState(angebot);
