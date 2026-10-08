@@ -372,6 +372,14 @@ export async function sbKundenportalMangelMelden(token, { titel, beschreibung, k
       p_fotos: fotos || [],
     });
     if (error) return { ok: false, fehler: error.message || "Melden fehlgeschlagen." };
+    // Bewusst nicht awaited und ohne Fehlerbehandlung nach außen — die
+    // Meldung selbst ist zu diesem Zeitpunkt bereits gespeichert (siehe
+    // RPC oben), der Push ist rein additiv. Schlägt er fehl (keine VAPID-
+    // Keys konfiguriert, niemand abonniert, Netzwerkfehler), soll der
+    // Kunde trotzdem die normale Erfolgsbestätigung sehen statt eines
+    // irreführenden Fehlers für etwas, das mit seiner Meldung gar nichts
+    // mehr zu tun hat.
+    supabase.functions.invoke("kundenportal-mangel-push", { body: { token, titel } }).catch(() => {});
     return { ok: true, fehler: null };
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
