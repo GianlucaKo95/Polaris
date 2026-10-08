@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
   CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight,
   Building2, Calendar, Euro, CloudSun, ChartColumn, FileText, Settings,
-  UserCog, RefreshCw, User, Sparkles, FlaskConical } from "lucide-react";
+  UserCog, RefreshCw, User, Sparkles, FlaskConical, Check } from "lucide-react";
 import { useTheme } from "./hooks/useTheme.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { useBackButton } from "./hooks/useBackButton.js";
@@ -14,6 +14,7 @@ import { sbClientMitToken, SUPABASE_URL, sbAufgabeSpeichern, sbAufgabeLoeschen, 
 import { PasswortSetzenScreen } from "./views/PasswortSetzenScreen.jsx";
 import { ErstePinAbfrageScreen } from "./views/ErstePinAbfrageScreen.jsx";
 import { EinladungScreen } from "./views/EinladungScreen.jsx";
+import { KundenportalScreen } from "./views/KundenportalScreen.jsx";
 import { RegistrierungScreen } from "./views/RegistrierungScreen.jsx";
 import { LoginScreen } from "./views/LoginScreen.jsx";
 import { PinSperreScreen } from "./views/PinSperreScreen.jsx";
@@ -91,6 +92,14 @@ export class ErrorBoundary extends React.Component {
   }
 }
 
+// Sortier-Optionen für "Meine Baustellen" — "zuletzt" lässt die Reihenfolge
+// unverändert, da projekte bereits mit created_at.desc von Supabase kommt.
+const PROJEKT_SORT_OPTIONEN = [
+  { id:"zuletzt", label:"Zuletzt" },
+  { id:"name",    label:"Name (A–Z)" },
+  { id:"nummer",  label:"Baustellen-Nr." },
+];
+
 export default function PolierApp() {
   const theme   = useTheme();
   const auth    = useAuth();
@@ -155,6 +164,22 @@ export default function PolierApp() {
   const [eigeneFirma,   setEigeneFirma] = useState({ name:"", strasse:"", plz:"", ort:"", telefon:"", email:"", geschaeftsfuehrer:"", steuernummer:"", gewerke:[], logo:null, pin_pflicht:false });
   const [subs,          setSubs]        = useState([]);
   const [homeTab,       setHomeTab]     = useState("projekte");
+  const [projektSort,       setProjektSort]       = useState("zuletzt");
+  const [projektSortOffen,  setProjektSortOffen]  = useState(false);
+  const projektSortRef = useRef(null);
+  // Dropdown bei Klick außerhalb schließen — muss vor jedem bedingten
+  // return stehen (Rules of Hooks), auch wenn das Dropdown selbst nur auf
+  // dem Dashboard ohne aktives Projekt sichtbar ist.
+  useEffect(() => {
+    if (!projektSortOffen) return;
+    function handleClick(e) {
+      if (projektSortRef.current && !projektSortRef.current.contains(e.target)) {
+        setProjektSortOffen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [projektSortOffen]);
   const [zeitbuchungen, setZeitbuchungen] = useState([]);
   const [einheitspreise,setEinheitspreise]= useState(DEFAULT_EINHEITSPREISE);
   const [lvVorlagen,    setLvVorlagen]    = useState(DEFAULT_LV_VORLAGEN);
@@ -191,6 +216,12 @@ export default function PolierApp() {
   // Einladungs-Token aus URL erkennen (sicher)
   const einladungsToken = typeof window !== "undefined"
     ? new URLSearchParams(window.location.search).get("einladung")
+    : null;
+
+  // Kundenportal-Token aus URL erkennen — komplett unabhängig von Login/
+  // Session, da der Bauherr keinen Account hat.
+  const kundenportalToken = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("kunde")
     : null;
 
   // Firma laden wenn eingeloggt — und lokalen eigeneFirma-State (der für
@@ -392,6 +423,11 @@ export default function PolierApp() {
     return () => document.removeEventListener("visibilitychange", beiSichtbarkeitswechsel);
   }, [aktiveProfil?.pin]);
 
+  // ── Kundenportal (öffentlich, ohne Login) ──
+  if (kundenportalToken) {
+    return <KundenportalScreen token={kundenportalToken} />;
+  }
+
   // ── Passwort-Setzen nach Einladung ──
   if (auth.inviteToken) {
     return <PasswortSetzenScreen auth={auth} type={auth.inviteType} />;
@@ -591,12 +627,13 @@ export default function PolierApp() {
   // ab. Läuft über eigene RPCs statt sbAufgabeSpeichern — ein Facharbeiter
   // hat kein UPDATE-Recht auf die aufgaben-Tabelle, und ein normaler
   // Full-Row-Save würde an der RLS scheitern.
-  async function aufgabeVorschlagen(a) {
+  async function aufgabeVorschlagen(a, behebungFotos = null) {
     setSpeicherFehler("");
-    const { ok, fehler } = await sbAufgabeVorschlagen(a.id, auth.session);
+    const { ok, fehler } = await sbAufgabeVorschlagen(a.id, auth.session, behebungFotos);
     if (!ok) { setSpeicherFehler(fehler || "Vorschlag konnte nicht gespeichert werden."); return; }
     setAktProjektAufgaben(prev => prev.map(x => x.id === a.id
-      ? { ...x, status:"zur_pruefung", vorschlag_von: auth.session?.user?.id, vorschlag_am: new Date().toISOString() }
+      ? { ...x, status:"zur_pruefung", vorschlag_von: auth.session?.user?.id, vorschlag_am: new Date().toISOString(),
+          behebung_fotos: behebungFotos ?? x.behebung_fotos }
       : x));
   }
 
@@ -767,6 +804,16 @@ export default function PolierApp() {
       return s + eltern.filter(f=>f.status!=="done" && f.geplant && new Date(f.geplant)<new Date()).length;
     }, 0);
 
+    // Nur für die Anzeige sortieren, "projekte" selbst bleibt unangetastet
+    // (andere Stellen wie der Stempeln-Tab verlassen sich auf projekte[0]
+    // als Default-Auswahl). .sort() ist stabil, "zuletzt" behält also die
+    // von Supabase gelieferte created_at.desc-Reihenfolge einfach bei.
+    const projekteSortiert = [...projekte].sort((a, b) => {
+      if (projektSort === "name")   return (a.name||"").localeCompare(b.name||"", "de");
+      if (projektSort === "nummer") return (a.projektnummer||"").localeCompare(b.projektnummer||"", "de", { numeric:true });
+      return 0;
+    });
+
     return (
       <>
         <div style={{ background:"var(--bg)", minHeight:"100dvh", color:"var(--text)" }}>
@@ -863,9 +910,31 @@ export default function PolierApp() {
                   <div style={{ color:"var(--text)", fontWeight:800, fontSize:13 }}>
                     Meine Baustellen
                   </div>
-                  <div style={{ display:"flex", alignItems:"center", gap:5, color:"var(--muted)",
-                    fontSize:12, fontWeight:600 }}>
-                    <Ellipsis size={14} />Zuletzt
+                  <div style={{ position:"relative" }} ref={projektSortRef}>
+                    <button onClick={() => setProjektSortOffen(o => !o)}
+                      style={{ display:"flex", alignItems:"center", gap:5, color:"var(--muted)",
+                        fontSize:12, fontWeight:600, background:"none", border:"none",
+                        padding:0, cursor:"pointer", fontFamily:"inherit" }}>
+                      <Ellipsis size={14} />
+                      {PROJEKT_SORT_OPTIONEN.find(o => o.id===projektSort)?.label}
+                    </button>
+                    {projektSortOffen && (
+                      <div style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:20,
+                        background:"var(--surface)", border:"1px solid var(--border)",
+                        minWidth:160, boxShadow:"0 4px 16px rgba(0,0,0,.18)" }}>
+                        {PROJEKT_SORT_OPTIONEN.map(o => (
+                          <div key={o.id}
+                            onClick={() => { setProjektSort(o.id); setProjektSortOffen(false); }}
+                            style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                              gap:10, padding:"10px 12px", cursor:"pointer", fontSize:12.5,
+                              fontWeight: projektSort===o.id ? 700 : 500,
+                              color: projektSort===o.id ? "var(--text)" : "var(--muted)" }}>
+                            {o.label}
+                            {projektSort===o.id && <Check size={13} />}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -893,7 +962,7 @@ export default function PolierApp() {
                   </div>
                 )}
 
-                {projekte.map(p => {
+                {projekteSortiert.map(p => {
                   const eltern  = (p.felder||[]).filter(f=>!f.parentId);
                   const done    = eltern.filter(f=>f.status==="done").length;
                   const total   = eltern.length;
@@ -991,6 +1060,8 @@ export default function PolierApp() {
         speicherFehler={projekteLadeFehler}
         session={auth.session}
         istAdmin={aktiveRolle === "administrator"}
+        firmaId={firma?.id}
+        profil={aktiveProfil}
       />
     );
   }
@@ -1162,7 +1233,8 @@ export default function PolierApp() {
             kannVorschlagen={["facharbeiter","vorarbeiter"].includes(aktiveRolle)}
             darfEntscheiden={["administrator","polier","bauleiter"].includes(aktiveRolle)}
             onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}
-            zeitbuchungen={zeitbuchungen} projekt={projekt} />}
+            zeitbuchungen={zeitbuchungen} projekt={projekt}
+            session={auth.session} firmaId={firma?.id} profil={aktiveProfil} />}
         {tab === "kosten"        && <KostenView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "stempeln"      && <StempeluhrView profil={aktiveProfil}
             projekte={aktiveProfil?.kolonne_id

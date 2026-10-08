@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { PlanErkennung } from "./PlanErkennung.jsx";
 import { leereAufgabe } from "../lib/utils.js";
 import { AUFGABEN_TYPEN, aufgabenVorlagenFuer, extraFeldLabelFuer,
-  PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN } from "../config/konstanten.js";
+  PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN, BEWEHRUNG_EXTRA_FELD_LABEL } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 
 export function SchnellErstellung({ onSave, onClose, projektTyp }) {
@@ -22,6 +22,9 @@ export function SchnellErstellung({ onSave, onClose, projektTyp }) {
   // ── Einzeln: minimales Formular ──
   const [titel,     setTitel]     = useState("");
   const [typ,       setTyp]       = useState(immerExtraFelder ? "allgemein" : "beton");
+  // Bewehrung ist immer eine Masse (t), unabhängig vom Projekttyp — siehe
+  // dieselbe Umbeschriftung in AufgabenFormular.jsx.
+  const einzelExtraLabel = typ === "bewehrung" ? BEWEHRUNG_EXTRA_FELD_LABEL : extraLabel;
   const [m2,        setM2]        = useState("");
   const [betonsorte,setBetonsorte]= useState("");
 
@@ -163,18 +166,18 @@ export function SchnellErstellung({ onSave, onClose, projektTyp }) {
                 ))}
               </div>
             </div>
-            {(typ === "beton" || immerExtraFelder) && (
+            {(typ === "beton" || typ === "bewehrung" || immerExtraFelder) && (
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10,
                 marginBottom:10 }}>
                 <div>
-                  <Label>{extraLabel.m2}</Label>
+                  <Label>{einzelExtraLabel.m2}</Label>
                   <input type="number" value={m2} onChange={e=>setM2(e.target.value)}
                     placeholder="0" style={inputStyle()} />
                 </div>
                 <div>
-                  <Label>{extraLabel.sorte}</Label>
+                  <Label>{einzelExtraLabel.sorte}</Label>
                   <input value={betonsorte} onChange={e=>setBetonsorte(e.target.value)}
-                    placeholder={extraLabel.sortePlatzhalter} style={inputStyle()} />
+                    placeholder={einzelExtraLabel.sortePlatzhalter} style={inputStyle()} />
                 </div>
               </div>
             )}

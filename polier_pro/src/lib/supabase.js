@@ -169,6 +169,7 @@ export async function sbAufgabeSpeichern(a, projektId, session, istNeu) {
     abhaengig_von:       Array.isArray(a.abhaengig_von) ? a.abhaengig_von.filter(id => typeof id === "number" && id < 1e12) : [],
     beschreibung:        a.beschreibung || "",
     fotos:               a.fotos || [],
+    behebung_fotos:      a.behebung_fotos || [],
     ist_mangel:          !!a.ist_mangel,
     mangel_verursacher:  a.mangel_verursacher || "",
     plan_x:              a.plan_x ?? null,
@@ -207,11 +208,15 @@ export async function sbAufgabeLoeschen(id, session) {
 // Firma selbst, ganz ohne UPDATE-Grant auf die aufgaben-Tabelle für diese
 // Rollen. Die RPCs werfen bei fehlender Berechtigung bereits eine konkrete
 // Meldung (raise exception) — die wird hier durchgereicht statt verworfen.
-export async function sbAufgabeVorschlagen(id, session) {
+// behebungFotos: Nachweis-Foto(s), dass ein Mangel tatsächlich behoben
+// wurde — bisher lief die Bestätigung durch eine leitende Rolle komplett
+// blind auf Zuruf. Optional (null bei normalen, nicht-Mangel-Aufgaben).
+export async function sbAufgabeVorschlagen(id, session, behebungFotos = null) {
   if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
   try {
     const client = sbClientMitToken(session);
-    const { error } = await client.rpc("aufgabe_vorschlagen_erledigt", { p_aufgabe_id: id });
+    const { error } = await client.rpc("aufgabe_vorschlagen_erledigt",
+      { p_aufgabe_id: id, p_behebung_fotos: behebungFotos });
     return { ok: !error, fehler: error ? (error.message || "Vorschlag fehlgeschlagen.") : null };
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
@@ -223,6 +228,54 @@ export async function sbAufgabeVorschlagEntscheiden(id, akzeptiert, session) {
     const { error } = await client.rpc("aufgabe_vorschlag_entscheiden", { p_aufgabe_id: id, p_akzeptiert: akzeptiert });
     return { ok: !error, fehler: error ? (error.message || "Entscheidung fehlgeschlagen.") : null };
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbKommentareLaden(aufgabeId, session) {
+  if (!session?.access_token || !aufgabeId) return [];
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("aufgaben_kommentare")
+      .select("*").eq("aufgabe_id", aufgabeId).order("created_at", { ascending: true });
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
+}
+
+export async function sbKommentarSpeichern(text, aufgabeId, firmaId, profilId, session) {
+  if (!session?.access_token || !aufgabeId || !firmaId) return { daten: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("aufgaben_kommentare")
+      .insert({ aufgabe_id: aufgabeId, firma_id: firmaId, erstellt_von: profilId || null, text })
+      .select();
+    const fehler = sbSchreibfehler(error, data, false);
+    if (fehler) return { daten: null, fehler };
+    return { daten: data?.[0] || null, fehler: null };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbKommentarLoeschen(id, session) {
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("aufgaben_kommentare").delete().eq("id", id).select();
+    const fehler = sbSchreibfehler(error, data, true);
+    return { ok: !fehler, fehler };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// Liefert ein { profilId: "Vorname Nachname" }-Lookup für eine Menge
+// Kommentar-Autoren — ein einzelner Request für alle auf einmal statt
+// eines Requests pro Kommentar.
+export async function sbProfileNamenLaden(ids, session) {
+  if (!session?.access_token || !ids?.length) return {};
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("profile").select("id,vorname,nachname").in("id", ids);
+    if (error) return {};
+    return Object.fromEntries((data || []).map(p =>
+      [p.id, [p.vorname, p.nachname].filter(Boolean).join(" ") || "Unbekannt"]));
+  } catch { return {}; }
 }
 
 export async function sbKolonneSpeichern(k, projektId, session, istNeu) {
@@ -253,6 +306,54 @@ export async function sbKolonneLoeschen(id, session) {
     const fehler = sbSchreibfehler(error, data, true);
     return { ok: !fehler, fehler };
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// ── Kundenportal: Bauherren-Freigabe-Link ──
+export async function sbKundenportalLaden(projektId, session) {
+  if (!session?.access_token || !projektId) return null;
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("kundenportal_freigaben")
+      .select("id, token, aktiv").eq("projekt_id", projektId).eq("aktiv", true)
+      .order("created_at", { ascending: false }).limit(1);
+    if (error) return null;
+    return data?.[0] || null;
+  } catch { return null; }
+}
+
+export async function sbKundenportalErstellen(projektId, firmaId, profilId, session) {
+  if (!session?.access_token || !projektId || !firmaId) return { daten: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("kundenportal_freigaben")
+      .insert({ projekt_id: projektId, firma_id: firmaId, erstellt_von: profilId || null })
+      .select("id, token, aktiv");
+    const fehler = sbSchreibfehler(error, data, false);
+    if (fehler) return { daten: null, fehler };
+    return { daten: data?.[0] || null, fehler: null };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbKundenportalDeaktivieren(id, session) {
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("kundenportal_freigaben")
+      .update({ aktiv: false }).eq("id", id).select();
+    const fehler = sbSchreibfehler(error, data, true);
+    return { ok: !fehler, fehler };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// Öffentlicher Abruf ohne Session — läuft über eine SECURITY DEFINER-RPC,
+// die gezielt nur die für den Kunden freigegebenen, kuratierten Felder
+// liefert (kein Zugriff auf echte Tabellen für anon, siehe Migration).
+export async function sbKundenportalDaten(token) {
+  try {
+    const { data, error } = await supabase.rpc("kundenportal_daten", { p_token: token });
+    if (error || !data?.length) return null;
+    return data[0];
+  } catch { return null; }
 }
 
 export async function sbSubSpeichern(s, firmaId, session, istNeu) {

@@ -10,6 +10,20 @@ import { Spinner } from "../components/Spinner.jsx";
 import { kiAngebotErstellen } from "../lib/ai.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 
+// aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
+// seine Bedeutung hängt aber vom Aufgabentyp ab (siehe extraLabel in
+// AufgabenFormular.jsx/SchnellErstellung.jsx): bei "beton" eine Fläche
+// (m²), bei "bewehrung" eine Masse (t). Beim Import MUSS der Katalogeintrag
+// deshalb zur tatsächlich erfassten Einheit passen, sonst entsteht ein
+// Einheiten/Mengen-Mismatch: eine frühere Fassung bevorzugte hier für Beton
+// den m³-Eintrag (branchenüblich wird Beton nach Volumen abgerechnet),
+// ohne menge mit umzurechnen — aus "50 m²" wurde dadurch fälschlich
+// "50 m³" zum m³-Preis, ein ca. 2,6-facher Aufpreis auf dem Angebot. Bis es
+// ein eigenes Mengenfeld für Volumen gibt, ist m² die einzige Einheit, zu
+// der die für Beton erfasste Menge passt — Bewehrung braucht hier keinen
+// Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
+const BEVORZUGTE_EINHEIT = { beton: "m²" };
+
 export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, session }) {
   const [a,         setA]         = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
@@ -57,13 +71,23 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   }
 
   function aufgabeImportieren(aufgabe) {
-    const typ   = aufgabe.typ;
-    const ep    = einheitspreise.find(e =>
+    const typ = aufgabe.typ;
+    // Mehrere Katalogeinträge können zum selben Gewerk passen (z.B. Beton
+    // mit m²- und m³-Einträgen) — ohne bevorzugte Einheit je Typ nahm
+    // find() immer den ersten Treffer, unabhängig von dessen Einheit.
+    const gewerkTreffer = einheitspreise.filter(e =>
       e.gewerk.toLowerCase().includes(typ) || typ.includes(e.gewerk.toLowerCase())
     );
+    const bevorzugt = BEVORZUGTE_EINHEIT[typ];
+    const ep = gewerkTreffer.find(e => e.einheit === bevorzugt) || gewerkTreffer[0];
     addPosition({
       bez:      aufgabe.titel,
-      einheit:  aufgabe.m2 ? "m²" : "h",
+      // Die Einheit des gefundenen Katalogeintrags übernehmen statt sie zu
+      // verwerfen — vorher wurde hier unabhängig vom Gewerk immer "m²"
+      // (bzw. "h" ohne m2-Wert) erzwungen, auch wenn der Katalog für genau
+      // dieses Gewerk bereits die richtige Einheit kannte (z.B. "t" bei
+      // Bewehrung).
+      einheit:  ep?.einheit || (aufgabe.m2 ? "m²" : "h"),
       menge:    aufgabe.m2 || 0,
       ep:       ep?.preis || 0,
     });
@@ -125,7 +149,15 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 .firma-info { font-size:9pt; color:#666; margin-top:3px; line-height:1.5; }
 .angebot-title { text-align:right; }
 .angebot-title h1 { font-size:16pt; font-weight:900; }
+.angebot-title .titel { font-size:11pt; font-weight:bold; margin-top:3px; }
 .angebot-title .meta { font-size:9pt; color:#666; margin-top:3px; }
+.betrag-banner { background:#1a1a1a; border-radius:12px; padding:14px 18px;
+  margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; }
+.betrag-label { color:#999; font-size:9pt; }
+.betrag-val { color:#F5C400; font-weight:900; font-size:22pt; margin-top:2px; line-height:1; }
+.betrag-meta { text-align:right; }
+.betrag-meta div { color:#ccc; font-size:9.5pt; margin-top:4px; }
+.betrag-meta div:first-child { margin-top:0; }
 .empfaenger { background:#f8f8f8; border-radius:6px; padding:12px 14px; margin-bottom:16px; }
 .empfaenger-label { font-size:8pt; color:#888; margin-bottom:4px; }
 .table { width:100%; border-collapse:collapse; margin-bottom:16px; }
@@ -162,10 +194,25 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
   </div>
   <div class="angebot-title">
     <h1>Angebot</h1>
+    ${a.titel ? `<div class="titel">${escapeHtml(a.titel)}</div>` : ""}
     <div class="meta">Datum: ${new Date(a.datum).toLocaleDateString("de-DE")}</div>
     <div class="meta">Gültig bis: ${new Date(a.gueltig_bis).toLocaleDateString("de-DE")}</div>
     <div class="meta" style="font-weight:bold">Projekt: ${escapeHtml(projekt?.name)}</div>
     <div class="meta">${escapeHtml(projekt?.projektnummer)}</div>
+  </div>
+</div>
+
+<!-- Angebotssumme sofort sichtbar — vorher stand der Gesamtbetrag nur
+     klein unten nach der Positionstabelle, obwohl das für den Empfänger
+     die mit Abstand wichtigste Zahl im ganzen Dokument ist. -->
+<div class="betrag-banner">
+  <div>
+    <div class="betrag-label">Angebotssumme (brutto)</div>
+    <div class="betrag-val">${bruttoGesamt.toLocaleString("de-DE",{minimumFractionDigits:2})} €</div>
+  </div>
+  <div class="betrag-meta">
+    <div>${a.positionen.length} Position${a.positionen.length===1?"":"en"}</div>
+    <div>Gültig bis ${new Date(a.gueltig_bis).toLocaleDateString("de-DE")}</div>
   </div>
 </div>
 

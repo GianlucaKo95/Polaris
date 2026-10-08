@@ -1,5 +1,3 @@
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  WidthType, AlignmentType, ImageRun, BorderStyle } from "docx";
 import { dataUrlZuBild } from "./docxUtils.js";
 
 const GELB = "F5C400";
@@ -12,7 +10,15 @@ const GRAU = "666666";
 // So kann ein beliebiger Vorlagen-Upload nie ein defektes/unöffenbares
 // Angebot erzeugen, weil das Ergebnis unabhängig vom Original immer eine
 // frisch gebaute, valide .docx ist.
+//
+// docx dynamisch statt statisch importiert: ein Top-Level-Import hätte die
+// komplette Bibliothek in jeden Seiten-Load eingebunden, obwohl der Angebot-
+// Export nur gelegentlich genutzt wird — sie landet so in einem eigenen
+// Chunk, der nur bei tatsächlichem Export nachgeladen wird.
 export async function erzeugeAngebotDocx({ angebot: a, projekt, eigeneFirma, angebotVorlage }) {
+  const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+    WidthType, AlignmentType, ImageRun, BorderStyle } = await import("docx");
+
   const gpOf = p => (p.menge||0) * (p.ep||0) * (1 - (p.rabatt||0)/100);
   const netto = a.positionen.reduce((s,p)=>s+gpOf(p),0);
   const rabattBetrag = netto * (a.rabatt||0)/100;

@@ -3,15 +3,22 @@ import { createPortal } from "react-dom";
 import { leereAufgabe } from "../lib/utils.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { AUFGABEN_TYPEN, AUFGABEN_STATUS, AUFGABEN_PRIO, extraFeldLabelFuer,
-  PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN } from "../config/konstanten.js";
+  PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN, BEWEHRUNG_EXTRA_FELD_LABEL } from "../config/konstanten.js";
+import { AufgabenKommentare } from "../components/AufgabenKommentare.jsx";
+import { sbAufgabeSpeichern } from "../lib/supabase.js";
 
-export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave, onClose, projektTyp }) {
+export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave, onClose, projektTyp,
+  session, firmaId, profil, darfEntscheiden = true, onEntscheiden, nurLesen = false }) {
   const [a,       setA]       = useState(initial || leereAufgabe());
-  const extraLabel = extraFeldLabelFuer(projektTyp);
+  // Bewehrung ist immer eine Masse (t), unabhängig vom Projekttyp — deshalb
+  // hier vom Aufgabentyp statt vom Projekttyp abgeleitet, anders als die
+  // Dach/PV-Umbeschriftung in extraFeldLabelFuer().
+  const extraLabel = a.typ === "bewehrung" ? BEWEHRUNG_EXTRA_FELD_LABEL : extraFeldLabelFuer(projektTyp);
   const immerExtraFelder = PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN.includes(projektTyp);
   const [bilder,  setBilder]  = useState([]);
   const [planMode,setPlanMode]= useState(false);
   const fileRef               = useRef(null);
+  const behebungFileRef       = useRef(null);
   const planRef               = useRef(null);
   const scrollRef              = useRef(null);
 
@@ -36,6 +43,36 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
       r.onload = ev => setA(p => ({ ...p, fotos:[...p.fotos, ev.target.result] }));
       r.readAsDataURL(file);
     });
+  }
+
+  function handleBehebungBild(e) {
+    Array.from(e.target.files).forEach(file => {
+      const r = new FileReader();
+      r.onload = ev => setA(p => ({ ...p, behebung_fotos:[...(p.behebung_fotos||[]), ev.target.result] }));
+      r.readAsDataURL(file);
+    });
+  }
+
+  // Direkte Bestätigung/Ablehnung aus dem vollen Formular heraus — bisher
+  // ging das nur blind über die zwei kleinen ✓/✕-Buttons auf der Karte,
+  // ohne Beschreibung oder Nachweisfotos zu sehen. Ruft denselben
+  // onEntscheiden-Callback wie die Karte (App.jsx: aufgabeEntscheiden), statt
+  // selbst eine Kopie der RPC-Logik zu pflegen — der normale onSave-Weg
+  // (voller Zeilen-Save) würde vorschlag_von/vorschlag_am nicht zurücksetzen,
+  // da sbAufgabeSpeichern diese Felder gar nicht ins Payload aufnimmt.
+  //
+  // Vorher ging ein hier erst neu hinzugefügtes Behebungsnachweis-Foto (oder
+  // jede andere lokale Änderung) beim Bestätigen/Ablehnen verloren, weil nur
+  // onEntscheiden (RPC, ändert ausschließlich status/vorschlag_von/-am)
+  // aufgerufen wurde, nie aber ein Save des restlichen Formularstands —
+  // genau der Fotonachweis, um den es in diesem Formular eigentlich geht.
+  // Deshalb hier zuerst der volle aktuelle Stand sichern (status bleibt dabei
+  // unverändert "zur_pruefung", also keine Kollision mit der nachfolgenden
+  // RPC, die exakt dieses Feld anschließend autoritativ umsetzt).
+  async function entscheiden(akzeptiert) {
+    if (a.projekt_id) await sbAufgabeSpeichern(a, a.projekt_id, session, false);
+    onEntscheiden?.(a, akzeptiert);
+    onClose();
   }
 
   function handlePlanKlick(e) {
@@ -79,6 +116,20 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
       </div>
 
       <div style={{ padding:"18px 16px 16px" }}>
+
+        {/* Vorarbeiter darf Aufgaben laut Rollenkonfiguration nicht
+            bearbeiten (kannAufgabenBearbeiten:false), aber die Karte zuvor
+            jetzt antippen, um sie überhaupt einzusehen (siehe AufgabenView —
+            vorher kam man an diesen Dialog als Vorarbeiter nie heran).
+            Alles unten bis vor die Kommentare wird daher nur "angezeigt". */}
+        {nurLesen && (
+          <div style={{ background:"var(--ybg)", color:"var(--ydark)", border:"1px solid var(--yellow)",
+            borderRadius:10, padding:"8px 12px", fontSize:12, fontWeight:600, marginBottom:14 }}>
+            Nur Ansicht — du darfst diese Aufgabe nicht bearbeiten. Kommentieren geht trotzdem.
+          </div>
+        )}
+
+        <div style={nurLesen ? { pointerEvents:"none", opacity:0.75 } : undefined}>
 
         {/* Typ */}
         <div style={{ marginBottom:10 }}>
@@ -232,8 +283,9 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
         </div>
 
         {/* Zusatzfelder (m²/Sorte) — bei Beton-Projekten nur für Betonage-
-            Aufgaben relevant, bei Dach/PV unabhängig vom Aufgabentyp */}
-        {(a.typ === "beton" || immerExtraFelder) && (
+            und Bewehrung-Aufgaben relevant (Bewehrung immer nach Gewicht,
+            siehe extraLabel oben), bei Dach/PV unabhängig vom Aufgabentyp */}
+        {(a.typ === "beton" || a.typ === "bewehrung" || immerExtraFelder) && (
           <div style={{ background:"var(--ybg)", borderRadius:12, padding:10,
             marginBottom:10, border:"1px solid var(--yellow)" }}>
             <div style={{ color:"var(--ydark)", fontWeight:700, fontSize:12,
@@ -319,6 +371,71 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
                   style={{ marginTop:6, fontSize:12, color:"var(--muted)" }} />
               </div>
             )}
+
+            {/* Behebungsnachweis — getrennt von den Mangel-Fotos oben, da
+                diese den Schaden zeigen und diese hier den Beleg der
+                Behebung (Vorher/Nachher). Wird über den Mangel-Beheben-
+                Dialog auf der Karte normalerweise schon befüllt, kann hier
+                aber auch direkt ergänzt/eingesehen werden. */}
+            <div style={{ marginTop:10 }}>
+              <Label>Behebungsnachweis ({a.behebung_fotos?.length || 0})</Label>
+              <input ref={behebungFileRef} type="file" accept="image/*" multiple
+                style={{ display:"none" }} onChange={handleBehebungBild} />
+              <button onClick={() => behebungFileRef.current.click()}
+                style={{ background:"var(--surface)", color:"var(--red)",
+                  border:"1.5px dashed var(--red)", borderRadius:10,
+                  padding:"8px 16px", cursor:"pointer", fontSize:12,
+                  fontFamily:"inherit", marginTop:6 }}>
+                📷 Nachweisfoto hinzufügen
+              </button>
+              {a.behebung_fotos?.length > 0 && (
+                <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+                  {a.behebung_fotos.map((url, i) => (
+                    <div key={i} style={{ position:"relative" }}>
+                      <img src={url} alt="" style={{ width:56, height:56,
+                        borderRadius:8, objectFit:"cover" }} />
+                      <button onClick={() => setA(p=>({...p,
+                        behebung_fotos:p.behebung_fotos.filter((_,j)=>j!==i)}))}
+                        style={{ position:"absolute", top:-4, right:-4,
+                          width:18, height:18, borderRadius:9,
+                          background:"var(--red)", color:"#fff", border:"none",
+                          cursor:"pointer", fontSize:10, padding:0 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Zur-Prüfung-Banner: Bestätigung/Ablehnung mit vollem Kontext
+            (Beschreibung, alle Fotos inkl. Behebungsnachweis) statt blind
+            von der Kartenliste aus. */}
+        {a.status === "zur_pruefung" && (
+          <div style={{ background:"var(--bbg)", border:"1px solid var(--blue)", borderRadius:12,
+            padding:12, marginBottom:12 }}>
+            <div style={{ color:"var(--blue)", fontWeight:700, fontSize:12.5, marginBottom: darfEntscheiden ? 8 : 0 }}>
+              ⏳ Wartet auf Bestätigung
+              {a.ist_mangel && !a.behebung_fotos?.length && (
+                <span style={{ display:"block", color:"var(--red)", fontWeight:600, marginTop:4, fontSize:11.5 }}>
+                  Kein Nachweisfoto vorhanden — vor dem Bestätigen prüfen.
+                </span>
+              )}
+            </div>
+            {darfEntscheiden && (
+              <div style={{ display:"flex", gap:10 }}>
+                <button onClick={() => entscheiden(false)}
+                  style={{ flex:1, background:"var(--red)", color:"#fff", border:"none",
+                    padding:10, fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:13 }}>
+                  ✕ Ablehnen
+                </button>
+                <button onClick={() => entscheiden(true)}
+                  style={{ flex:1, background:"var(--green)", color:"#fff", border:"none",
+                    padding:10, fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:13 }}>
+                  ✓ Bestätigen
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -351,6 +468,17 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
             </div>
           )}
         </div>
+
+        </div>
+
+        {/* Kommentare — erst sinnvoll, wenn die Aufgabe bereits in der DB
+            existiert (bei "Neue Aufgabe"/"Neuer Mangel" hat initial zwar
+            schon eine lokale id von leereAufgabe(), aber noch keine Zeile,
+            an die ein Kommentar per Fremdschlüssel hängen könnte — deshalb
+            Abgleich gegen alleAufgaben statt bloß initial?.id). */}
+        {initial?.id && alleAufgaben.some(x => x.id === initial.id) && session && firmaId && (
+          <AufgabenKommentare aufgabeId={initial.id} firmaId={firmaId} session={session} profil={profil} />
+        )}
       </div>
 
       {/* Sticky statt im normalen Fluss am Formularende: bleibt immer
@@ -359,6 +487,13 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
       <div style={{ position:"sticky", bottom:0, display:"flex", gap:10,
         background:"var(--bg)", borderTop:"1px solid var(--border)",
         padding:"12px 16px", paddingBottom:"calc(12px + env(safe-area-inset-bottom))" }}>
+        {nurLesen ? (
+          <button onClick={onClose}
+            style={{ flex:1, background:"var(--surface2)", color:"var(--text)",
+              border:"1.5px solid var(--border)", padding:16,
+              cursor:"pointer", fontFamily:"inherit", fontWeight:700 }}>Schließen</button>
+        ) : (
+        <>
         <button onClick={onClose}
           style={{ flex:1, background:"var(--surface2)", color:"var(--muted)",
             border:"1.5px solid var(--border)", padding:16,
@@ -371,6 +506,8 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
             fontFamily:"inherit" }}>
           Speichern
         </button>
+        </>
+        )}
       </div>
     </div>,
     document.body

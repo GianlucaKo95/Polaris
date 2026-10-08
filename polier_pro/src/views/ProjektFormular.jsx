@@ -8,8 +8,10 @@ import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { kiBaustelleAnlegen } from "../lib/ai.js";
 import { sbFetch } from "../lib/supabase.js";
+import { KundenportalFreigabe } from "../components/KundenportalFreigabe.jsx";
 
-export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherFehler = "", session, istAdmin = false }) {
+export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherFehler = "", session, istAdmin = false,
+  firmaId, profil }) {
   const [p, setP] = useState(initial || leerProjekt());
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
   const [kiDiktat,  setKiDiktat]  = useState("");
@@ -129,6 +131,13 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
             style={{ background:"none", border:"none", color:"var(--muted)",
               cursor:"pointer", display:"flex" }}><X size={20} /></button>
         </div>
+
+        {/* Kundenportal — nur beim Bearbeiten (braucht eine echte projekt_id
+            für die Freigabe-Zeile), RLS entscheidet serverseitig final über
+            die Berechtigung, hier bewusst nicht zusätzlich nach Rolle verborgen. */}
+        {initial?.id && session && firmaId && (
+          <KundenportalFreigabe projektId={initial.id} firmaId={firmaId} session={session} profil={profil} />
+        )}
 
         {/* KI-Diktat — nur beim Neuanlegen, nur für Administrator. Füllt das
             Formular unten vor, angelegt wird die Baustelle weiterhin erst
