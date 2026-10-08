@@ -130,7 +130,8 @@ export function AufgabenKommentare({ aufgabeId, firmaId, session, profil }) {
       </div>
 
       {fehler && (
-        <div style={{ color:"var(--red)", fontSize:11, marginTop:6 }}>{fehler}</div>
+        <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
+          padding:"8px 12px", fontSize:11.5, marginTop:8 }}>{fehler}</div>
       )}
 
       <div style={{ display:"flex", gap:8, marginTop:8 }}>

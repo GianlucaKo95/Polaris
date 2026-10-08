@@ -85,7 +85,10 @@ export function KundenportalFreigabe({ projektId, firmaId, session, profil }) {
         </>
       )}
 
-      {fehler && <div style={{ color:"var(--red)", fontSize:11, marginTop:8 }}>{fehler}</div>}
+      {fehler && (
+        <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:8,
+          padding:"8px 12px", fontSize:11.5, marginTop:10 }}>{fehler}</div>
+      )}
     </div>
   );
 }
