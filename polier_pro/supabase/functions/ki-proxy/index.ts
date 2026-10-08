@@ -57,8 +57,12 @@ serve(async (req: Request) => {
   // (Bautagebuch-KI) und { system, messages, maxTokens } für mehrstufige
   // Chats mit Kontext (KI-Assistent) — beide laufen auf denselben
   // Anthropic-Aufruf hinaus, nur mit bzw. ohne system-Parameter und mit
-  // einer oder mehreren messages.
-  let system: string | undefined, messages: Array<{ role: string; content: string }>, maxTokens: number;
+  // einer oder mehreren messages. content ist bei reinen Text-Aufrufen ein
+  // String, bei Vision-Aufrufen (z.B. Mängelerkennung aus Foto) ein Array
+  // aus Content-Blöcken ({type:"image"|"text", ...}) — diese Function
+  // validiert content nicht inhaltlich, sondern reicht es unverändert an
+  // Anthropic durch, daher hier `unknown` statt `string`.
+  let system: string | undefined, messages: Array<{ role: string; content: unknown }>, maxTokens: number;
   try {
     const body = await req.json();
     maxTokens = body.maxTokens || 1000;

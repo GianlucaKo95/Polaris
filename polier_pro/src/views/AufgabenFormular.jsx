@@ -2,10 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { leereAufgabe } from "../lib/utils.js";
 import { Label, inputStyle } from "../components/Label.jsx";
+import { Spinner } from "../components/Spinner.jsx";
 import { AUFGABEN_TYPEN, AUFGABEN_STATUS, AUFGABEN_PRIO, extraFeldLabelFuer,
   PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN, BEWEHRUNG_EXTRA_FELD_LABEL } from "../config/konstanten.js";
 import { AufgabenKommentare } from "../components/AufgabenKommentare.jsx";
 import { sbAufgabeSpeichern } from "../lib/supabase.js";
+import { kiMangelAusFoto } from "../lib/ai.js";
 
 export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave, onClose, projektTyp,
   session, firmaId, profil, darfEntscheiden = true, onEntscheiden, nurLesen = false }) {
@@ -17,6 +19,8 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
   const immerExtraFelder = PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN.includes(projektTyp);
   const [bilder,  setBilder]  = useState([]);
   const [planMode,setPlanMode]= useState(false);
+  const [kiMangelLaedt,  setKiMangelLaedt]  = useState(false);
+  const [kiMangelFehler, setKiMangelFehler] = useState("");
   const fileRef               = useRef(null);
   const behebungFileRef       = useRef(null);
   const planRef               = useRef(null);
@@ -51,6 +55,32 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
       r.onload = ev => setA(p => ({ ...p, behebung_fotos:[...(p.behebung_fotos||[]), ev.target.result] }));
       r.readAsDataURL(file);
     });
+  }
+
+  // Analysiert das zuletzt hinzugefügte Foto (Abschnitt "Fotos" unten) und
+  // füllt daraus Titel/Beschreibung/Verursacher/Priorität vor — wie bei
+  // kiBaustelleAnlegen bleiben vom Nutzer bereits ausgefüllte Felder
+  // erhalten, falls die KI für ein Feld nichts Verlässliches erkennt
+  // (leerer String statt Raten, siehe kiMangelAusFoto).
+  async function kiMangelVorschlag() {
+    if (!a.fotos?.length || kiMangelLaedt) return;
+    setKiMangelLaedt(true);
+    setKiMangelFehler("");
+    try {
+      const vorschlag = await kiMangelAusFoto(a.fotos[a.fotos.length - 1], session);
+      if (!vorschlag) { setKiMangelFehler("Konnte aus dem Foto keinen Vorschlag ableiten."); return; }
+      setA(p => ({
+        ...p,
+        titel:              vorschlag.titel || p.titel,
+        beschreibung:        vorschlag.beschreibung || p.beschreibung,
+        mangel_verursacher: vorschlag.verursacher || p.mangel_verursacher,
+        prioritaet:          vorschlag.prioritaet || p.prioritaet,
+      }));
+    } catch (err) {
+      setKiMangelFehler(err.message || "KI-Anfrage fehlgeschlagen.");
+    } finally {
+      setKiMangelLaedt(false);
+    }
   }
 
   // Direkte Bestätigung/Ablehnung aus dem vollen Formular heraus — bisher
@@ -313,6 +343,32 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
             marginBottom:10, border:"1px solid var(--red)" }}>
             <div style={{ color:"var(--red)", fontWeight:700, fontSize:12,
               marginBottom:7 }}>⚠️ Mangel-Details</div>
+
+            {/* KI-Vorschlag aus Foto — nutzt das zuletzt im Abschnitt
+                "Fotos" unten hinzugefügte Bild, füllt nur das Formular vor
+                (siehe kiMangelVorschlag), der Nutzer prüft/korrigiert vor
+                dem Speichern wie bei den anderen KI-Diktat-Funktionen. */}
+            <div style={{ marginBottom:9 }}>
+              <button type="button" onClick={kiMangelVorschlag}
+                disabled={!a.fotos?.length || kiMangelLaedt}
+                style={{ width:"100%", background: a.fotos?.length ? "var(--red)" : "var(--surface2)",
+                  color: a.fotos?.length ? "#fff" : "var(--muted)",
+                  border:"none", borderRadius:10, padding:10, fontWeight:700,
+                  cursor: a.fotos?.length && !kiMangelLaedt ? "pointer" : "default", fontSize:12.5,
+                  fontFamily:"inherit", display:"flex", alignItems:"center",
+                  justifyContent:"center", gap:7 }}>
+                {kiMangelLaedt ? <><Spinner size={13} /> Analysiere Foto…</> : "📸 KI-Vorschlag aus Foto"}
+              </button>
+              {!a.fotos?.length && (
+                <div style={{ color:"var(--muted)", fontSize:10.5, marginTop:5 }}>
+                  Erst unten ein Foto hinzufügen — die KI liest daraus Titel, Gewerk und Dringlichkeit ab.
+                </div>
+              )}
+              {kiMangelFehler && (
+                <div style={{ color:"var(--red)", fontSize:11.5, marginTop:6 }}>⚠️ {kiMangelFehler}</div>
+              )}
+            </div>
+
             <div style={{ marginBottom:7 }}>
               <Label>Verursacher / Gewerk</Label>
               <input value={a.mangel_verursacher||""}
