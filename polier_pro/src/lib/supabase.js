@@ -356,6 +356,26 @@ export async function sbKundenportalDaten(token) {
   } catch { return null; }
 }
 
+// Lässt den Bauherrn ohne Login über denselben Token selbst einen Mangel
+// melden — ebenfalls eine SECURITY DEFINER-RPC (kundenportal_mangel_melden),
+// die Token+aktiv serverseitig prüft und einen einfachen Rate-Limit
+// (10 Meldungen/Projekt/Stunde) durchsetzt, siehe Migration. error ist bei
+// Ablehnung (ungültiger Link, leerer Titel, Rate-Limit) die RPC-eigene
+// deutschsprachige Fehlermeldung aus der Postgres-Exception.
+export async function sbKundenportalMangelMelden(token, { titel, beschreibung, kontakt, fotos }) {
+  try {
+    const { error } = await supabase.rpc("kundenportal_mangel_melden", {
+      p_token: token,
+      p_titel: titel || "",
+      p_beschreibung: beschreibung || "",
+      p_kontakt: kontakt || null,
+      p_fotos: fotos || [],
+    });
+    if (error) return { ok: false, fehler: error.message || "Melden fehlgeschlagen." };
+    return { ok: true, fehler: null };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
 export async function sbSubSpeichern(s, firmaId, session, istNeu) {
   if (!session?.access_token || !firmaId) return null;
   const payload = {

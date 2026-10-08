@@ -344,6 +344,18 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
             <div style={{ color:"var(--red)", fontWeight:700, fontSize:12,
               marginBottom:7 }}>⚠️ Mangel-Details</div>
 
+            {/* Vom Bauherrn über das Kundenportal gemeldet (siehe
+                kundenportal_mangel_melden-RPC) — unverifizierte Quelle ohne
+                Login, deshalb deutlich als solche markiert statt wie ein
+                intern erfasster Mangel zu wirken. */}
+            {a.gemeldet_von_kunde && (
+              <div style={{ background:"var(--bbg)", color:"var(--blue)", border:"1px solid var(--blue)",
+                borderRadius:10, padding:"8px 12px", fontSize:11.5, fontWeight:600, marginBottom:9 }}>
+                👤 Vom Kunden über das Kundenportal gemeldet
+                {a.gemeldet_kontakt && <div style={{ marginTop:3, fontWeight:700 }}>Kontakt: {a.gemeldet_kontakt}</div>}
+              </div>
+            )}
+
             {/* KI-Vorschlag aus Foto — nutzt das zuletzt im Abschnitt
                 "Fotos" unten hinzugefügte Bild, füllt nur das Formular vor
                 (siehe kiMangelVorschlag), der Nutzer prüft/korrigiert vor
