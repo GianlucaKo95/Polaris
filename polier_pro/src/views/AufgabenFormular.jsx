@@ -7,7 +7,7 @@ import { AUFGABEN_TYPEN, AUFGABEN_STATUS, AUFGABEN_PRIO, extraFeldLabelFuer,
 import { AufgabenKommentare } from "../components/AufgabenKommentare.jsx";
 
 export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave, onClose, projektTyp,
-  session, firmaId, profil, darfEntscheiden = true, onEntscheiden }) {
+  session, firmaId, profil, darfEntscheiden = true, onEntscheiden, nurLesen = false }) {
   const [a,       setA]       = useState(initial || leereAufgabe());
   const extraLabel = extraFeldLabelFuer(projektTyp);
   const immerExtraFelder = PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN.includes(projektTyp);
@@ -102,6 +102,20 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
       </div>
 
       <div style={{ padding:"18px 16px 16px" }}>
+
+        {/* Vorarbeiter darf Aufgaben laut Rollenkonfiguration nicht
+            bearbeiten (kannAufgabenBearbeiten:false), aber die Karte zuvor
+            jetzt antippen, um sie überhaupt einzusehen (siehe AufgabenView —
+            vorher kam man an diesen Dialog als Vorarbeiter nie heran).
+            Alles unten bis vor die Kommentare wird daher nur "angezeigt". */}
+        {nurLesen && (
+          <div style={{ background:"var(--ybg)", color:"var(--ydark)", border:"1px solid var(--yellow)",
+            borderRadius:10, padding:"8px 12px", fontSize:12, fontWeight:600, marginBottom:14 }}>
+            Nur Ansicht — du darfst diese Aufgabe nicht bearbeiten. Kommentieren geht trotzdem.
+          </div>
+        )}
+
+        <div style={nurLesen ? { pointerEvents:"none", opacity:0.75 } : undefined}>
 
         {/* Typ */}
         <div style={{ marginBottom:10 }}>
@@ -440,6 +454,8 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
           )}
         </div>
 
+        </div>
+
         {/* Kommentare — erst sinnvoll, wenn die Aufgabe bereits in der DB
             existiert (bei "Neue Aufgabe"/"Neuer Mangel" hat initial zwar
             schon eine lokale id von leereAufgabe(), aber noch keine Zeile,
@@ -456,6 +472,13 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
       <div style={{ position:"sticky", bottom:0, display:"flex", gap:10,
         background:"var(--bg)", borderTop:"1px solid var(--border)",
         padding:"12px 16px", paddingBottom:"calc(12px + env(safe-area-inset-bottom))" }}>
+        {nurLesen ? (
+          <button onClick={onClose}
+            style={{ flex:1, background:"var(--surface2)", color:"var(--text)",
+              border:"1.5px solid var(--border)", padding:16,
+              cursor:"pointer", fontFamily:"inherit", fontWeight:700 }}>Schließen</button>
+        ) : (
+        <>
         <button onClick={onClose}
           style={{ flex:1, background:"var(--surface2)", color:"var(--muted)",
             border:"1.5px solid var(--border)", padding:16,
@@ -468,6 +491,8 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
             fontFamily:"inherit" }}>
           Speichern
         </button>
+        </>
+        )}
       </div>
     </div>,
     document.body

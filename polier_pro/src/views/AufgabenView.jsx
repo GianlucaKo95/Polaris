@@ -92,6 +92,7 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
         profil={profil}
         darfEntscheiden={darfEntscheiden}
         onEntscheiden={onEntscheiden}
+        nurLesen={!darfBearbeiten}
       />
     );
   }
@@ -179,7 +180,7 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
               <SektionsTitel label="Zur Prüfung" />
               {zurPruefungListe.map(a => (
                 <AufgabenKarte key={a.id} aufgabe={a} kolonnen={kolonnen} istStunden={istStundenProAufgabe[a.id] || 0}
-                  onClick={() => darfBearbeiten && setEditAufgabe(a)}
+                  onClick={() => (darfBearbeiten || kannVorschlagen) && setEditAufgabe(a)}
                   onDelete={darfBearbeiten ? handleDelete : undefined}
                   onEntscheiden={darfEntscheiden ? onEntscheiden : undefined} />
               ))}
@@ -191,7 +192,7 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
               <SektionsTitel label="Überfällig" />
               {ueberfaelligListe.map(a => (
                 <AufgabenKarte key={a.id} aufgabe={a} kolonnen={kolonnen} istStunden={istStundenProAufgabe[a.id] || 0}
-                  onClick={() => darfBearbeiten && setEditAufgabe(a)}
+                  onClick={() => (darfBearbeiten || kannVorschlagen) && setEditAufgabe(a)}
                   onDelete={darfBearbeiten ? handleDelete : undefined}
                   onToggleErledigt={darfBearbeiten ? handleToggleErledigt : undefined}
                   onVorschlagen={kannVorschlagen ? onVorschlagen : undefined} />
@@ -204,7 +205,7 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
               <SektionsTitel label="Offen" />
               {offenListe.map(a => (
                 <AufgabenKarte key={a.id} aufgabe={a} kolonnen={kolonnen} istStunden={istStundenProAufgabe[a.id] || 0}
-                  onClick={() => darfBearbeiten && setEditAufgabe(a)}
+                  onClick={() => (darfBearbeiten || kannVorschlagen) && setEditAufgabe(a)}
                   onDelete={darfBearbeiten ? handleDelete : undefined}
                   onToggleErledigt={darfBearbeiten ? handleToggleErledigt : undefined}
                   onVorschlagen={kannVorschlagen ? onVorschlagen : undefined} />
@@ -217,7 +218,7 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
               <SektionsTitel label="Erledigt" />
               {erledigtListe.map(a => (
                 <AufgabenKarte key={a.id} aufgabe={a} kolonnen={kolonnen} istStunden={istStundenProAufgabe[a.id] || 0}
-                  onClick={() => darfBearbeiten && setEditAufgabe(a)}
+                  onClick={() => (darfBearbeiten || kannVorschlagen) && setEditAufgabe(a)}
                   onDelete={darfBearbeiten ? handleDelete : undefined}
                   onToggleErledigt={darfBearbeiten ? handleToggleErledigt : undefined} />
               ))}
@@ -244,7 +245,7 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
                     fontWeight:700 }}>{spalte.length}</div>
                 </div>
                 {spalte.map(a => (
-                  <div key={a.id} onClick={() => darfBearbeiten && setEditAufgabe(a)}
+                  <div key={a.id} onClick={() => (darfBearbeiten || kannVorschlagen) && setEditAufgabe(a)}
                     style={{ background:"var(--surface)",
                       padding:"7px 12px", marginBottom:6, cursor:"pointer",
                       borderLeft:`3px solid ${AUFGABEN_TYPEN[a.typ]?.farbe || "var(--muted)"}` }}>
