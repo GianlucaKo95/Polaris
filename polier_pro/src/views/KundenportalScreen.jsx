@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { MapPin, Users, Cloud, Camera, Building2 } from "lucide-react";
+import { MapPin, Users, Cloud, Camera, Building2, TriangleAlert } from "lucide-react";
 import { sbKundenportalDaten } from "../lib/supabase.js";
 import { PROJEKTTYPEN } from "../config/konstanten.js";
+import { KundenMangelMelden } from "../components/KundenMangelMelden.jsx";
 
 // Öffentliche, read-only Seite für den Bauherrn — kein Login, kein Zugriff
 // auf den Rest der App. Erreicht über ?kunde=<token> (siehe App.jsx), lädt
@@ -11,6 +12,7 @@ export function KundenportalScreen({ token }) {
   const [daten,  setDaten]  = useState(null);
   const [laden,  setLaden]  = useState(true);
   const [fehler, setFehler] = useState(false);
+  const [zeigeMangelMelden, setZeigeMangelMelden] = useState(false);
 
   useEffect(() => {
     let aktiv = true;
@@ -102,6 +104,19 @@ export function KundenportalScreen({ token }) {
             {daten.aufgaben_fertig} von {daten.aufgaben_gesamt} Positionen abgeschlossen
           </div>
         </div>
+
+        {/* Mangel melden — läuft über eine eigene, token-geprüfte RPC
+            (kundenportal_mangel_melden), kein Login nötig. */}
+        <button onClick={() => setZeigeMangelMelden(true)}
+          style={{ width:"100%", background:"var(--rbg)", color:"var(--red)",
+            border:"1.5px solid var(--red)", borderRadius:10, padding:"11px 14px",
+            fontWeight:700, cursor:"pointer", fontSize:13, fontFamily:"inherit",
+            display:"flex", alignItems:"center", justifyContent:"center", gap:7, marginBottom:18 }}>
+          <TriangleAlert size={15} />Mangel melden
+        </button>
+        {zeigeMangelMelden && (
+          <KundenMangelMelden token={token} onClose={() => setZeigeMangelMelden(false)} />
+        )}
 
         {/* Tagesberichte */}
         <div style={{ fontWeight:800, fontSize:13, marginBottom:10 }}>Baustellenberichte</div>
