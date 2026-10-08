@@ -391,13 +391,40 @@ export const AUFGABEN_VORLAGEN = [
 // Schnellerstellungs-Vorlagen je Projekttyp — ohne das hier würde die
 // Aufgaben-Schnellerstellung IMMER die Beton-Vorlagen oben zeigen, auch für
 // ein Dach- oder PV-Projekt, bei dem "Bodenplatte"/"Schaltafel stellen"
-// keinen Sinn ergeben. Projekttypen ohne eigenen Eintrag (hochbau,
-// tiefgarage, tiefbau) fallen auf AUFGABEN_VORLAGEN zurück, da dort Beton
-// tatsächlich das dominante Gewerk ist. Wie bei AUFGABEN_VORLAGEN oben
-// folgt die Reihenfolge dem realen Bauablauf (z.B. bei PV: erst Gerüst und
+// keinen Sinn ergeben. Projekttypen ohne eigenen Eintrag (tiefgarage,
+// tiefbau) fallen auf AUFGABEN_VORLAGEN zurück, da dort Beton tatsächlich
+// das dominante Gewerk ist. Wie bei AUFGABEN_VORLAGEN oben folgt die
+// Reihenfolge dem realen Bauablauf (z.B. bei PV: erst Gerüst und
 // Unterkonstruktion, dann Module, zuletzt Verkabelung und Abnahme) statt
 // nur eine lose Stichwortsammlung zu sein.
 export const AUFGABEN_VORLAGEN_NACH_TYP = {
+  // Hausbau/Hochbau deckt anders als Tiefgarage/Tiefbau nicht nur den
+  // Rohbau ab, sondern das komplette Haus bis zur Übergabe — deshalb eine
+  // eigene, deutlich längere Phasenliste statt der reinen Beton-Vorlagen.
+  hochbau: [
+    { name:"Baustelleneinrichtung",                  typ:"allgemein",  betonsorte:"",       icon:"🚧" },
+    { name:"Baugrube ausheben",                       typ:"allgemein",  betonsorte:"",       icon:"⛏️" },
+    { name:"Sauberkeitsschicht",                      typ:"beton",      betonsorte:"C12/15", icon:"🏗️" },
+    { name:"Fundament / Bodenplatte",                 typ:"beton",      betonsorte:"C25/30", icon:"🏗️" },
+    { name:"Kellerwände",                             typ:"beton",      betonsorte:"C30/37", icon:"🏗️" },
+    { name:"Kellerabdichtung",                        typ:"abdichtung", betonsorte:"",       icon:"💧" },
+    { name:"Rohbau Erdgeschoss",                      typ:"beton",      betonsorte:"C25/30", icon:"🏗️" },
+    { name:"Rohbau Obergeschoss",                     typ:"beton",      betonsorte:"C25/30", icon:"🏗️" },
+    { name:"Dachstuhl aufrichten",                    typ:"allgemein",  betonsorte:"",       icon:"🏚️" },
+    { name:"Dach eindecken",                          typ:"allgemein",  betonsorte:"",       icon:"🏚️" },
+    { name:"Fenster und Außentüren einbauen",         typ:"allgemein",  betonsorte:"",       icon:"🪟" },
+    { name:"Elektro-Rohinstallation",                 typ:"allgemein",  betonsorte:"",       icon:"⚡" },
+    { name:"Sanitär-Rohinstallation",                 typ:"allgemein",  betonsorte:"",       icon:"🚿" },
+    { name:"Heizung-Rohinstallation",                 typ:"allgemein",  betonsorte:"",       icon:"🔥" },
+    { name:"Estrich einbringen",                      typ:"estrich",    betonsorte:"",       icon:"🪣" },
+    { name:"Innenputz / Trockenbau",                  typ:"allgemein",  betonsorte:"",       icon:"🪚" },
+    { name:"Fliesenarbeiten",                         typ:"allgemein",  betonsorte:"",       icon:"🟫" },
+    { name:"Malerarbeiten",                           typ:"allgemein",  betonsorte:"",       icon:"🖌️" },
+    { name:"Endinstallation Elektro/Sanitär/Heizung", typ:"allgemein",  betonsorte:"",       icon:"🔌" },
+    { name:"Bodenbeläge verlegen",                    typ:"allgemein",  betonsorte:"",       icon:"🧱" },
+    { name:"Außenanlagen",                            typ:"allgemein",  betonsorte:"",       icon:"🌳" },
+    { name:"Abnahme / Übergabe",                      typ:"allgemein",  betonsorte:"",       icon:"✅" },
+  ],
   dach: [
     { name:"Gerüst stellen",          typ:"allgemein",  betonsorte:"",               icon:"🪜" },
     { name:"Lattung prüfen",          typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
