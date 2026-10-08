@@ -1,26 +1,32 @@
-import { Document, Packer, Paragraph, TextRun, AlignmentType, ImageRun } from "docx";
 import { dataUrlZuBild } from "./docxUtils.js";
 
 const GELB = "F5C400";
 const GRAU = "666666";
-
-function abschnittsTitel(text) {
-  return new Paragraph({
-    children: [new TextRun({ text: text.toUpperCase(), bold:true, color:GELB, size:20 })],
-    spacing: { before:200, after:80 },
-  });
-}
-
-function zeile(text, opts = {}) {
-  return new Paragraph({ children: [new TextRun({ text, ...opts })], spacing: { after: 80 } });
-}
 
 // Generiert das Bautagebuch komplett neu aus sauberen Bausteinen (Firmen-
 // daten, Berichtsdaten, KI/Admin-bestätigte Vorlagen-Textbausteine) über die
 // docx-Bibliothek — bearbeitet NIE eine hochgeladene Originaldatei. Gleiches
 // Prinzip wie erzeugeAngebotDocx: das Ergebnis ist unabhängig vom Original
 // immer eine frisch gebaute, valide .docx.
+//
+// docx dynamisch statt statisch importiert (siehe erzeugeAngebotDocx für
+// die Begründung) — deshalb stehen abschnittsTitel/zeile hier als Closures
+// statt als Modul-Top-Level-Funktionen, da sie Paragraph/TextRun aus dem
+// dynamischen Import brauchen.
 export async function erzeugeBerichtDocx({ bericht: b, projekt, eigeneFirma, wetter, tagebuchVorlage }) {
+  const { Document, Packer, Paragraph, TextRun, AlignmentType, ImageRun } = await import("docx");
+
+  function abschnittsTitel(text) {
+    return new Paragraph({
+      children: [new TextRun({ text: text.toUpperCase(), bold:true, color:GELB, size:20 })],
+      spacing: { before:200, after:80 },
+    });
+  }
+
+  function zeile(text, opts = {}) {
+    return new Paragraph({ children: [new TextRun({ text, ...opts })], spacing: { after: 80 } });
+  }
+
   const v = tagebuchVorlage || {};
   const labels = {
     taetigkeit:     v.label_taetigkeit || "Tätigkeiten",

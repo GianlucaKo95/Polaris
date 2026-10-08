@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { ChartColumn, Search, Download } from "lucide-react";
-import writeXlsxFile from "write-excel-file/browser";
 import { sbFetch } from "../lib/supabase.js";
 import { TAETIGKEITEN } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
@@ -128,6 +127,10 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
     const maSuffix = gewaehlteMA !== "alle"
       ? "_" + (mitarbeiterOptionen.find(m => String(m.id) === String(gewaehlteMA))?.name || "MA").replace(/\s+/g, "_")
       : "";
+    // Dynamisch statt statisch importiert: ein Top-Level-Import hätte die
+    // Bibliothek in jeden Seiten-Load eingebunden, obwohl der Stunden-Export
+    // nur gelegentlich genutzt wird.
+    const { default: writeXlsxFile } = await import("write-excel-file/browser");
     await writeXlsxFile(rows, { columns: SPALTEN })
       .toFile(`Stunden_${vonDatum}_bis_${bisDatum}${maSuffix}.xlsx`);
   }
