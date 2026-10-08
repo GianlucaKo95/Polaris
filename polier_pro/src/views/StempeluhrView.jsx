@@ -41,6 +41,24 @@ export function StempeluhrView({ profil, projekte, session, kolonnen = [], aufga
   // lässt sich einer einzelnen Aufgabe zuordnen.
   const offeneAufgaben = aufgaben.filter(a => a.projekt_id === aktivProjekt && a.status !== "abgeschlossen");
 
+  // Tätigkeits-Chips auf das aktive Projekt zuschneiden: "Aufräumen",
+  // "Transport", "Vorarbeit" und "Sonstiges" passen zu jedem Projekt und
+  // bleiben deshalb immer sichtbar, unabhängig von dessen Aufgaben.
+  // Gibt es im Projekt offene Aufgaben mit einem Typ, der auch eine
+  // Tätigkeit ist (Beton/Schalung/Bewehrung/Abdichtung/Estrich), wird die
+  // Chipleiste auf genau diese plus die generischen vier eingeschränkt.
+  // Ohne ein solches Signal (noch keine Aufgaben, oder nur Allgemein/
+  // Mangel-Aufgaben) bleibt die volle Liste sichtbar — eine Einschränkung
+  // auf eine leere oder zu kleine Auswahl würde sonst nur im Weg stehen.
+  const GENERISCHE_TAETIGKEITEN = ["aufraeumen", "transport", "vorarbeit", "sonstiges"];
+  const projektTaetigkeitsTypen = new Set(
+    offeneAufgaben.map(a => a.typ).filter(typ => TAETIGKEITEN[typ])
+  );
+  const sichtbareTaetigkeiten = projektTaetigkeitsTypen.size > 0
+    ? Object.entries(TAETIGKEITEN).filter(([key]) =>
+        GENERISCHE_TAETIGKEITEN.includes(key) || projektTaetigkeitsTypen.has(key))
+    : Object.entries(TAETIGKEITEN);
+
   // Eigene Kolonne finden (für Vorarbeiter mit Team-Sammelerfassung)
   const eigeneKolonne = kolonnen.find(k => k.id === profil?.kolonne_id);
   const kannSammelStempeln = ROLLEN[profil?.rolle]?.label === "Vorarbeiter" ||
@@ -62,6 +80,16 @@ export function StempeluhrView({ profil, projekte, session, kolonnen = [], aufga
   useEffect(() => {
     ladeBuchungen();
   }, []);
+
+  // Bei Projektwechsel kann die bisherige Tätigkeits-Auswahl außerhalb der
+  // neu gefilterten Chipleiste liegen (z.B. "Beton" gewählt, dann zu einem
+  // Projekt ohne Beton-Aufgabe gewechselt) — dann auf die erste sichtbare
+  // Tätigkeit zurücksetzen, damit nie eine unsichtbare Auswahl aktiv bleibt.
+  useEffect(() => {
+    if (sichtbareTaetigkeiten.length > 0 && !sichtbareTaetigkeiten.some(([key]) => key === taetigkeit)) {
+      setTaetigkeit(sichtbareTaetigkeiten[0][0]);
+    }
+  }, [aktivProjekt]);
 
   if (zeigeSammel && eigeneKolonne) {
     return (
@@ -377,7 +405,7 @@ export function StempeluhrView({ profil, projekte, session, kolonnen = [], aufga
               </div>
             ) : (
               <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginTop:6 }}>
-                {Object.entries(TAETIGKEITEN).map(([key, t]) => (
+                {sichtbareTaetigkeiten.map(([key, t]) => (
                   <button key={key} onClick={() => setTaetigkeit(key)}
                     style={{ background: taetigkeit===key ? "var(--ink)" : "var(--surface)",
                       color: taetigkeit===key ? "#fff" : "var(--text2)",
