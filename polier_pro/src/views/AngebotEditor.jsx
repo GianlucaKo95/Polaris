@@ -10,16 +10,18 @@ import { Spinner } from "../components/Spinner.jsx";
 import { kiAngebotErstellen } from "../lib/ai.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 
-// Aufgaben erfassen aktuell ausschließlich eine Fläche (aufgabe.m2,
-// Formularlabel "Fläche (m²)", einziges Mengenfeld im gesamten Aufgaben-
-// Formular) — nie ein Volumen oder Gewicht. Beim Import MUSS der
-// Katalogeintrag deshalb zu dieser Einheit passen (m²), sonst entsteht ein
+// aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
+// seine Bedeutung hängt aber vom Aufgabentyp ab (siehe extraLabel in
+// AufgabenFormular.jsx/SchnellErstellung.jsx): bei "beton" eine Fläche
+// (m²), bei "bewehrung" eine Masse (t). Beim Import MUSS der Katalogeintrag
+// deshalb zur tatsächlich erfassten Einheit passen, sonst entsteht ein
 // Einheiten/Mengen-Mismatch: eine frühere Fassung bevorzugte hier für Beton
 // den m³-Eintrag (branchenüblich wird Beton nach Volumen abgerechnet),
 // ohne menge mit umzurechnen — aus "50 m²" wurde dadurch fälschlich
-// "50 m³" zum m³-Preis, ein ca. 2,6-facher Aufpreis auf dem Angebot. Bis
-// es ein eigenes Mengenfeld für Volumen gibt, ist m² die einzige Einheit,
-// zu der die tatsächlich erfasste Menge passt.
+// "50 m³" zum m³-Preis, ein ca. 2,6-facher Aufpreis auf dem Angebot. Bis es
+// ein eigenes Mengenfeld für Volumen gibt, ist m² die einzige Einheit, zu
+// der die für Beton erfasste Menge passt — Bewehrung braucht hier keinen
+// Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
 export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, session }) {

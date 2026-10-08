@@ -3,14 +3,17 @@ import { createPortal } from "react-dom";
 import { leereAufgabe } from "../lib/utils.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { AUFGABEN_TYPEN, AUFGABEN_STATUS, AUFGABEN_PRIO, extraFeldLabelFuer,
-  PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN } from "../config/konstanten.js";
+  PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN, BEWEHRUNG_EXTRA_FELD_LABEL } from "../config/konstanten.js";
 import { AufgabenKommentare } from "../components/AufgabenKommentare.jsx";
 import { sbAufgabeSpeichern } from "../lib/supabase.js";
 
 export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave, onClose, projektTyp,
   session, firmaId, profil, darfEntscheiden = true, onEntscheiden, nurLesen = false }) {
   const [a,       setA]       = useState(initial || leereAufgabe());
-  const extraLabel = extraFeldLabelFuer(projektTyp);
+  // Bewehrung ist immer eine Masse (t), unabhängig vom Projekttyp — deshalb
+  // hier vom Aufgabentyp statt vom Projekttyp abgeleitet, anders als die
+  // Dach/PV-Umbeschriftung in extraFeldLabelFuer().
+  const extraLabel = a.typ === "bewehrung" ? BEWEHRUNG_EXTRA_FELD_LABEL : extraFeldLabelFuer(projektTyp);
   const immerExtraFelder = PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN.includes(projektTyp);
   const [bilder,  setBilder]  = useState([]);
   const [planMode,setPlanMode]= useState(false);
@@ -280,8 +283,9 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
         </div>
 
         {/* Zusatzfelder (m²/Sorte) — bei Beton-Projekten nur für Betonage-
-            Aufgaben relevant, bei Dach/PV unabhängig vom Aufgabentyp */}
-        {(a.typ === "beton" || immerExtraFelder) && (
+            und Bewehrung-Aufgaben relevant (Bewehrung immer nach Gewicht,
+            siehe extraLabel oben), bei Dach/PV unabhängig vom Aufgabentyp */}
+        {(a.typ === "beton" || a.typ === "bewehrung" || immerExtraFelder) && (
           <div style={{ background:"var(--ybg)", borderRadius:12, padding:10,
             marginBottom:10, border:"1px solid var(--yellow)" }}>
             <div style={{ color:"var(--ydark)", fontWeight:700, fontSize:12,

@@ -463,6 +463,14 @@ export const AUFGABEN_EXTRA_FELD_LABEL = {
 };
 const STANDARD_EXTRA_FELD_LABEL = { m2:"Fläche (m²)", sorte:"Betonsorte", sortePlatzhalter:"C25/30" };
 
+// Bewehrung wird immer nach Gewicht abgerechnet (siehe DEFAULT_EINHEITSPREISE,
+// Gewerk "Bewehrung", Einheit "t") — unabhängig vom Projekttyp, anders als
+// bei Dach/PV oben, wo die Umbeschriftung vom Projekttyp abhängt. Ohne diese
+// Umbeschriftung blieb das generische m2-Feld für Bewehrung-Aufgaben
+// unsichtbar (nur für typ "beton" bzw. Dach/PV eingeblendet) und ein
+// importiertes Angebot zeigte Bewehrung-Positionen immer mit menge:0.
+export const BEWEHRUNG_EXTRA_FELD_LABEL = { m2:"Menge (t)", sorte:"Stahlsorte", sortePlatzhalter:"z.B. BSt 500 S" };
+
 export function aufgabenVorlagenFuer(projektTyp) {
   return AUFGABEN_VORLAGEN_NACH_TYP[projektTyp] || AUFGABEN_VORLAGEN;
 }
