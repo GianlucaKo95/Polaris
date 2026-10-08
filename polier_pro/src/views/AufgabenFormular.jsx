@@ -5,6 +5,7 @@ import { Label, inputStyle } from "../components/Label.jsx";
 import { AUFGABEN_TYPEN, AUFGABEN_STATUS, AUFGABEN_PRIO, extraFeldLabelFuer,
   PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN } from "../config/konstanten.js";
 import { AufgabenKommentare } from "../components/AufgabenKommentare.jsx";
+import { sbAufgabeSpeichern } from "../lib/supabase.js";
 
 export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave, onClose, projektTyp,
   session, firmaId, profil, darfEntscheiden = true, onEntscheiden, nurLesen = false }) {
@@ -56,7 +57,17 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
   // selbst eine Kopie der RPC-Logik zu pflegen — der normale onSave-Weg
   // (voller Zeilen-Save) würde vorschlag_von/vorschlag_am nicht zurücksetzen,
   // da sbAufgabeSpeichern diese Felder gar nicht ins Payload aufnimmt.
-  function entscheiden(akzeptiert) {
+  //
+  // Vorher ging ein hier erst neu hinzugefügtes Behebungsnachweis-Foto (oder
+  // jede andere lokale Änderung) beim Bestätigen/Ablehnen verloren, weil nur
+  // onEntscheiden (RPC, ändert ausschließlich status/vorschlag_von/-am)
+  // aufgerufen wurde, nie aber ein Save des restlichen Formularstands —
+  // genau der Fotonachweis, um den es in diesem Formular eigentlich geht.
+  // Deshalb hier zuerst der volle aktuelle Stand sichern (status bleibt dabei
+  // unverändert "zur_pruefung", also keine Kollision mit der nachfolgenden
+  // RPC, die exakt dieses Feld anschließend autoritativ umsetzt).
+  async function entscheiden(akzeptiert) {
+    if (a.projekt_id) await sbAufgabeSpeichern(a, a.projekt_id, session, false);
     onEntscheiden?.(a, akzeptiert);
     onClose();
   }

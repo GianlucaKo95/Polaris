@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Send, Trash2 } from "lucide-react";
-import { supabase, sbKommentareLaden, sbKommentarSpeichern, sbKommentarLoeschen, sbProfileNamenLaden } from "../lib/supabase.js";
+import { sbClientMitToken, sbKommentareLaden, sbKommentarSpeichern, sbKommentarLoeschen, sbProfileNamenLaden } from "../lib/supabase.js";
 
 // Rollen, die auch fremde Kommentare löschen dürfen (Moderation) — muss mit
 // der "aufgaben_kommentare_loeschen"-RLS-Policy übereinstimmen, sonst wirkt
@@ -33,20 +33,30 @@ export function AufgabenKommentare({ aufgabeId, firmaId, session, profil }) {
 
     // Live-Updates: neue Kommentare von anderen Nutzern (z.B. Bauleiter im
     // Büro) erscheinen hier ohne manuelles Neuladen — der eigentliche
-    // "Chat"-Charakter dieser Liste.
-    const channel = supabase
-      .channel(`aufgaben-kommentare-${aufgabeId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public",
-        table: "aufgaben_kommentare", filter: `aufgabe_id=eq.${aufgabeId}` },
-        payload => setKommentare(prev => prev.some(k => k.id === payload.new.id)
-          ? prev : [...prev, payload.new]))
-      .on("postgres_changes", { event: "DELETE", schema: "public",
-        table: "aufgaben_kommentare", filter: `aufgabe_id=eq.${aufgabeId}` },
-        payload => setKommentare(prev => prev.filter(k => k.id !== payload.old.id)))
-      .subscribe();
+    // "Chat"-Charakter dieser Liste. Dafür muss der Client sein JWT explizit
+    // an Realtime übergeben (setAuth) — ohne das bleibt die Verbindung auf
+    // dem anon-Key, und die RLS-Policy auf aufgaben_kommentare (die
+    // eigene_firma_id() über auth.uid() braucht) lässt dann gar keine
+    // postgres_changes-Events durch. Nur die REST-Aufrufe (sbKommentare*)
+    // waren durch sbClientMitToken bereits korrekt authentifiziert.
+    const client = sbClientMitToken(session);
+    let channel;
+    client.realtime.setAuth(session?.access_token).then(() => {
+      if (!aktiv) return;
+      channel = client
+        .channel(`aufgaben-kommentare-${aufgabeId}`)
+        .on("postgres_changes", { event: "INSERT", schema: "public",
+          table: "aufgaben_kommentare", filter: `aufgabe_id=eq.${aufgabeId}` },
+          payload => setKommentare(prev => prev.some(k => k.id === payload.new.id)
+            ? prev : [...prev, payload.new]))
+        .on("postgres_changes", { event: "DELETE", schema: "public",
+          table: "aufgaben_kommentare", filter: `aufgabe_id=eq.${aufgabeId}` },
+          payload => setKommentare(prev => prev.filter(k => k.id !== payload.old.id)))
+        .subscribe();
+    });
 
-    return () => { aktiv = false; supabase.removeChannel(channel); };
-  }, [aufgabeId]);
+    return () => { aktiv = false; if (channel) client.removeChannel(channel); };
+  }, [aufgabeId, session]);
 
   // Namen der Autoren nachladen, sobald in der Liste unbekannte
   // erstellt_von-IDs auftauchen (initial oder durch Realtime-Updates).
@@ -78,9 +88,18 @@ export function AufgabenKommentare({ aufgabeId, firmaId, session, profil }) {
   }
 
   async function loeschen(id) {
+    const geloescht = kommentare.find(k => k.id === id);
     setKommentare(prev => prev.filter(k => k.id !== id));
     const { ok, fehler: err } = await sbKommentarLoeschen(id, session);
-    if (!ok) setFehler(err || "Löschen fehlgeschlagen.");
+    if (!ok) {
+      setFehler(err || "Löschen fehlgeschlagen.");
+      // Optimistisch entfernten Kommentar zurückholen, wenn das Löschen auf
+      // dem Server scheiterte — sonst bliebe er in dieser Sitzung
+      // unsichtbar, obwohl er in der DB weiterhin existiert.
+      if (geloescht) setKommentare(prev => prev.some(k => k.id === id)
+        ? prev
+        : [...prev, geloescht].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+    }
   }
 
   const darfAlleLoeschen = LOESCH_ROLLEN.includes(profil?.rolle);

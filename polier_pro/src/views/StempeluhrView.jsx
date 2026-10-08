@@ -81,15 +81,20 @@ export function StempeluhrView({ profil, projekte, session, kolonnen = [], aufga
     ladeBuchungen();
   }, []);
 
-  // Bei Projektwechsel kann die bisherige Tätigkeits-Auswahl außerhalb der
-  // neu gefilterten Chipleiste liegen (z.B. "Beton" gewählt, dann zu einem
-  // Projekt ohne Beton-Aufgabe gewechselt) — dann auf die erste sichtbare
-  // Tätigkeit zurücksetzen, damit nie eine unsichtbare Auswahl aktiv bleibt.
+  // Bei Projektwechsel ODER wenn sich die offenen Aufgaben des aktiven
+  // Projekts ändern (z.B. jemand anderes schließt währenddessen die letzte
+  // Beton-Aufgabe), kann die bisherige Tätigkeits-Auswahl außerhalb der neu
+  // gefilterten Chipleiste liegen — dann auf die erste sichtbare Tätigkeit
+  // zurücksetzen, damit nie eine unsichtbare Auswahl aktiv bleibt. Als
+  // Abhängigkeit dient ein stabiler String aus den sichtbaren Schlüsseln
+  // statt sichtbareTaetigkeiten selbst, da dieses Array bei jedem Render neu
+  // entsteht und sonst den Effekt bei jedem Render erneut auslösen würde.
+  const sichtbareTaetigkeitenSchluessel = sichtbareTaetigkeiten.map(([key]) => key).join(",");
   useEffect(() => {
     if (sichtbareTaetigkeiten.length > 0 && !sichtbareTaetigkeiten.some(([key]) => key === taetigkeit)) {
       setTaetigkeit(sichtbareTaetigkeiten[0][0]);
     }
-  }, [aktivProjekt]);
+  }, [aktivProjekt, sichtbareTaetigkeitenSchluessel]);
 
   if (zeigeSammel && eigeneKolonne) {
     return (
