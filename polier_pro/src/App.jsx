@@ -1218,7 +1218,8 @@ export default function PolierApp() {
             kannVorschlagen={["facharbeiter","vorarbeiter"].includes(aktiveRolle)}
             darfEntscheiden={["administrator","polier","bauleiter"].includes(aktiveRolle)}
             onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}
-            zeitbuchungen={zeitbuchungen} projekt={projekt} />}
+            zeitbuchungen={zeitbuchungen} projekt={projekt}
+            session={auth.session} firmaId={firma?.id} profil={aktiveProfil} />}
         {tab === "kosten"        && <KostenView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "stempeln"      && <StempeluhrView profil={aktiveProfil}
             projekte={aktiveProfil?.kolonne_id

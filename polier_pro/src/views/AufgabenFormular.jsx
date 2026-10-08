@@ -4,8 +4,10 @@ import { leereAufgabe } from "../lib/utils.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { AUFGABEN_TYPEN, AUFGABEN_STATUS, AUFGABEN_PRIO, extraFeldLabelFuer,
   PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN } from "../config/konstanten.js";
+import { AufgabenKommentare } from "../components/AufgabenKommentare.jsx";
 
-export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave, onClose, projektTyp }) {
+export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave, onClose, projektTyp,
+  session, firmaId, profil }) {
   const [a,       setA]       = useState(initial || leereAufgabe());
   const extraLabel = extraFeldLabelFuer(projektTyp);
   const immerExtraFelder = PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN.includes(projektTyp);
@@ -351,6 +353,15 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
             </div>
           )}
         </div>
+
+        {/* Kommentare — erst sinnvoll, wenn die Aufgabe bereits in der DB
+            existiert (bei "Neue Aufgabe"/"Neuer Mangel" hat initial zwar
+            schon eine lokale id von leereAufgabe(), aber noch keine Zeile,
+            an die ein Kommentar per Fremdschlüssel hängen könnte — deshalb
+            Abgleich gegen alleAufgaben statt bloß initial?.id). */}
+        {initial?.id && alleAufgaben.some(x => x.id === initial.id) && session && firmaId && (
+          <AufgabenKommentare aufgabeId={initial.id} firmaId={firmaId} session={session} profil={profil} />
+        )}
       </div>
 
       {/* Sticky statt im normalen Fluss am Formularende: bleibt immer

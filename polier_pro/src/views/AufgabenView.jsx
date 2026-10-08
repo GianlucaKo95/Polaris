@@ -10,7 +10,7 @@ import { useBackButton } from "../hooks/useBackButton.js";
 
 export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, darfBearbeiten = true, initialFilter = "alle",
   initialEditId = null, kannVorschlagen = false, onVorschlagen, onEntscheiden, darfEntscheiden = darfBearbeiten,
-  zeitbuchungen = [], projekt }) {
+  zeitbuchungen = [], projekt, session, firmaId, profil }) {
   const projektTyp = projekt?.typ;
   const [ansicht,     setAnsicht]     = useState("liste");  // liste | kanban
   const [filter,      setFilter]      = useState(initialFilter);
@@ -87,6 +87,9 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
         onSave={handleSave}
         onClose={() => setEditAufgabe(null)}
         projektTyp={projektTyp}
+        session={session}
+        firmaId={firmaId}
+        profil={profil}
       />
     );
   }

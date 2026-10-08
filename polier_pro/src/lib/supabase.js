@@ -225,6 +225,54 @@ export async function sbAufgabeVorschlagEntscheiden(id, akzeptiert, session) {
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
+export async function sbKommentareLaden(aufgabeId, session) {
+  if (!session?.access_token || !aufgabeId) return [];
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("aufgaben_kommentare")
+      .select("*").eq("aufgabe_id", aufgabeId).order("created_at", { ascending: true });
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
+}
+
+export async function sbKommentarSpeichern(text, aufgabeId, firmaId, profilId, session) {
+  if (!session?.access_token || !aufgabeId || !firmaId) return { daten: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("aufgaben_kommentare")
+      .insert({ aufgabe_id: aufgabeId, firma_id: firmaId, erstellt_von: profilId || null, text })
+      .select();
+    const fehler = sbSchreibfehler(error, data, false);
+    if (fehler) return { daten: null, fehler };
+    return { daten: data?.[0] || null, fehler: null };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbKommentarLoeschen(id, session) {
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("aufgaben_kommentare").delete().eq("id", id).select();
+    const fehler = sbSchreibfehler(error, data, true);
+    return { ok: !fehler, fehler };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// Liefert ein { profilId: "Vorname Nachname" }-Lookup für eine Menge
+// Kommentar-Autoren — ein einzelner Request für alle auf einmal statt
+// eines Requests pro Kommentar.
+export async function sbProfileNamenLaden(ids, session) {
+  if (!session?.access_token || !ids?.length) return {};
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("profile").select("id,vorname,nachname").in("id", ids);
+    if (error) return {};
+    return Object.fromEntries((data || []).map(p =>
+      [p.id, [p.vorname, p.nachname].filter(Boolean).join(" ") || "Unbekannt"]));
+  } catch { return {}; }
+}
+
 export async function sbKolonneSpeichern(k, projektId, session, istNeu) {
   if (!session?.access_token || !projektId) return { daten: null, fehler: "Keine gültige Sitzung." };
   const payload = {
