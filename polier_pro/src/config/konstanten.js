@@ -370,14 +370,22 @@ export const AUFGABEN_PRIO = {
   kritisch: { label:"Kritisch", icon:"‼", farbe:"#DC2626" },
 };
 
+// Reihenfolge entspricht dem tatsächlichen Bauablauf (Baugrube vor
+// Bewehrung vor Betonage vor Ausschalen usw.), damit die Vorlagenliste
+// auch als grobe Checkliste von oben nach unten abgearbeitet werden kann.
 export const AUFGABEN_VORLAGEN = [
-  { name:"Bodenplatte",       typ:"beton",      betonsorte:"C25/30", icon:"🏗️" },
-  { name:"Fundament",         typ:"beton",      betonsorte:"C25/30", icon:"🏗️" },
-  { name:"Kellerwand WU",     typ:"beton",      betonsorte:"C30/37", icon:"🏗️" },
-  { name:"Schaltafel stellen",typ:"schalung",   betonsorte:"",       icon:"🪵" },
-  { name:"Bewehrung verlegen",typ:"bewehrung",  betonsorte:"",       icon:"🔩" },
-  { name:"Abdichtung 2-lagig",typ:"abdichtung", betonsorte:"",       icon:"💧" },
-  { name:"Estrich einbringen",typ:"estrich",    betonsorte:"",       icon:"🪣" },
+  { name:"Baugrube ausheben",     typ:"allgemein",  betonsorte:"",       icon:"⛏️" },
+  { name:"Sauberkeitsschicht",    typ:"beton",      betonsorte:"C12/15", icon:"🏗️" },
+  { name:"Schalung stellen",      typ:"schalung",   betonsorte:"",       icon:"🪵" },
+  { name:"Bewehrung verlegen",    typ:"bewehrung",  betonsorte:"",       icon:"🔩" },
+  { name:"Einbauteile setzen",    typ:"allgemein",  betonsorte:"",       icon:"🔧" },
+  { name:"Bodenplatte",           typ:"beton",      betonsorte:"C25/30", icon:"🏗️" },
+  { name:"Fundament",             typ:"beton",      betonsorte:"C25/30", icon:"🏗️" },
+  { name:"Kellerwand WU",         typ:"beton",      betonsorte:"C30/37", icon:"🏗️" },
+  { name:"Ausschalen",            typ:"schalung",   betonsorte:"",       icon:"🪵" },
+  { name:"Nachbehandlung Beton",  typ:"beton",      betonsorte:"",       icon:"🏗️" },
+  { name:"Abdichtung 2-lagig",    typ:"abdichtung", betonsorte:"",       icon:"💧" },
+  { name:"Estrich einbringen",    typ:"estrich",    betonsorte:"",       icon:"🪣" },
 ];
 
 // Schnellerstellungs-Vorlagen je Projekttyp — ohne das hier würde die
@@ -385,23 +393,36 @@ export const AUFGABEN_VORLAGEN = [
 // ein Dach- oder PV-Projekt, bei dem "Bodenplatte"/"Schaltafel stellen"
 // keinen Sinn ergeben. Projekttypen ohne eigenen Eintrag (hochbau,
 // tiefgarage, tiefbau) fallen auf AUFGABEN_VORLAGEN zurück, da dort Beton
-// tatsächlich das dominante Gewerk ist.
+// tatsächlich das dominante Gewerk ist. Wie bei AUFGABEN_VORLAGEN oben
+// folgt die Reihenfolge dem realen Bauablauf (z.B. bei PV: erst Gerüst und
+// Unterkonstruktion, dann Module, zuletzt Verkabelung und Abnahme) statt
+// nur eine lose Stichwortsammlung zu sein.
 export const AUFGABEN_VORLAGEN_NACH_TYP = {
   dach: [
-    { name:"Hauptfläche eindecken", typ:"allgemein",  betonsorte:"Dachziegel Ton", icon:"🏚️" },
-    { name:"Traufe",                typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
-    { name:"First schließen",       typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
-    { name:"Ortgang",               typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
-    { name:"Kehle abdichten",       typ:"abdichtung", betonsorte:"",               icon:"💧" },
-    { name:"Dachflächenfenster",    typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
-    { name:"Dämmung verlegen",      typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
+    { name:"Gerüst stellen",          typ:"allgemein",  betonsorte:"",               icon:"🪜" },
+    { name:"Lattung prüfen",          typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
+    { name:"Unterspannbahn verlegen", typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
+    { name:"Traufe",                  typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
+    { name:"Hauptfläche eindecken",   typ:"allgemein",  betonsorte:"Dachziegel Ton", icon:"🏚️" },
+    { name:"Ortgang",                 typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
+    { name:"First schließen",         typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
+    { name:"Kehle abdichten",         typ:"abdichtung", betonsorte:"",               icon:"💧" },
+    { name:"Dachflächenfenster",      typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
+    { name:"Dämmung verlegen",        typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
+    { name:"Dachrinne montieren",     typ:"allgemein",  betonsorte:"",               icon:"🏚️" },
+    { name:"Gerüst abbauen",          typ:"allgemein",  betonsorte:"",               icon:"🪜" },
   ],
   pv: [
-    { name:"Modulreihe montieren",  typ:"allgemein", betonsorte:"", icon:"☀️" },
-    { name:"Wechselrichter setzen", typ:"allgemein", betonsorte:"", icon:"☀️" },
-    { name:"DC-Verkabelung",        typ:"allgemein", betonsorte:"", icon:"☀️" },
-    { name:"AC-Verkabelung",        typ:"allgemein", betonsorte:"", icon:"☀️" },
-    { name:"Einspeisepunkt",        typ:"allgemein", betonsorte:"", icon:"☀️" },
+    { name:"Gerüst stellen",             typ:"allgemein", betonsorte:"", icon:"🪜" },
+    { name:"Unterkonstruktion montieren",typ:"allgemein", betonsorte:"", icon:"☀️" },
+    { name:"Schienen montieren",         typ:"allgemein", betonsorte:"", icon:"☀️" },
+    { name:"Module verlegen",            typ:"allgemein", betonsorte:"", icon:"☀️" },
+    { name:"DC-Verkabelung",             typ:"allgemein", betonsorte:"", icon:"☀️" },
+    { name:"Wechselrichter setzen",      typ:"allgemein", betonsorte:"", icon:"☀️" },
+    { name:"AC-Verkabelung",             typ:"allgemein", betonsorte:"", icon:"☀️" },
+    { name:"Einspeisepunkt anschließen", typ:"allgemein", betonsorte:"", icon:"☀️" },
+    { name:"Inbetriebnahme / Abnahme",   typ:"allgemein", betonsorte:"", icon:"☀️" },
+    { name:"Gerüst abbauen",             typ:"allgemein", betonsorte:"", icon:"🪜" },
   ],
 };
 
