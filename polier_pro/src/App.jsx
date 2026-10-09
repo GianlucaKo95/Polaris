@@ -26,6 +26,7 @@ import { ProjektFormular } from "./views/ProjektFormular.jsx";
 import { Chip } from "./components/Chip.jsx";
 import { FirmenView } from "./views/FirmenView.jsx";
 import { SupervisorView } from "./views/SupervisorView.jsx";
+import { FirmaGesperrtScreen } from "./views/FirmaGesperrtScreen.jsx";
 import { Aktenregister } from "./components/Aktenregister.jsx";
 import { ProjektInfoStrip } from "./components/ProjektInfoStrip.jsx";
 import { PlanGuard } from "./views/PlanGuard.jsx";
@@ -239,7 +240,7 @@ export default function PolierApp() {
       // ausgeschlossen, damit der KI-Key nie in den Client-State (firma/
       // eigeneFirma) gelangt. Er wird ausschließlich serverseitig in der
       // ki-proxy Edge Function gelesen (siehe supabase/functions/ki-proxy).
-      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage, pin_pflicht")
+      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage, pin_pflicht, gesperrt")
         .eq("id", auth.profil.firma_id)
         .then(({ data: d, error, status }) => {
           if (error) {
@@ -562,6 +563,14 @@ export default function PolierApp() {
 
   if (!onboardingDone) {
     return <OnboardingFlow onComplete={handleOnboardingComplete} session={auth.session} onAbmelden={abmelden} />;
+  }
+
+  // Zugangssperre durch den Supervisor (firmen.gesperrt) — siehe
+  // FirmaGesperrtScreen.jsx für die Begründung, warum das hier aktiv
+  // abgefangen wird statt die App einfach mit leeren Projekt-/Aufgaben-
+  // listen weiterlaufen zu lassen.
+  if (firma?.gesperrt) {
+    return <FirmaGesperrtScreen onAbmelden={abmelden} />;
   }
 
   const projekt = projekte.find(p => p.id === aktivId) || null;
