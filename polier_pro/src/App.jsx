@@ -570,7 +570,7 @@ export default function PolierApp() {
   // abgefangen wird statt die App einfach mit leeren Projekt-/Aufgaben-
   // listen weiterlaufen zu lassen.
   if (firma?.gesperrt) {
-    return <FirmaGesperrtScreen onAbmelden={abmelden} />;
+    return <FirmaGesperrtScreen onAbmelden={abmelden} rolle={aktiveRolle} />;
   }
 
   const projekt = projekte.find(p => p.id === aktivId) || null;
@@ -1204,7 +1204,7 @@ export default function PolierApp() {
         onEdit={rolleConfig?.kannBearbeiten !== false ? () => setEditProjekt(true) : undefined} />}
 
       {/* ── CONTENT — einziger scrollender Bereich ── */}
-      <PlanGuard firma={firma} ressource="app">
+      <PlanGuard firma={firma} ressource="app" rolle={aktiveRolle}>
       <div style={{ padding:"16px 14px 20px", background:"var(--bg)",
         flex:"1 1 0", minHeight:0, overflowY:"auto", WebkitOverflowScrolling:"touch",
         overscrollBehaviorY:"contain" }}>

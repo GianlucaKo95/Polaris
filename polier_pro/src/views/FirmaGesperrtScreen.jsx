@@ -1,4 +1,6 @@
-import { LockKeyhole, LogOut } from "lucide-react";
+import { LockKeyhole, LogOut, Mail } from "lucide-react";
+
+const SUPPORT_MAIL = "support@polaris-app.de";
 
 // Wird gezeigt, sobald firma.gesperrt true ist (siehe App.jsx — der Lesezugriff
 // auf die eigene firmen-Zeile bleibt laut firmen_eigen-Policy bewusst auch
@@ -8,7 +10,16 @@ import { LockKeyhole, LogOut } from "lucide-react";
 // liefert und projekte/aufgaben/kolonnen serverseitig einfach leer
 // zurückkommen — das sähe nach einem Fehler oder einem leeren Konto aus,
 // nicht nach einer bewussten Sperre.
-export function FirmaGesperrtScreen({ onAbmelden }) {
+//
+// Administrator/Geschäftsführer sind die einzigen Rollen, die hier
+// überhaupt etwas tun können (Zahlungsproblem klären, Support kontaktieren
+// — ein Facharbeiter kann weder das eine noch das andere) — die sehen
+// deshalb einen Mailto-Kontakt direkt hier, statt wie alle anderen Rollen
+// nur auf "sprich mit deinem Administrator" verwiesen zu werden, womit sie
+// nichts anfangen könnten.
+export function FirmaGesperrtScreen({ onAbmelden, rolle }) {
+  const kannHandeln = rolle === "administrator" || rolle === "geschaeftsfuehrer";
+
   return (
     <div style={{ background:"var(--bg)", minHeight:"100dvh", display:"flex",
       flexDirection:"column", alignItems:"center", justifyContent:"center",
@@ -29,10 +40,22 @@ export function FirmaGesperrtScreen({ onAbmelden }) {
           Zugang gesperrt
         </div>
         <div style={{ color:"var(--muted)", fontSize:13.5, lineHeight:1.6, marginBottom:20 }}>
-          Der Zugang deines Unternehmens zu Polaris wurde vorübergehend gesperrt.
-          Bitte wende dich an deinen Administrator oder an den Polaris-Support,
-          um das zu klären.
+          {kannHandeln
+            ? "Der Zugang deines Unternehmens zu Polaris wurde vorübergehend gesperrt — vermutlich wegen eines offenen Zahlungs- oder Vertragsthemas. Bitte wende dich an den Polaris-Support, um das zu klären."
+            : "Der Zugang deines Unternehmens zu Polaris wurde vorübergehend gesperrt. Bitte wende dich an deinen Administrator oder Geschäftsführer, um das zu klären."}
         </div>
+
+        {kannHandeln && (
+          <a href={`mailto:${SUPPORT_MAIL}?subject=Zugang%20gesperrt`}
+            style={{ width:"100%", boxSizing:"border-box", background:"var(--yellow)", color:"#1a1200",
+              border:"none", borderRadius:12, padding:14, fontWeight:800, fontSize:14,
+              fontFamily:"inherit", textDecoration:"none",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+              marginBottom:10 }}>
+            <Mail size={15} /> Support kontaktieren
+          </a>
+        )}
+
         <button onClick={onAbmelden}
           style={{ width:"100%", background:"var(--surface2)", color:"var(--text)",
             border:"1.5px solid var(--border)", borderRadius:12, padding:14,

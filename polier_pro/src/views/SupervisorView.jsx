@@ -5,10 +5,17 @@ import { Spinner } from "../components/Spinner.jsx";
 import { PLAN_CONFIG } from "../config/konstanten.js";
 import { sbSupervisorNutzerEinladen, sbSupervisorFirmenListe, sbSupervisorFirmaAktualisieren } from "../lib/supabase.js";
 
+// Werte MÜSSEN exakt zu PlanGuard.jsx passen — das ist die Stelle, die
+// plan_status tatsächlich auswertet und bei "cancelled"/"expired" den
+// Zugriff sperrt. "overdue" ist bewusst NICHT in dieser Sperrliste
+// (realistische Kulanzfrist bei Zahlungsproblemen, bevor der Zugang
+// tatsächlich blockiert wird) — nur Information für den Supervisor, kein
+// Blocker.
 const PLAN_STATUS_LABEL = {
-  active:   { label: "Aktiv",      farbe: "var(--green)" },
-  overdue:  { label: "Überfällig", farbe: "var(--yellow)" },
-  canceled: { label: "Gekündigt",  farbe: "var(--red)" },
+  active:    { label: "Aktiv",      farbe: "var(--green)" },
+  overdue:   { label: "Überfällig", farbe: "var(--yellow)" },
+  cancelled: { label: "Gekündigt",  farbe: "var(--red)" },
+  expired:   { label: "Abgelaufen", farbe: "var(--red)" },
 };
 
 // ISO-Timestamp -> value für <input type="date"> (YYYY-MM-DD), bzw. "" wenn
