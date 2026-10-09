@@ -131,6 +131,13 @@ export function AufgabenKarte({ aufgabe, onClick, kolonnen, onDelete, onToggleEr
                 <TriangleAlert size={11} />MANGEL
               </span>
             )}
+            {aufgabe.gemeldet_von_kunde && (
+              <span title={aufgabe.gemeldet_kontakt ? `Kontakt: ${aufgabe.gemeldet_kontakt}` : undefined}
+                style={{ background:"var(--bbg)", color:"var(--blue)",
+                  padding:"2px 8px", fontWeight:800, display:"inline-flex", alignItems:"center", gap:4 }}>
+                <User size={11} />VOM KUNDEN
+              </span>
+            )}
             {aufgabe.prioritaet === "kritisch" && (
               <span style={{ color:prio.farbe, fontWeight:800 }}>‼ Kritisch</span>
             )}

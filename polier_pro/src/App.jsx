@@ -25,6 +25,7 @@ import { OnboardingFlow } from "./views/OnboardingFlow.jsx";
 import { ProjektFormular } from "./views/ProjektFormular.jsx";
 import { Chip } from "./components/Chip.jsx";
 import { FirmenView } from "./views/FirmenView.jsx";
+import { SupervisorView } from "./views/SupervisorView.jsx";
 import { Aktenregister } from "./components/Aktenregister.jsx";
 import { ProjektInfoStrip } from "./components/ProjektInfoStrip.jsx";
 import { PlanGuard } from "./views/PlanGuard.jsx";
@@ -874,7 +875,13 @@ export default function PolierApp() {
 
             {/* Home Tabs */}
             <div style={{ display:"flex", gap:22, marginTop:18 }}>
-              {[["projekte","Baustellen"],["firmen","Unternehmen"]].map(([id,label]) => (
+              {[["projekte","Baustellen"],["firmen","Unternehmen"],
+                // Nur für profile.ist_supervisor (serverseitig per Trigger
+                // unveränderbar, siehe Migration) — kein normaler
+                // Administrator sieht diesen Tab, auch nicht in der eigenen
+                // Firma.
+                ...(auth.profil?.ist_supervisor ? [["supervisor","Supervisor"]] : [])]
+                .map(([id,label]) => (
                 <button key={id} onClick={() => setHomeTab(id)}
                   style={{ background:"none", border:"none", cursor:"pointer",
                     padding:"0 0 10px", fontFamily:"inherit", fontSize:13, fontWeight:700,
@@ -1041,6 +1048,10 @@ export default function PolierApp() {
                 session={auth.session}
                 firmaId={firma?.id}
               />
+            )}
+
+            {homeTab === "supervisor" && auth.profil?.ist_supervisor && (
+              <SupervisorView session={auth.session} />
             )}
           </div>
         </div>

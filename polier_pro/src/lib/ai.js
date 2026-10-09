@@ -436,6 +436,60 @@ Antworte NUR mit diesem JSON (kein Markdown, keine Erklärungen):
   }
 }
 
+// ── KI-Mängelerkennung aus Foto ─────────────────────────────────────────
+// Läuft NUR auf Tastendruck (eigener Button im Mangel-Details-Block von
+// AufgabenFormular.jsx), nie automatisch beim Hochladen. Der ki-proxy
+// reicht "messages" unverändert an Anthropic durch (siehe
+// supabase/functions/ki-proxy/index.ts) — content kann deshalb hier,
+// anders als bei den reinen Text-Aufrufen oben, ein Array aus Bild- und
+// Text-Block sein (Vision), ohne dass die Edge Function angepasst werden
+// müsste. Wie bei kiBaustelleAnlegen wird nur das Formular vorausgefüllt;
+// der Nutzer sieht den Vorschlag vor dem Speichern und kann ihn
+// korrigieren oder verwerfen.
+const GUELTIGE_MANGEL_PRIO = ["niedrig", "mittel", "hoch", "kritisch"];
+
+export async function kiMangelAusFoto(fotoDataUrl, session) {
+  const treffer = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(fotoDataUrl || "");
+  if (!treffer) throw new Error("Kein auswertbares Foto vorhanden.");
+  const [, mediaType, base64Data] = treffer;
+
+  const prompt = `Du bist ein erfahrener Bauleiter und begutachtest ein Foto eines Mangels auf einer Baustelle.
+
+Beschreibe ausschließlich, was auf dem Foto tatsächlich zu erkennen ist. Wenn du dir bei einem Feld unsicher bist (z.B. welches Gewerk den Mangel verursacht hat), lass es leer statt zu raten.
+
+Antworte NUR mit einem JSON-Objekt ohne Markdown:
+{
+  "titel": "Kurze, fachliche Mangelbeschreibung (z.B. \\"Riss in Bodenplatte, ca. 30cm\\")",
+  "beschreibung": "Ausführlichere Beschreibung des erkennbaren Schadens (2-3 Sätze)",
+  "verursacher": "Vermutliches Gewerk, NUR falls auf dem Foto eindeutig erkennbar (z.B. \\"Estrich\\", \\"Elektrik\\"), sonst leerer String",
+  "prioritaet": "niedrig|mittel|hoch|kritisch — Einschätzung allein nach sichtbarem Schadensausmaß"
+}`;
+
+  const data = await rufeKiProxyAuf({
+    messages: [{
+      role: "user",
+      content: [
+        { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } },
+        { type: "text", text: prompt },
+      ],
+    }],
+    maxTokens: 600,
+  }, session, "Bitte ein anderes Foto wählen oder die Felder manuell ausfüllen.");
+
+  const text = data.content?.find(b => b.type === "text")?.text || "{}";
+  try {
+    const r = JSON.parse(text.replace(/```json|```/g, "").trim());
+    return {
+      titel:        r.titel || "",
+      beschreibung: r.beschreibung || "",
+      verursacher:  r.verursacher || "",
+      prioritaet:   GUELTIGE_MANGEL_PRIO.includes(r.prioritaet) ? r.prioritaet : "mittel",
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Läuft VOR jeder Firmenanlage — es gibt also noch keine firma_id und
 // keinen firmenspezifischen Anthropic-Key, deshalb ein eigener Endpunkt
 // (nicht ki-proxy): firma-recherche nutzt einen Plattform-Key, der laut

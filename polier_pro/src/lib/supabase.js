@@ -356,6 +356,63 @@ export async function sbKundenportalDaten(token) {
   } catch { return null; }
 }
 
+// Lässt den Bauherrn ohne Login über denselben Token selbst einen Mangel
+// melden — ebenfalls eine SECURITY DEFINER-RPC (kundenportal_mangel_melden),
+// die Token+aktiv serverseitig prüft und einen einfachen Rate-Limit
+// (10 Meldungen/Projekt/Stunde) durchsetzt, siehe Migration. error ist bei
+// Ablehnung (ungültiger Link, leerer Titel, Rate-Limit) die RPC-eigene
+// deutschsprachige Fehlermeldung aus der Postgres-Exception.
+export async function sbKundenportalMangelMelden(token, { titel, beschreibung, kontakt, fotos }) {
+  try {
+    const { error } = await supabase.rpc("kundenportal_mangel_melden", {
+      p_token: token,
+      p_titel: titel || "",
+      p_beschreibung: beschreibung || "",
+      p_kontakt: kontakt || null,
+      p_fotos: fotos || [],
+    });
+    if (error) return { ok: false, fehler: error.message || "Melden fehlgeschlagen." };
+    // Bewusst nicht awaited und ohne Fehlerbehandlung nach außen — die
+    // Meldung selbst ist zu diesem Zeitpunkt bereits gespeichert (siehe
+    // RPC oben), der Push ist rein additiv. Schlägt er fehl (keine VAPID-
+    // Keys konfiguriert, niemand abonniert, Netzwerkfehler), soll der
+    // Kunde trotzdem die normale Erfolgsbestätigung sehen statt eines
+    // irreführenden Fehlers für etwas, das mit seiner Meldung gar nichts
+    // mehr zu tun hat.
+    supabase.functions.invoke("kundenportal-mangel-push", { body: { token, titel } }).catch(() => {});
+    return { ok: true, fehler: null };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// Nur für Nutzer mit profile.ist_supervisor = true (serverseitig in der
+// Edge Function geprüft, hier nur die Weiterleitung) — legt für eine neue
+// Kundenfirma das allererste Admin-Konto per E-Mail-Einladung an, siehe
+// supabase/functions/supervisor-nutzer-einladen/index.ts für die komplette
+// Erklärung, warum danach keine weitere App-Logik mehr nötig ist.
+//
+// Per fetch() statt supabase.functions.invoke() — wie ki-proxy/firma-
+// recherche oben: invoke() kapselt einen Nicht-2xx-Status als generischen
+// FunctionsHttpError, dessen .message NICHT die eigene JSON-Fehlermeldung
+// der Function enthält. Für diese Funktion muss der Supervisor aber genau
+// diese Meldung sehen (z.B. "Für diese E-Mail-Adresse existiert bereits
+// ein Konto."), nicht nur "non-2xx status code".
+export async function sbSupervisorNutzerEinladen(email, session) {
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/supervisor-nutzer-einladen`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ email, redirectTo: window.location.origin }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, fehler: data?.error || `Einladung fehlgeschlagen (${res.status})` };
+    return { ok: true, fehler: null };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
 export async function sbSubSpeichern(s, firmaId, session, istNeu) {
   if (!session?.access_token || !firmaId) return null;
   const payload = {
