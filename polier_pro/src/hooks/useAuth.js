@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { sbGetProfile, supabase, sbSignIn, sbSignOut, SUPABASE_URL } from "../lib/supabase.js";
-import { ROLLEN, BENUTZERNAME_LOGIN_DOMAIN } from "../config/konstanten.js";
+import { sbGetProfile, supabase, sbSignIn, sbSignOut, sbBenutzernameLoginEmails, SUPABASE_URL } from "../lib/supabase.js";
+import { ROLLEN } from "../config/konstanten.js";
 
 export function useAuth() {
   const [session, setSession]   = useState(() => {
@@ -178,17 +178,30 @@ export function useAuth() {
   async function anmelden(emailOderBenutzername, password) {
     setLoading(true); setFehler("");
     // Administratoren & Co. melden sich weiterhin mit einer echten E-Mail
-    // an — die geht hier unverändert durch, ohne jede Zusatzprüfung oder
-    // einen weiteren Request ("das System darf nicht zusätzlich auflösen").
-    // Nur eine Eingabe OHNE "@" (Benutzername, siehe EinladungScreen.jsx
-    // für zugangsart="benutzername") wird rein clientseitig und
-    // deterministisch zur selben synthetischen Adresse ergänzt, die
-    // supabase/functions/einladung-benutzername-registrieren/index.ts bei
-    // der Registrierung angelegt hat — keine serverseitige Auflösung, kein
-    // zusätzlicher Lookup, nur ein fester String-Suffix.
+    // an — die geht hier unverändert direkt durch, ohne jede Zusatzprüfung
+    // oder einen weiteren Request ("das System darf nicht zusätzlich
+    // auflösen"). Nur eine Eingabe OHNE "@" ist ein Benutzername (siehe
+    // EinladungGenerieren.jsx für zugangsart="benutzername") — die
+    // synthetische Adresse dafür ist seit "pro Firma unterschiedliche
+    // Mail-Endung" NICHT mehr deterministisch aus dem Benutzernamen allein
+    // ableitbar (der Domain-Teil hängt von firma_id ab, die der Client an
+    // dieser Stelle nicht kennt), deshalb hier ein Lookup über
+    // benutzername_login_emails(). Da zwei Firmen denselben Benutzernamen
+    // vergeben dürfen, kann das mehrere Kandidaten liefern (in der Praxis
+    // fast immer genau einen) — diese werden mit dem eingegebenen Passwort
+    // nacheinander durchprobiert, bis einer passt.
     const wert = (emailOderBenutzername || "").trim();
-    const email = wert.includes("@") ? wert : `${wert.toLowerCase()}@${BENUTZERNAME_LOGIN_DOMAIN}`;
-    const data = await sbSignIn(email, password);
+    let data;
+    if (wert.includes("@")) {
+      data = await sbSignIn(wert, password);
+    } else {
+      const kandidaten = await sbBenutzernameLoginEmails(wert);
+      data = { error: "invalid_grant", error_description: "Invalid login credentials" };
+      for (const kandidat of kandidaten) {
+        const versuch = await sbSignIn(kandidat, password);
+        if (versuch.access_token) { data = versuch; break; }
+      }
+    }
     if (data.access_token) {
       localStorage.setItem("polaris-session", JSON.stringify(data));
       setSession(data);

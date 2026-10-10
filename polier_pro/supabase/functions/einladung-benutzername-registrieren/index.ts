@@ -15,10 +15,13 @@
 // ihren eigenen p_benutzername-Parameter aus genau demselben Grund
 // ignoriert). Supabase Auth selbst kennt nur E-Mail/Telefon als Identität
 // — deshalb legt diese Function im Hintergrund ein Konto mit einer
-// synthetischen Adresse "<benutzername>@mitarbeiter.polier-pro.local" an.
-// Dieser Domain-Teil MUSS exakt mit BENUTZERNAME_LOGIN_DOMAIN in
-// src/config/konstanten.js übereinstimmen — dort baut useAuth.js beim
-// Login dieselbe Adresse aus dem eingegebenen Benutzernamen zusammen.
+// synthetischen Adresse "<benutzername>@firma<firma_id>.polaris.local" an.
+// Die Domain ist bewusst pro Firma unterschiedlich (nicht eine einzige
+// gemeinsame Domain für alle) — so dürfen zwei verschiedene Firmen
+// denselben Benutzernamen vergeben (z.B. "peter" bei Firma 1 UND Firma 2),
+// ohne dass ihre Supabase-Auth-Konten kollidieren. Dieses Format MUSS
+// exakt mit der SQL-Funktion benutzername_login_emails() übereinstimmen,
+// die useAuth.js beim Login aufruft, um dieselbe Adresse zu finden.
 //
 // Warum eine eigene Function statt supabase.auth.signUp() im Client (wie
 // beim normalen E-Mail-Pfad in EinladungScreen.jsx): signUp() verschickt
@@ -42,10 +45,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL     = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-// Muss exakt mit BENUTZERNAME_LOGIN_DOMAIN in src/config/konstanten.js
-// übereinstimmen — sonst löst useAuth.js beim Login eine andere Adresse
-// auf, als hier beim Registrieren tatsächlich angelegt wurde.
-const BENUTZERNAME_LOGIN_DOMAIN = "mitarbeiter.polier-pro.local";
+// Muss exakt mit der SQL-Funktion benutzername_login_emails() (Supabase-
+// Migration) übereinstimmen — sonst findet useAuth.js beim Login eine
+// andere Adresse, als hier beim Registrieren tatsächlich angelegt wurde.
+function syntheticEmailDomain(firmaId: number): string {
+  return `firma${firmaId}.polaris.local`;
+}
 const BENUTZERNAME_REGEX = /^[a-z0-9._-]+$/;
 
 const CORS_HEADERS = {
@@ -86,7 +91,7 @@ Deno.serve(async (req: Request) => {
   // vergeben), nie vom aufrufenden Client.
   const { data: einladung, error: einladungError } = await admin
     .from("einladungen")
-    .select("id, zugangsart, benutzername, aktiv, läuft_ab_at, max_nutzungen, nutzungen")
+    .select("id, firma_id, zugangsart, benutzername, aktiv, läuft_ab_at, max_nutzungen, nutzungen")
     .eq("token", token)
     .maybeSingle();
 
@@ -103,7 +108,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Diese Einladung hat keinen gültigen Benutzernamen hinterlegt. Bitte beim Administrator eine neue Einladung anfordern." }, 400);
   }
 
-  const syntheticEmail = `${benutzername}@${BENUTZERNAME_LOGIN_DOMAIN}`;
+  const syntheticEmail = `${benutzername}@${syntheticEmailDomain(einladung.firma_id)}`;
 
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email: syntheticEmail,

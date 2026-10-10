@@ -403,16 +403,37 @@ export async function sbEinladungBenutzernameRegistrieren(token, passwort) {
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen.", email: null }; }
 }
 
-// Live-Verfügbarkeitsprüfung während der Eingabe in EinladungScreen.jsx,
-// noch bevor überhaupt ein Konto angelegt wird — die verbindliche Prüfung
-// läuft trotzdem serverseitig nochmal in einladung_einloesen_v2 (Race
-// zwischen dieser Prüfung und der tatsächlichen Registrierung).
-export async function sbBenutzernameVerfuegbar(benutzername) {
+// Live-Verfügbarkeitsprüfung während der Eingabe in EinladungGenerieren.jsx
+// (der Administrator vergibt den Benutzernamen), noch bevor überhaupt ein
+// Konto angelegt wird — die verbindliche Prüfung läuft trotzdem serverseitig
+// nochmal in einladung_einloesen_v2 (Race zwischen dieser Prüfung und der
+// tatsächlichen Registrierung). _v2 prüft pro Firma statt global — zwei
+// Firmen dürfen seit "@firma<firma_id>.polaris.local" denselben
+// Benutzernamen vergeben, da die synthetische Adresse sie ohnehin
+// unterscheidet. Die alte benutzername_verfuegbar(text) bleibt als
+// ungenutztes Überbleibsel stehen (kein DROP nötig, einfach nicht mehr
+// aufgerufen).
+export async function sbBenutzernameVerfuegbar(benutzername, firmaId) {
   try {
-    const { data, error } = await supabase.rpc("benutzername_verfuegbar", { p_benutzername: benutzername });
+    const { data, error } = await supabase.rpc("benutzername_verfuegbar_v2", {
+      p_benutzername: benutzername, p_firma_id: firmaId,
+    });
     if (error) return null; // unbekannt statt fälschlich "verfügbar"
     return !!data;
   } catch { return null; }
+}
+
+// Login-Auflösung für Benutzername-Konten (siehe useAuth.js) — da ein
+// Benutzername jetzt in mehreren Firmen vorkommen kann, liefert diese RPC
+// alle dazu passenden synthetischen Adressen (in der Praxis fast immer
+// genau eine); der Client probiert sie nacheinander mit dem eingegebenen
+// Passwort durch.
+export async function sbBenutzernameLoginEmails(benutzername) {
+  try {
+    const { data, error } = await supabase.rpc("benutzername_login_emails", { p_benutzername: benutzername });
+    if (error) return [];
+    return (data || []).map(r => r.email);
+  } catch { return []; }
 }
 
 // Nur für profile.rolle = 'administrator', und nur für Nutzer der eigenen

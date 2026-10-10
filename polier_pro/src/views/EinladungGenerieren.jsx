@@ -30,7 +30,7 @@ export function EinladungGenerieren({ session, firmaId, kolonnen }) {
     if (bereinigt.length < 3 || !BENUTZERNAME_REGEX.test(bereinigt)) return;
     pruefTimer.current = setTimeout(async () => {
       setBenutzernameStatus("pruefe");
-      const frei = await sbBenutzernameVerfuegbar(bereinigt);
+      const frei = await sbBenutzernameVerfuegbar(bereinigt, firmaId);
       setBenutzernameStatus(frei === null ? null : (frei ? "frei" : "vergeben"));
     }, 400);
   }
