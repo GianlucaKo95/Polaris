@@ -245,7 +245,16 @@ export default function PolierApp() {
       // ausgeschlossen, damit der KI-Key nie in den Client-State (firma/
       // eigeneFirma) gelangt. Er wird ausschließlich serverseitig in der
       // ki-proxy Edge Function gelesen (siehe supabase/functions/ki-proxy).
-      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage, pin_pflicht, gesperrt")
+      //
+      // plan/plan_status/trial_ends_at/plan_ends_at fehlten hier bisher
+      // komplett — PlanGuard.jsx weiter unten liest exakt diese vier Felder
+      // von firma, um eine abgelaufene Testphase oder ein inaktives Abo zu
+      // sperren. Ohne sie war firma.plan im Client immer undefined, die
+      // Sperr-Bedingung (firma.plan === "trial" && trial_ends_at < jetzt)
+      // also nie erfüllbar — eine abgelaufene Testphase (z.B. Musterbau
+      // GmbH (Demo), trial_ends_at 24.09.) sperrte dadurch nie tatsächlich,
+      // unabhängig vom echten Datenbankstand.
+      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage, pin_pflicht, gesperrt, plan, plan_status, trial_ends_at, plan_ends_at")
         .eq("id", auth.profil.firma_id)
         .then(({ data: d, error, status }) => {
           if (error) {
