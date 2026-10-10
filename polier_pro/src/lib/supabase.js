@@ -384,6 +384,80 @@ export async function sbKundenportalMangelMelden(token, { titel, beschreibung, k
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
+// Läuft noch ohne Session (anon) — der Mitarbeiter hat ja gerade erst den
+// Einladungslink geöffnet. Siehe supabase/functions/einladung-benutzername-
+// registrieren/index.ts: legt per SERVICE_ROLE_KEY ein sofort bestätigtes
+// Konto mit synthetischer Adresse an UND löst die Einladung ein — der
+// Client muss sich danach nur noch ganz normal mit der zurückgegebenen
+// E-Mail + dem eingegebenen Passwort einloggen (sbSignIn).
+export async function sbEinladungBenutzernameRegistrieren(token, passwort) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/einladung-benutzername-registrieren`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, passwort }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, fehler: data?.error || `Registrierung fehlgeschlagen (${res.status})`, email: null };
+    return { ok: true, fehler: null, email: data.email };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen.", email: null }; }
+}
+
+// Live-Verfügbarkeitsprüfung während der Eingabe in EinladungGenerieren.jsx
+// (der Administrator vergibt den Benutzernamen), noch bevor überhaupt ein
+// Konto angelegt wird — die verbindliche Prüfung läuft trotzdem serverseitig
+// nochmal in einladung_einloesen_v2 (Race zwischen dieser Prüfung und der
+// tatsächlichen Registrierung). _v2 prüft pro Firma statt global — zwei
+// Firmen dürfen seit "@firma<firma_id>.polaris.local" denselben
+// Benutzernamen vergeben, da die synthetische Adresse sie ohnehin
+// unterscheidet. Die alte benutzername_verfuegbar(text) bleibt als
+// ungenutztes Überbleibsel stehen (kein DROP nötig, einfach nicht mehr
+// aufgerufen).
+export async function sbBenutzernameVerfuegbar(benutzername, firmaId) {
+  try {
+    const { data, error } = await supabase.rpc("benutzername_verfuegbar_v2", {
+      p_benutzername: benutzername, p_firma_id: firmaId,
+    });
+    if (error) return null; // unbekannt statt fälschlich "verfügbar"
+    return !!data;
+  } catch { return null; }
+}
+
+// Login-Auflösung für Benutzername-Konten (siehe useAuth.js) — da ein
+// Benutzername jetzt in mehreren Firmen vorkommen kann, liefert diese RPC
+// alle dazu passenden synthetischen Adressen (in der Praxis fast immer
+// genau eine); der Client probiert sie nacheinander mit dem eingegebenen
+// Passwort durch.
+export async function sbBenutzernameLoginEmails(benutzername) {
+  try {
+    const { data, error } = await supabase.rpc("benutzername_login_emails", { p_benutzername: benutzername });
+    if (error) return [];
+    return (data || []).map(r => r.email);
+  } catch { return []; }
+}
+
+// Nur für profile.rolle = 'administrator', und nur für Nutzer der eigenen
+// Firma (serverseitig geprüft) — setzt das Passwort direkt, ohne E-Mail-
+// Link. Für Benutzername-Konten (kein echtes Postfach) der einzige Weg,
+// ein vergessenes Passwort zurückzusetzen; siehe supabase/functions/
+// admin-passwort-zuruecksetzen/index.ts.
+export async function sbAdminPasswortZuruecksetzen(profilId, neuesPasswort, session) {
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-passwort-zuruecksetzen`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ profilId, neuesPasswort }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, fehler: data?.error || `Zurücksetzen fehlgeschlagen (${res.status})` };
+    return { ok: true, fehler: null };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
 // Nur für Nutzer mit profile.ist_supervisor = true (serverseitig in der
 // Edge Function geprüft, hier nur die Weiterleitung) — legt für eine neue
 // Kundenfirma das allererste Admin-Konto per E-Mail-Einladung an, siehe

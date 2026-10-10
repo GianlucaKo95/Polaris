@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { sbGetProfile, supabase, sbSignIn, sbSignOut, SUPABASE_URL } from "../lib/supabase.js";
+import { sbGetProfile, supabase, sbSignIn, sbSignOut, sbBenutzernameLoginEmails, SUPABASE_URL } from "../lib/supabase.js";
 import { ROLLEN } from "../config/konstanten.js";
 
 export function useAuth() {
@@ -175,9 +175,33 @@ export function useAuth() {
     return () => window.removeEventListener("polaris-auth-invalid", handleAuthInvalid);
   }, [session?.access_token]);
 
-  async function anmelden(email, password) {
+  async function anmelden(emailOderBenutzername, password) {
     setLoading(true); setFehler("");
-    const data = await sbSignIn(email, password);
+    // Administratoren & Co. melden sich weiterhin mit einer echten E-Mail
+    // an — die geht hier unverändert direkt durch, ohne jede Zusatzprüfung
+    // oder einen weiteren Request ("das System darf nicht zusätzlich
+    // auflösen"). Nur eine Eingabe OHNE "@" ist ein Benutzername (siehe
+    // EinladungGenerieren.jsx für zugangsart="benutzername") — die
+    // synthetische Adresse dafür ist seit "pro Firma unterschiedliche
+    // Mail-Endung" NICHT mehr deterministisch aus dem Benutzernamen allein
+    // ableitbar (der Domain-Teil hängt von firma_id ab, die der Client an
+    // dieser Stelle nicht kennt), deshalb hier ein Lookup über
+    // benutzername_login_emails(). Da zwei Firmen denselben Benutzernamen
+    // vergeben dürfen, kann das mehrere Kandidaten liefern (in der Praxis
+    // fast immer genau einen) — diese werden mit dem eingegebenen Passwort
+    // nacheinander durchprobiert, bis einer passt.
+    const wert = (emailOderBenutzername || "").trim();
+    let data;
+    if (wert.includes("@")) {
+      data = await sbSignIn(wert, password);
+    } else {
+      const kandidaten = await sbBenutzernameLoginEmails(wert);
+      data = { error: "invalid_grant", error_description: "Invalid login credentials" };
+      for (const kandidat of kandidaten) {
+        const versuch = await sbSignIn(kandidat, password);
+        if (versuch.access_token) { data = versuch; break; }
+      }
+    }
     if (data.access_token) {
       localStorage.setItem("polaris-session", JSON.stringify(data));
       setSession(data);

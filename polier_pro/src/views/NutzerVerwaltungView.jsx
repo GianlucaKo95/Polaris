@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Users, Plus, TriangleAlert, X, Pencil, HardHat, Phone, CircleCheckBig, Ban, User, Calendar, Copy, ArrowUpRight, Mail, FileClock, MapPin } from "lucide-react";
-import { sbFetch } from "../lib/supabase.js";
+import { Users, Plus, TriangleAlert, X, Pencil, HardHat, Phone, CircleCheckBig, Ban, User, Calendar, Copy, ArrowUpRight, Mail, FileClock, MapPin, KeyRound, AtSign } from "lucide-react";
+import { sbFetch, sbAdminPasswortZuruecksetzen } from "../lib/supabase.js";
 import { ROLLEN } from "../config/konstanten.js";
 import { ibanMaskiert } from "../lib/utils.js";
 import { EinladungGenerieren } from "./EinladungGenerieren.jsx";
@@ -121,6 +121,23 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
     if (!ok?.length) { setAktionsFehler("Kolonne konnte nicht geändert werden."); return; }
     setNutzer(prev => prev.map(n => n.id === id
       ? { ...n, kolonne_id: kolonneId || null } : n));
+  }
+
+  // Nur für Benutzername-Konten relevant (kein echtes Postfach, siehe
+  // EinladungGenerieren.jsx) — aber auch für E-Mail-Konten nutzbar, falls
+  // der Mitarbeiter selbst nicht mehr an seine E-Mail kommt.
+  async function passwortZuruecksetzen(n) {
+    setAktionsFehler("");
+    const name = `${n.vorname || ""} ${n.nachname || ""}`.trim() || "diesen Nutzer";
+    const neuesPasswort = window.prompt(`Neues Passwort für ${name} (mind. 6 Zeichen):`);
+    if (!neuesPasswort) return;
+    if (neuesPasswort.length < 6) {
+      setAktionsFehler("Passwort muss mindestens 6 Zeichen haben.");
+      return;
+    }
+    const { ok, fehler } = await sbAdminPasswortZuruecksetzen(n.id, neuesPasswort, session);
+    if (!ok) { setAktionsFehler(fehler || "Passwort konnte nicht zurückgesetzt werden."); return; }
+    window.alert(`Passwort für ${name} wurde geändert.`);
   }
 
   async function einladungWiderrufen(id) {
@@ -285,6 +302,12 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
                           <Phone size={10} /> {n.telefon}
                         </div>
                       )}
+                      {n.benutzername && (
+                        <div style={{ color:"var(--muted)", fontSize:11, marginTop:2,
+                          display:"flex", alignItems:"center", gap:3 }}>
+                          <AtSign size={10} /> {n.benutzername}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <button onClick={() => setEditNutzer(isEdit ? null : n.id)}
@@ -389,6 +412,17 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
                         </div>
                       )
                     )}
+
+                    {/* Für Benutzername-Konten (kein echtes Postfach) der
+                        einzige Weg an ein vergessenes Passwort — aber auch
+                        für E-Mail-Konten als Admin-Notfallweg nutzbar. */}
+                    <button onClick={() => passwortZuruecksetzen(n)}
+                      style={{ background:"var(--surface2)", color:"var(--text)",
+                        border:"1px solid var(--border)", borderRadius:8, padding:"8px 14px",
+                        cursor:"pointer", fontWeight:700, fontSize:13, fontFamily:"inherit",
+                        display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                      <KeyRound size={13} /> Passwort zurücksetzen
+                    </button>
 
                     <button onClick={() => aktivitaetToggle(n.id, n.aktiv !== false)}
                       style={{ background: n.aktiv === false ? "var(--gbg)" : "var(--rbg)",
@@ -543,7 +577,7 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
                     <div style={{ color:"var(--muted)", fontSize:11, marginTop:4,
                       display:"flex", alignItems:"center", gap:4 }}>
                       <Calendar size={10} /> Gültig bis {abgelaufen}
-                      {e.email && ` · ${e.email}`}
+                      {e.zugangsart === "benutzername" ? " · Benutzername-Zugang" : (e.email && ` · ${e.email}`)}
                     </div>
                   </div>
                   <button onClick={() => einladungWiderrufen(e.id)}
