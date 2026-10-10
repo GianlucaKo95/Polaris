@@ -495,13 +495,22 @@ export async function sbSupervisorFirmenListe(session) {
   if (!session?.access_token) return null;
   try {
     const client = sbClientMitToken(session);
-    const { data, error } = await client.rpc("supervisor_firmen_liste");
+    // _v2 liefert zusätzlich max_baustellen/aktive_baustellen (Baustellen-
+    // Limit pro Firma) — v1 bleibt als ungenutztes Überbleibsel bestehen,
+    // eine zusätzliche RETURNS-TABLE-Spalte hätte ein DROP FUNCTION vor dem
+    // Neuanlegen verlangt (siehe bekannte Migrations-Tool-Einschränkung).
+    const { data, error } = await client.rpc("supervisor_firmen_liste_v2");
     if (error) return null;
     return data || [];
   } catch { return null; }
 }
 
-export async function sbSupervisorFirmaAktualisieren(firmaId, { plan, planStatus, trialEndsAt, planEndsAt, gesperrt }, session) {
+// maxBaustellen: undefined/null = nicht ändern, -1 = explizit auf
+// "unbegrenzt" setzen, sonst die neue Zahl — siehe Kommentar in der
+// Migration zu supervisor_firma_aktualisieren (ein reines COALESCE in der
+// RPC könnte "unbegrenzt setzen" sonst nicht von "nicht anfassen"
+// unterscheiden, weil beides null wäre).
+export async function sbSupervisorFirmaAktualisieren(firmaId, { plan, planStatus, trialEndsAt, planEndsAt, gesperrt, maxBaustellen }, session) {
   if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
   try {
     const client = sbClientMitToken(session);
@@ -512,6 +521,7 @@ export async function sbSupervisorFirmaAktualisieren(firmaId, { plan, planStatus
       p_trial_ends_at: trialEndsAt ?? null,
       p_plan_ends_at: planEndsAt ?? null,
       p_gesperrt: gesperrt ?? null,
+      p_max_baustellen: maxBaustellen ?? null,
     });
     if (error) return { ok: false, fehler: error.message || "Aktualisierung fehlgeschlagen." };
     if (!data) return { ok: false, fehler: "Firma nicht gefunden." };

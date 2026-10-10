@@ -1,4 +1,5 @@
 import { Lock, Zap } from "lucide-react";
+import { PLAN_CONFIG } from "../config/konstanten.js";
 
 // Nur Administrator/Geschäftsführer können einen Plan wählen oder ein Abo
 // verlängern — ein Facharbeiter, der hier auf "Pro wählen, 99 €/Monat"
@@ -58,8 +59,12 @@ export function PlanGuard({ firma, children, ressource, rolle }) {
       <div style={{ display:"flex", flexDirection:"column", gap:10,
         width:"100%", maxWidth:340 }}>
         {[
-          { key:"starter", label:"Starter",  preis:"49 €/Monat", features:"5 Projekte, 10 Nutzer" },
-          { key:"pro",     label:"Pro",       preis:"99 €/Monat", features:"20 Projekte, 50 Nutzer, API" },
+          { key:"starter",    label:PLAN_CONFIG.starter.label,    preis:PLAN_CONFIG.starter.preis,
+            features:`${PLAN_CONFIG.starter.inklusiveBaustellen} Baustellen inklusive, je weitere ${PLAN_CONFIG.starter.preisJeWeitere}` },
+          { key:"pro",        label:PLAN_CONFIG.pro.label,        preis:PLAN_CONFIG.pro.preis,
+            features:`${PLAN_CONFIG.pro.inklusiveBaustellen} Baustellen inklusive, je weitere ${PLAN_CONFIG.pro.preisJeWeitere}, + KI-Features & Kundenportal` },
+          { key:"enterprise", label:PLAN_CONFIG.enterprise.label, preis:PLAN_CONFIG.enterprise.preis,
+            features:"Unbegrenzte Baustellen, individuelle Vereinbarung" },
         ].map(p => (
           <div key={p.key} style={{ background:"var(--surface)", borderRadius:14,
             padding:"12px 20px", border:`2px solid ${p.key === "pro" ? "var(--yellow)" : "var(--border)"}` }}>
@@ -81,7 +86,7 @@ export function PlanGuard({ firma, children, ressource, rolle }) {
                 border:"none", borderRadius:10, padding:12, fontWeight:700,
                 cursor:"pointer", fontFamily:"inherit",
                 display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-              {p.key === "pro" ? <><Zap size={14} /> Pro wählen</> : "Starter wählen"}
+              {p.key === "pro" ? <><Zap size={14} /> Pro wählen</> : `${p.label} wählen`}
             </button>
           </div>
         ))}

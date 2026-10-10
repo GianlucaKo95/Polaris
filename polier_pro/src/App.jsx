@@ -254,7 +254,7 @@ export default function PolierApp() {
       // also nie erfüllbar — eine abgelaufene Testphase (z.B. Musterbau
       // GmbH (Demo), trial_ends_at 24.09.) sperrte dadurch nie tatsächlich,
       // unabhängig vom echten Datenbankstand.
-      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage, pin_pflicht, gesperrt, plan, plan_status, trial_ends_at, plan_ends_at")
+      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage, pin_pflicht, gesperrt, plan, plan_status, trial_ends_at, plan_ends_at, max_baustellen")
         .eq("id", auth.profil.firma_id)
         .then(({ data: d, error, status }) => {
           if (error) {
