@@ -458,6 +458,49 @@ export async function sbAdminPasswortZuruecksetzen(profilId, neuesPasswort, sess
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
+// Startet den ERSTEN Abo-Abschluss (Trial → zahlender Kunde) für Starter
+// oder Pro — siehe supabase/functions/stripe-checkout-session für den
+// Grund, warum ein späterer Wechsel/Kündigen stattdessen über
+// sbStripePortalOeffnen läuft. Nur für administrator/geschaeftsfuehrer
+// (serverseitig geprüft). Liefert die Stripe-Checkout-URL zum Weiterleiten.
+export async function sbStripeCheckoutStarten(plan, session) {
+  if (!session?.access_token) return { url: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/stripe-checkout-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ plan, returnUrl: window.location.href }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.url) return { url: null, fehler: data?.error || `Checkout fehlgeschlagen (${res.status})` };
+    return { url: data.url, fehler: null };
+  } catch { return { url: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// Für alles NACH dem ersten Checkout: Zahlungsmittel ändern, Plan
+// wechseln, Baustellen-Overage-Menge anpassen, kündigen — alles im von
+// Stripe selbst gehosteten Customer Portal, siehe supabase/functions/
+// stripe-portal-session.
+export async function sbStripePortalOeffnen(session) {
+  if (!session?.access_token) return { url: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/stripe-portal-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ returnUrl: window.location.href }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.url) return { url: null, fehler: data?.error || `Portal-Link fehlgeschlagen (${res.status})` };
+    return { url: data.url, fehler: null };
+  } catch { return { url: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
 // Nur für Nutzer mit profile.ist_supervisor = true (serverseitig in der
 // Edge Function geprüft, hier nur die Weiterleitung) — legt für eine neue
 // Kundenfirma das allererste Admin-Konto per E-Mail-Einladung an, siehe
