@@ -3,12 +3,20 @@
 // ═══════════════════════════════════════════════════════════════════════
 //
 // Löst "Vorarbeiter und Facharbeiter bekommen keine Firmen-Mailadresse" —
-// für eine Einladung mit zugangsart='benutzername' (siehe
-// EinladungGenerieren.jsx) tippt der Mitarbeiter nur einen Benutzernamen
-// statt einer E-Mail. Supabase Auth selbst kennt aber nur E-Mail/Telefon
-// als Identität — deshalb legt diese Function im Hintergrund ein Konto
-// mit einer synthetischen Adresse "<benutzername>@mitarbeiter.polier-pro.local"
-// an. Dieser Domain-Teil MUSS exakt mit BENUTZERNAME_LOGIN_DOMAIN in
+// für eine Einladung mit zugangsart='benutzername' legt der Administrator
+// in EinladungGenerieren.jsx bereits den Benutzernamen fest; der
+// Mitarbeiter wählt beim Öffnen des Links nur noch ein Passwort ("Der
+// Admin soll den Benutzernamen festlegen. Der Mitarbeiter dann nur das
+// Passwort."). Der Benutzername kommt deshalb hier NICHT aus dem Request-
+// Body, sondern wird aus der einladungen-Zeile selbst gelesen — ein
+// Client, der diese Function direkt aufruft, kann sich also keinen
+// anderen Benutzernamen als den vom Admin vergebenen aussuchen (dieselbe
+// Absicherung greift zusätzlich nochmal in einladung_einloesen_v2, die
+// ihren eigenen p_benutzername-Parameter aus genau demselben Grund
+// ignoriert). Supabase Auth selbst kennt nur E-Mail/Telefon als Identität
+// — deshalb legt diese Function im Hintergrund ein Konto mit einer
+// synthetischen Adresse "<benutzername>@mitarbeiter.polier-pro.local" an.
+// Dieser Domain-Teil MUSS exakt mit BENUTZERNAME_LOGIN_DOMAIN in
 // src/config/konstanten.js übereinstimmen — dort baut useAuth.js beim
 // Login dieselbe Adresse aus dem eingegebenen Benutzernamen zusammen.
 //
@@ -56,20 +64,16 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  let token: string, benutzername: string, passwort: string;
+  let token: string, passwort: string;
   try {
     const body = await req.json();
-    token        = typeof body.token === "string" ? body.token : "";
-    benutzername = typeof body.benutzername === "string" ? body.benutzername.trim().toLowerCase() : "";
-    passwort     = typeof body.passwort === "string" ? body.passwort : "";
+    token    = typeof body.token === "string" ? body.token : "";
+    passwort = typeof body.passwort === "string" ? body.passwort : "";
   } catch {
     return json({ error: "Ungültige Anfrage." }, 400);
   }
 
   if (!token) return json({ error: "Kein Einladungs-Token übergeben." }, 400);
-  if (benutzername.length < 3 || !BENUTZERNAME_REGEX.test(benutzername)) {
-    return json({ error: "Benutzername muss mindestens 3 Zeichen haben und darf nur Buchstaben, Zahlen, Punkt, Unterstrich und Minus enthalten." }, 400);
-  }
   if (!passwort || passwort.length < 6) {
     return json({ error: "Passwort muss mindestens 6 Zeichen haben." }, 400);
   }
@@ -77,10 +81,12 @@ Deno.serve(async (req: Request) => {
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
   // Einladung serverseitig gegen die echte Tabelle prüfen, nicht nur im
-  // UI — derselbe Gültigkeitscheck wie in einladung_pruefen_v2().
+  // UI — derselbe Gültigkeitscheck wie in einladung_pruefen_v3(). Der
+  // Benutzername kommt ausschließlich von hier (vom Administrator
+  // vergeben), nie vom aufrufenden Client.
   const { data: einladung, error: einladungError } = await admin
     .from("einladungen")
-    .select("id, zugangsart, aktiv, läuft_ab_at, max_nutzungen, nutzungen")
+    .select("id, zugangsart, benutzername, aktiv, läuft_ab_at, max_nutzungen, nutzungen")
     .eq("token", token)
     .maybeSingle();
 
@@ -91,6 +97,10 @@ Deno.serve(async (req: Request) => {
   }
   if (einladung.zugangsart !== "benutzername") {
     return json({ error: "Diese Einladung nutzt E-Mail, nicht Benutzername." }, 400);
+  }
+  const benutzername = (einladung.benutzername || "").trim().toLowerCase();
+  if (benutzername.length < 3 || !BENUTZERNAME_REGEX.test(benutzername)) {
+    return json({ error: "Diese Einladung hat keinen gültigen Benutzernamen hinterlegt. Bitte beim Administrator eine neue Einladung anfordern." }, 400);
   }
 
   const syntheticEmail = `${benutzername}@${BENUTZERNAME_LOGIN_DOMAIN}`;
@@ -107,8 +117,11 @@ Deno.serve(async (req: Request) => {
     return json({ error: message }, 400);
   }
 
+  // p_benutzername bewusst nicht mitgegeben (default null) — die RPC liest
+  // den Benutzernamen seit der Admin-vergibt-ihn-Änderung ausschließlich
+  // selbst aus der einladungen-Zeile, nie aus einem Parameter.
   const { data: result, error: rpcError } = await admin.rpc("einladung_einloesen_v2", {
-    p_token: token, p_user_id: created.user.id, p_benutzername: benutzername,
+    p_token: token, p_user_id: created.user.id,
   });
 
   if (rpcError || !result?.ok) {

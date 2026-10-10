@@ -390,12 +390,12 @@ export async function sbKundenportalMangelMelden(token, { titel, beschreibung, k
 // Konto mit synthetischer Adresse an UND löst die Einladung ein — der
 // Client muss sich danach nur noch ganz normal mit der zurückgegebenen
 // E-Mail + dem eingegebenen Passwort einloggen (sbSignIn).
-export async function sbEinladungBenutzernameRegistrieren(token, benutzername, passwort) {
+export async function sbEinladungBenutzernameRegistrieren(token, passwort) {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/einladung-benutzername-registrieren`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, benutzername, passwort }),
+      body: JSON.stringify({ token, passwort }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, fehler: data?.error || `Registrierung fehlgeschlagen (${res.status})`, email: null };

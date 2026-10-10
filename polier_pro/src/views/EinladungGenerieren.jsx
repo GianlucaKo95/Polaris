@@ -1,23 +1,55 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Users, CircleX, Link, Copy } from "lucide-react";
-import { sbClientMitToken } from "../lib/supabase.js";
+import { sbClientMitToken, sbBenutzernameVerfuegbar } from "../lib/supabase.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { ROLLEN } from "../config/konstanten.js";
+
+const BENUTZERNAME_REGEX = /^[a-zA-Z0-9._-]+$/;
 
 export function EinladungGenerieren({ session, firmaId, kolonnen }) {
   const [rolle,      setRolle]      = useState("facharbeiter");
   const [kolonneId,  setKolonneId]  = useState("");
   const [zugangsart, setZugangsart] = useState("email");
   const [email,      setEmail]      = useState("");
+  // Admin legt den Benutzernamen fest (nicht mehr der Eingeladene selbst,
+  // siehe EinladungScreen.jsx) — "Der Admin soll den Benutzernamen
+  // festlegen. Der Mitarbeiter dann nur das Passwort."
+  const [benutzername,       setBenutzername]       = useState("");
+  const [benutzernameStatus, setBenutzernameStatus] = useState(null); // null|"pruefe"|"frei"|"vergeben"
   const [tage,       setTage]       = useState(7);
   const [link,       setLink]       = useState("");
   const [laden,      setLaden]      = useState(false);
   const [fehler,     setFehler]     = useState("");
 
+  const pruefTimer = useRef(null);
+  function benutzernameEingegeben(wert) {
+    setBenutzername(wert);
+    setBenutzernameStatus(null);
+    clearTimeout(pruefTimer.current);
+    const bereinigt = wert.trim();
+    if (bereinigt.length < 3 || !BENUTZERNAME_REGEX.test(bereinigt)) return;
+    pruefTimer.current = setTimeout(async () => {
+      setBenutzernameStatus("pruefe");
+      const frei = await sbBenutzernameVerfuegbar(bereinigt);
+      setBenutzernameStatus(frei === null ? null : (frei ? "frei" : "vergeben"));
+    }, 400);
+  }
+
   async function generieren() {
     if (!firmaId) {
       setFehler("Firma konnte nicht ermittelt werden. Bitte Seite neu laden und erneut versuchen.");
       return;
+    }
+    const bereinigterBenutzername = benutzername.trim().toLowerCase();
+    if (zugangsart === "benutzername") {
+      if (bereinigterBenutzername.length < 3 || !BENUTZERNAME_REGEX.test(bereinigterBenutzername)) {
+        setFehler("Benutzername muss mindestens 3 Zeichen haben und darf nur Buchstaben, Zahlen, Punkt, Unterstrich und Minus enthalten.");
+        return;
+      }
+      if (benutzernameStatus === "vergeben") {
+        setFehler("Dieser Benutzername ist bereits vergeben. Bitte einen anderen wählen.");
+        return;
+      }
     }
     setLaden(true); setFehler("");
     try {
@@ -28,6 +60,7 @@ export function EinladungGenerieren({ session, firmaId, kolonnen }) {
         kolonne_id:   kolonneId || null,
         zugangsart,
         email:        zugangsart === "email" ? (email || null) : null,
+        benutzername: zugangsart === "benutzername" ? bereinigterBenutzername : null,
         läuft_ab_at:  new Date(Date.now() + tage * 86400000).toISOString(),
         max_nutzungen: 1,
       }).select();
@@ -102,20 +135,37 @@ export function EinladungGenerieren({ session, firmaId, kolonnen }) {
         </select>
         {zugangsart === "benutzername" && (
           <div style={{ color:"var(--muted)", fontSize:11.5, marginTop:6, lineHeight:1.5 }}>
-            Für Mitarbeiter ohne eigene Firmen-Mailadresse — der/die Eingeladene
-            wählt beim Öffnen des Links selbst einen Benutzernamen statt einer
-            E-Mail. "Passwort vergessen" funktioniert dafür nicht; das Passwort
-            muss dann über die Nutzerverwaltung zurückgesetzt werden.
+            Für Mitarbeiter ohne eigene Firmen-Mailadresse — du legst unten den
+            Benutzernamen fest, der/die Eingeladene wählt beim Öffnen des Links
+            nur noch ein eigenes Passwort. "Passwort vergessen" funktioniert
+            dafür nicht; das Passwort muss dann über die Nutzerverwaltung
+            zurückgesetzt werden.
           </div>
         )}
       </div>
 
-      {zugangsart === "email" && (
+      {zugangsart === "email" ? (
         <div style={{ marginBottom:10 }}>
           <Label>E-Mail vorausfüllen (optional)</Label>
           <input type="email" value={email}
             onChange={e => setEmail(e.target.value)}
             placeholder="mitarbeiter@firma.de" style={inputStyle()} />
+        </div>
+      ) : (
+        <div style={{ marginBottom:10 }}>
+          <Label>Benutzername</Label>
+          <input type="text" value={benutzername} autoCapitalize="none" autoCorrect="off"
+            onChange={e => benutzernameEingegeben(e.target.value)}
+            placeholder="z.B. peter.vorarbeiter" style={inputStyle()} />
+          {benutzernameStatus === "pruefe" && (
+            <div style={{ color:"var(--muted)", fontSize:11.5, marginTop:5 }}>Prüfe Verfügbarkeit…</div>
+          )}
+          {benutzernameStatus === "frei" && (
+            <div style={{ color:"var(--green)", fontSize:11.5, marginTop:5 }}>✓ Verfügbar</div>
+          )}
+          {benutzernameStatus === "vergeben" && (
+            <div style={{ color:"var(--red)", fontSize:11.5, marginTop:5 }}>Bereits vergeben — bitte einen anderen wählen.</div>
+          )}
         </div>
       )}
 
@@ -127,7 +177,7 @@ export function EinladungGenerieren({ session, firmaId, kolonnen }) {
         </div>
       )}
 
-      <button onClick={generieren} disabled={laden}
+      <button onClick={generieren} disabled={laden || (zugangsart === "benutzername" && benutzernameStatus === "vergeben")}
         style={{ width:"100%", background:"var(--yellow)", color:"#1a1200",
           border:"none", borderRadius:10, padding:12, fontWeight:700,
           cursor:"pointer", fontFamily:"inherit", fontSize:14,

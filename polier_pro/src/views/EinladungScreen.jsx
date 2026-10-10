@@ -1,16 +1,12 @@
-import { useState, useEffect, useRef } from "react";
-import { CircleX, ArrowRight, CircleCheckBig, PartyPopper } from "lucide-react";
-import { supabase, sbClientMitToken, sbSignIn, sbEinladungBenutzernameRegistrieren, sbBenutzernameVerfuegbar } from "../lib/supabase.js";
+import { useState, useEffect } from "react";
+import { CircleX, ArrowRight, CircleCheckBig, PartyPopper, AtSign } from "lucide-react";
+import { supabase, sbClientMitToken, sbSignIn, sbEinladungBenutzernameRegistrieren } from "../lib/supabase.js";
 import { ROLLEN } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
-
-const BENUTZERNAME_REGEX = /^[a-zA-Z0-9._-]+$/;
 
 export function EinladungScreen({ token, onErfolg }) {
   const [einladung,    setEinladung]    = useState(null);
   const [email,        setEmail]        = useState("");
-  const [benutzername, setBenutzername] = useState("");
-  const [benutzernameStatus, setBenutzernameStatus] = useState(null); // null|"pruefe"|"frei"|"vergeben"
   const [password,     setPassword]     = useState("");
   const [laden,        setLaden]        = useState(true);
   const [fehler,       setFehler]       = useState("");
@@ -22,17 +18,18 @@ export function EinladungScreen({ token, onErfolg }) {
     // Läuft über eine SECURITY DEFINER-RPC (nicht mehr über eine offene
     // SELECT-Policy): so kann ein anonymer Client nur genau die Einladung
     // zu einem bekannten Token abrufen, statt alle aktiven Einladungen
-    // aller Firmen auflisten zu können. _v2 liefert zusätzlich zugangsart —
-    // die ursprüngliche einladung_pruefen() bleibt unverändert bestehen
-    // (ungenutzt), weil eine zusätzliche Rückgabespalte ein DROP FUNCTION
-    // vor dem Neuanlegen verlangt hätte, das über das Migrations-Tool
-    // dieser Session nie durchlief (Timeout, vermutlich eine nie
-    // beantwortete Bestätigungs-Hürde für destruktive Statements).
-    const { data, error } = await supabase.rpc("einladung_pruefen_v2", { p_token: token });
+    // aller Firmen auflisten zu können. _v3 liefert zusätzlich zugangsart
+    // und benutzername (den der Admin in EinladungGenerieren.jsx festgelegt
+    // hat) — v1/v2 bleiben unverändert bestehen (ungenutzt), weil eine
+    // zusätzliche Rückgabespalte ein DROP FUNCTION vor dem Neuanlegen
+    // verlangt hätte, das über das Migrations-Tool dieser Session nie
+    // durchlief (Timeout, vermutlich eine nie beantwortete
+    // Bestätigungs-Hürde für destruktive Statements).
+    const { data, error } = await supabase.rpc("einladung_pruefen_v3", { p_token: token });
     const row = data?.[0];
     if (!error && row) {
       setEinladung({
-        token: row.token, email: row.email, rolle: row.rolle,
+        token: row.token, email: row.email, benutzername: row.benutzername, rolle: row.rolle,
         firma_id: row.firma_id, kolonne_id: row.kolonne_id,
         zugangsart: row.zugangsart || "email",
         firmen: { name: row.firma_name, logo_url: row.firma_logo_url },
@@ -43,22 +40,6 @@ export function EinladungScreen({ token, onErfolg }) {
       setFehler("Diese Einladung ist ungültig oder abgelaufen.");
     }
     setLaden(false);
-  }
-
-  // Live-Verfügbarkeitsprüfung während der Eingabe — nur UI-Feedback, die
-  // verbindliche Prüfung läuft serverseitig nochmal bei der Registrierung.
-  const pruefTimer = useRef(null);
-  function benutzernameEingegeben(wert) {
-    setBenutzername(wert);
-    setBenutzernameStatus(null);
-    clearTimeout(pruefTimer.current);
-    const bereinigt = wert.trim();
-    if (bereinigt.length < 3 || !BENUTZERNAME_REGEX.test(bereinigt)) return;
-    pruefTimer.current = setTimeout(async () => {
-      setBenutzernameStatus("pruefe");
-      const frei = await sbBenutzernameVerfuegbar(bereinigt);
-      setBenutzernameStatus(frei === null ? null : (frei ? "frei" : "vergeben"));
-    }, 400);
   }
 
   async function registrierenUndEinloesen() {
@@ -127,24 +108,22 @@ export function EinladungScreen({ token, onErfolg }) {
     setTimeout(() => onErfolg?.(), 2000);
   }
 
-  // Zugangsart="benutzername": kein signUp()/signInWithPassword() im
-  // Client wie oben — die Edge Function legt das Konto bereits sofort
-  // bestätigt an (siehe sbEinladungBenutzernameRegistrieren) und löst die
-  // Einladung gleich mit ein. Der Client muss sich danach nur noch mit der
-  // zurückgegebenen synthetischen Adresse ganz normal einloggen.
+  // Zugangsart="benutzername": der Benutzername steht schon fest (vom
+  // Administrator in EinladungGenerieren.jsx vergeben, siehe einladung.
+  // benutzername) — hier wird nur noch ein Passwort gewählt. Kein
+  // signUp()/signInWithPassword() im Client wie oben — die Edge Function
+  // legt das Konto bereits sofort bestätigt an (siehe
+  // sbEinladungBenutzernameRegistrieren) und löst die Einladung gleich
+  // mit ein. Der Client muss sich danach nur noch mit der zurückgegebenen
+  // synthetischen Adresse ganz normal einloggen.
   async function benutzernameRegistrierenUndEinloesen() {
-    const bereinigt = benutzername.trim();
-    if (bereinigt.length < 3 || !BENUTZERNAME_REGEX.test(bereinigt)) {
-      setFehler("Benutzername muss mindestens 3 Zeichen haben und darf nur Buchstaben, Zahlen, Punkt, Unterstrich und Minus enthalten.");
-      return;
-    }
     if (!password || password.length < 6) {
       setFehler("Bitte ein Passwort mit mindestens 6 Zeichen eingeben.");
       return;
     }
     setLaden(true); setFehler("");
 
-    const reg = await sbEinladungBenutzernameRegistrieren(token, bereinigt, password);
+    const reg = await sbEinladungBenutzernameRegistrieren(token, password);
     if (!reg.ok) {
       setFehler(reg.fehler || "Registrierung fehlgeschlagen.");
       setLaden(false);
@@ -214,19 +193,11 @@ export function EinladungScreen({ token, onErfolg }) {
             {einladung.zugangsart === "benutzername" ? (
               <>
                 <div style={{ marginBottom:10 }}>
-                  <Label>Benutzername</Label>
-                  <input type="text" value={benutzername} autoCapitalize="none" autoCorrect="off"
-                    onChange={e => benutzernameEingegeben(e.target.value)}
-                    placeholder="z.B. peter.vorarbeiter" style={inputStyle()} />
-                  {benutzernameStatus === "pruefe" && (
-                    <div style={{ color:"var(--muted)", fontSize:11.5, marginTop:5 }}>Prüfe Verfügbarkeit…</div>
-                  )}
-                  {benutzernameStatus === "frei" && (
-                    <div style={{ color:"var(--green)", fontSize:11.5, marginTop:5 }}>✓ Verfügbar</div>
-                  )}
-                  {benutzernameStatus === "vergeben" && (
-                    <div style={{ color:"var(--red)", fontSize:11.5, marginTop:5 }}>Bereits vergeben — bitte einen anderen wählen.</div>
-                  )}
+                  <Label>Dein Benutzername</Label>
+                  <div style={{ ...inputStyle(), display:"flex", alignItems:"center", gap:7,
+                    color:"var(--text2)", background:"var(--surface2)" }}>
+                    <AtSign size={14} /> {einladung.benutzername || "—"}
+                  </div>
                 </div>
                 <div style={{ marginBottom:14 }}>
                   <Label>Passwort wählen</Label>
@@ -234,8 +205,7 @@ export function EinladungScreen({ token, onErfolg }) {
                     onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••" style={inputStyle()} />
                 </div>
-                <button onClick={benutzernameRegistrierenUndEinloesen}
-                  disabled={laden || benutzernameStatus === "vergeben"}
+                <button onClick={benutzernameRegistrierenUndEinloesen} disabled={laden}
                   style={{ width:"100%", background:"var(--yellow)", color:"#1a1200",
                     border:"none", borderRadius:12, padding:15, fontWeight:800,
                     fontSize:15, cursor:"pointer", fontFamily:"inherit",
