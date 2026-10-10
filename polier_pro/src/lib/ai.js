@@ -89,7 +89,7 @@ async function rufeKiProxyAuf(body, session, refusalHinweis = "Bitte das Diktat 
 // bekommt NUR diese Daten und die Anweisung, nichts darüber hinaus zu
 // behaupten. Läuft als mehrstufiger Chat (verlauf), damit Rückfragen den
 // bisherigen Gesprächskontext behalten.
-function baueProjektKontext({ projekt, aufgaben = [], kolonnen = [], wetterVorhersage, terminprognose }) {
+function baueProjektKontext({ projekt, aufgaben = [], kolonnen = [], wetterVorhersage, terminprognose, tagesberichte = [], kommentare = [] }) {
   const heute = new Date().toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 
   const offeneAufgaben = aufgaben.filter(a => a.status !== "abgeschlossen");
@@ -105,6 +105,52 @@ function baueProjektKontext({ projekt, aufgaben = [], kolonnen = [], wetterVorhe
     if (a.prioritaet === "kritisch") teile.push("PRIORITÄT KRITISCH");
     return `- "${a.titel}" (${teile.join(", ")})`;
   }).join("\n") || "keine offenen Aufgaben erfasst";
+
+  // Erledigte Aufgaben fehlten der KI bisher komplett (nur offeneAufgaben
+  // oben) — ohne sie konnte sie z.B. "was wurde schon gemacht?" nicht
+  // beantworten, obwohl die App es längst wusste. Auf die letzten 25 nach
+  // Abschlussdatum begrenzt, sonst wächst dieser Abschnitt bei einem langen
+  // Projekt unbegrenzt mit.
+  const erledigteAufgaben = aufgaben
+    .filter(a => a.status === "abgeschlossen")
+    .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
+    .slice(0, 25);
+  const erledigtText = erledigteAufgaben.map(a => {
+    const datum = a.updated_at ? new Date(a.updated_at).toLocaleDateString("de-DE") : "unbekannt";
+    const teile = [AUFGABEN_TYPEN[a.typ]?.label || a.typ, `abgeschlossen am ${datum}`];
+    if (a.zustaendig) teile.push(`zuständig: ${a.zustaendig}`);
+    if (a.ist_mangel) teile.push("war MANGEL");
+    return `- "${a.titel}" (${teile.join(", ")})`;
+  }).join("\n") || "keine erledigten Aufgaben erfasst";
+
+  // Letzte 40 Kommentare über alle Aufgaben dieses Projekts (aus dem
+  // aufgaben!inner-Join in App.jsx, bereits auf diese Baustelle begrenzt) —
+  // chronologisch aufsteigend, damit die KI den Gesprächsverlauf einer
+  // Aufgabe in der richtigen Reihenfolge liest statt absteigend sortiert.
+  const kommentareSortiert = [...kommentare].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const kommentareText = kommentareSortiert.map(k => {
+    const titel = k.aufgaben?.titel || "unbekannte Aufgabe";
+    const autor = k.autor ? [k.autor.vorname, k.autor.nachname].filter(Boolean).join(" ") : "unbekannt";
+    const datum = new Date(k.created_at).toLocaleDateString("de-DE");
+    return `- [${titel}] ${autor} (${datum}): "${k.text}"`;
+  }).join("\n") || "keine Kommentare zu Aufgaben erfasst";
+
+  // Letzte 10 Tagesberichte — ältere Berichte sind für aktuelle Fragen
+  // ("was ist gestern passiert?", "gab es zuletzt Mängel im Bericht?")
+  // selten relevant und würden den Prompt sonst unnötig aufblähen.
+  const tagesberichteSortiert = [...tagesberichte]
+    .sort((a, b) => new Date(b.datum) - new Date(a.datum))
+    .slice(0, 10);
+  const tagesberichteText = tagesberichteSortiert.map(b => {
+    const teile = [`Datum: ${new Date(b.datum).toLocaleDateString("de-DE")}`];
+    if (b.arbeiter) teile.push(`${b.arbeiter} Arbeiter`);
+    if (b.maengel_anzahl) teile.push(`${b.maengel_anzahl} Mangel/Mängel`);
+    const zeilen = [`- ${teile.join(", ")}`];
+    if (b.taetigkeit) zeilen.push(`  Tätigkeit: ${b.taetigkeit}`);
+    if (b.besonderheiten) zeilen.push(`  Besonderheiten: ${b.besonderheiten}`);
+    if (b.material) zeilen.push(`  Material: ${b.material}`);
+    return zeilen.join("\n");
+  }).join("\n") || "keine Tagesberichte erfasst";
 
   const kolonnenText = kolonnen.map(k =>
     `- ${k.name}: ${k.mitarbeiter?.length || 0} Mann${k.vorarbeiter ? `, Vorarbeiter ${k.vorarbeiter}` : ""}, Einsatz: ${k.einsatz || "—"}`
@@ -137,6 +183,15 @@ PROJEKT: ${projekt?.name || "—"}${projekt?.ort ? `, ${projekt.ort}` : ""}
 
 OFFENE AUFGABEN:
 ${aufgabenText}
+
+ERLEDIGTE AUFGABEN (zuletzt abgeschlossen, max. 25):
+${erledigtText}
+
+KOMMENTARE ZU AUFGABEN (chronologisch, max. 40):
+${kommentareText}
+
+TAGESBERICHTE (zuletzt erstellt, max. 10):
+${tagesberichteText}
 
 KOLONNEN:
 ${kolonnenText}
