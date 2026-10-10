@@ -458,6 +458,49 @@ export async function sbAdminPasswortZuruecksetzen(profilId, neuesPasswort, sess
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
+// Startet den ERSTEN Abo-Abschluss (Trial → zahlender Kunde) für Starter
+// oder Pro — siehe supabase/functions/stripe-checkout-session für den
+// Grund, warum ein späterer Wechsel/Kündigen stattdessen über
+// sbStripePortalOeffnen läuft. Nur für administrator/geschaeftsfuehrer
+// (serverseitig geprüft). Liefert die Stripe-Checkout-URL zum Weiterleiten.
+export async function sbStripeCheckoutStarten(plan, session) {
+  if (!session?.access_token) return { url: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/stripe-checkout-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ plan, returnUrl: window.location.href }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.url) return { url: null, fehler: data?.error || `Checkout fehlgeschlagen (${res.status})` };
+    return { url: data.url, fehler: null };
+  } catch { return { url: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// Für alles NACH dem ersten Checkout: Zahlungsmittel ändern, Plan
+// wechseln, Baustellen-Overage-Menge anpassen, kündigen — alles im von
+// Stripe selbst gehosteten Customer Portal, siehe supabase/functions/
+// stripe-portal-session.
+export async function sbStripePortalOeffnen(session) {
+  if (!session?.access_token) return { url: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/stripe-portal-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ returnUrl: window.location.href }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.url) return { url: null, fehler: data?.error || `Portal-Link fehlgeschlagen (${res.status})` };
+    return { url: data.url, fehler: null };
+  } catch { return { url: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
 // Nur für Nutzer mit profile.ist_supervisor = true (serverseitig in der
 // Edge Function geprüft, hier nur die Weiterleitung) — legt für eine neue
 // Kundenfirma das allererste Admin-Konto per E-Mail-Einladung an, siehe
@@ -495,13 +538,22 @@ export async function sbSupervisorFirmenListe(session) {
   if (!session?.access_token) return null;
   try {
     const client = sbClientMitToken(session);
-    const { data, error } = await client.rpc("supervisor_firmen_liste");
+    // _v2 liefert zusätzlich max_baustellen/aktive_baustellen (Baustellen-
+    // Limit pro Firma) — v1 bleibt als ungenutztes Überbleibsel bestehen,
+    // eine zusätzliche RETURNS-TABLE-Spalte hätte ein DROP FUNCTION vor dem
+    // Neuanlegen verlangt (siehe bekannte Migrations-Tool-Einschränkung).
+    const { data, error } = await client.rpc("supervisor_firmen_liste_v2");
     if (error) return null;
     return data || [];
   } catch { return null; }
 }
 
-export async function sbSupervisorFirmaAktualisieren(firmaId, { plan, planStatus, trialEndsAt, planEndsAt, gesperrt }, session) {
+// maxBaustellen: undefined/null = nicht ändern, -1 = explizit auf
+// "unbegrenzt" setzen, sonst die neue Zahl — siehe Kommentar in der
+// Migration zu supervisor_firma_aktualisieren (ein reines COALESCE in der
+// RPC könnte "unbegrenzt setzen" sonst nicht von "nicht anfassen"
+// unterscheiden, weil beides null wäre).
+export async function sbSupervisorFirmaAktualisieren(firmaId, { plan, planStatus, trialEndsAt, planEndsAt, gesperrt, maxBaustellen }, session) {
   if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
   try {
     const client = sbClientMitToken(session);
@@ -512,6 +564,7 @@ export async function sbSupervisorFirmaAktualisieren(firmaId, { plan, planStatus
       p_trial_ends_at: trialEndsAt ?? null,
       p_plan_ends_at: planEndsAt ?? null,
       p_gesperrt: gesperrt ?? null,
+      p_max_baustellen: maxBaustellen ?? null,
     });
     if (error) return { ok: false, fehler: error.message || "Aktualisierung fehlgeschlagen." };
     if (!data) return { ok: false, fehler: "Firma nicht gefunden." };

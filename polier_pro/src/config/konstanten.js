@@ -240,10 +240,20 @@ export const ALLE_GEWERKE = [
   { key:"garten",       label:"Garten / Außenanlagen",     icon:"🌿" },
 ];
 
+// inklusiveBaustellen/preisJeWeitere sind reine Anzeige-Werte für die
+// Supervisor-Oberfläche (Vorschlag beim Plan-Wechsel) — die tatsächliche
+// Durchsetzung läuft über firmen.max_baustellen (vom Supervisor pro Firma
+// gepflegt) und den projekte_baustellen_limit_pruefen-Trigger in der DB,
+// nicht über diese Konstante. null bei inklusiveBaustellen = unbegrenzt.
 export const PLAN_CONFIG = {
-  trial:   { label:"Testversion",  preis:"kostenlos · 14 Tage", farbe:"#64748B", icon:"⏱️" },
-  starter: { label:"Starter",      preis:"49 € / Monat",        farbe:"#2563EB", icon:"🚀" },
-  pro:     { label:"Pro",          preis:"99 € / Monat",        farbe:"#F5C400", icon:"⚡" },
+  trial:      { label:"Testversion", preis:"kostenlos · 14 Tage", farbe:"#64748B", icon:"⏱️",
+                inklusiveBaustellen:null, preisJeWeitere:null },
+  starter:    { label:"Starter",     preis:"59 € / Monat",        farbe:"#2563EB", icon:"🚀",
+                inklusiveBaustellen:3,    preisJeWeitere:"19 € / Monat" },
+  pro:        { label:"Pro",         preis:"129 € / Monat",       farbe:"#F5C400", icon:"⚡",
+                inklusiveBaustellen:10,   preisJeWeitere:"15 € / Monat" },
+  enterprise: { label:"Enterprise",  preis:"ab 349 € / Monat",    farbe:"#7C3AED", icon:"🏢",
+                inklusiveBaustellen:null, preisJeWeitere:null },
 };
 
 export const ONBOARDING_KEY = "polier_pro_onboarding_done";
