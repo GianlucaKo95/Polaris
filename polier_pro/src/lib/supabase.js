@@ -413,6 +413,38 @@ export async function sbSupervisorNutzerEinladen(email, session) {
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
+// Cross-tenant-Liste ALLER Firmen (Name, Plan, Status, Sperre) — nur für
+// profile.ist_supervisor, serverseitig per supervisor_firmen_liste()-RPC
+// geprüft (SECURITY DEFINER, umgeht die normale firma_id-RLS bewusst,
+// liefert aber ausschließlich Abo-/Status-Felder, keine operativen Daten).
+export async function sbSupervisorFirmenListe(session) {
+  if (!session?.access_token) return null;
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.rpc("supervisor_firmen_liste");
+    if (error) return null;
+    return data || [];
+  } catch { return null; }
+}
+
+export async function sbSupervisorFirmaAktualisieren(firmaId, { plan, planStatus, trialEndsAt, planEndsAt, gesperrt }, session) {
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.rpc("supervisor_firma_aktualisieren", {
+      p_firma_id: firmaId,
+      p_plan: plan ?? null,
+      p_plan_status: planStatus ?? null,
+      p_trial_ends_at: trialEndsAt ?? null,
+      p_plan_ends_at: planEndsAt ?? null,
+      p_gesperrt: gesperrt ?? null,
+    });
+    if (error) return { ok: false, fehler: error.message || "Aktualisierung fehlgeschlagen." };
+    if (!data) return { ok: false, fehler: "Firma nicht gefunden." };
+    return { ok: true, fehler: null };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
 export async function sbSubSpeichern(s, firmaId, session, istNeu) {
   if (!session?.access_token || !firmaId) return null;
   const payload = {

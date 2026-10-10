@@ -25,7 +25,8 @@ import { OnboardingFlow } from "./views/OnboardingFlow.jsx";
 import { ProjektFormular } from "./views/ProjektFormular.jsx";
 import { Chip } from "./components/Chip.jsx";
 import { FirmenView } from "./views/FirmenView.jsx";
-import { SupervisorView } from "./views/SupervisorView.jsx";
+import { SupervisorShell } from "./views/SupervisorShell.jsx";
+import { FirmaGesperrtScreen } from "./views/FirmaGesperrtScreen.jsx";
 import { Aktenregister } from "./components/Aktenregister.jsx";
 import { ProjektInfoStrip } from "./components/ProjektInfoStrip.jsx";
 import { PlanGuard } from "./views/PlanGuard.jsx";
@@ -232,6 +233,11 @@ export default function PolierApp() {
   // trotz bereits vorhandener Firma in der Datenbank.
   const [firmaLadeFehler, setFirmaLadeFehler] = useState("");
   useEffect(() => {
+    // ist_supervisor lädt bewusst keine Firmendaten, selbst wenn das Profil
+    // (wie gk@koeven.de) daneben noch firma_id/rolle für die eigene Firma
+    // trägt — firma/projekte/subs usw. bleiben dadurch durchgängig leer,
+    // nicht nur die SupervisorShell-Weiche in der Render-Logik unten.
+    if (auth.profil?.ist_supervisor) return;
     if (auth.profil?.firma_id && auth.session?.access_token) {
       setFirmaLadeFehler("");
       const client = sbClientMitToken(auth.session);
@@ -239,7 +245,7 @@ export default function PolierApp() {
       // ausgeschlossen, damit der KI-Key nie in den Client-State (firma/
       // eigeneFirma) gelangt. Er wird ausschließlich serverseitig in der
       // ki-proxy Edge Function gelesen (siehe supabase/functions/ki-proxy).
-      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage, pin_pflicht")
+      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage, pin_pflicht, gesperrt")
         .eq("id", auth.profil.firma_id)
         .then(({ data: d, error, status }) => {
           if (error) {
@@ -483,6 +489,19 @@ export default function PolierApp() {
     window.location.reload();
   }
 
+  // ── Supervisor: komplett eigene, isolierte Ansicht ──
+  // "Der Supervisor soll Zugriff auf keine Unternehmen haben. Er ist nur
+  // zur Verwaltung da. Er soll auch nur diese Fenster sehen." — kommt
+  // deshalb bewusst VOR jeder firma-/projekt-bezogenen Weiche (PIN-Abfrage,
+  // Onboarding, Gesperrt-Screen, PlanGuard, normale Baustellen-Ansicht).
+  // gk@koeven.de bleibt dabei weiterhin administrator mit firma_id 1 in der
+  // profile-Zeile (für den Fall, dass ist_supervisor je zurückgenommen
+  // wird), aber SOLANGE ist_supervisor true ist, wird keine dieser anderen
+  // Ansichten je erreicht — unabhängig von rolle/firma_id auf dem Profil.
+  if (auth.profil?.ist_supervisor) {
+    return <SupervisorShell session={auth.session} onAbmelden={abmelden} />;
+  }
+
   // ── App-Sperre ── vor allem anderen (auch vor der Facharbeiter-Ansicht),
   // damit eine hinterlegte PIN wirklich jede Ansicht abdeckt.
   if (gesperrt && aktiveProfil?.pin) {
@@ -562,6 +581,14 @@ export default function PolierApp() {
 
   if (!onboardingDone) {
     return <OnboardingFlow onComplete={handleOnboardingComplete} session={auth.session} onAbmelden={abmelden} />;
+  }
+
+  // Zugangssperre durch den Supervisor (firmen.gesperrt) — siehe
+  // FirmaGesperrtScreen.jsx für die Begründung, warum das hier aktiv
+  // abgefangen wird statt die App einfach mit leeren Projekt-/Aufgaben-
+  // listen weiterlaufen zu lassen.
+  if (firma?.gesperrt) {
+    return <FirmaGesperrtScreen onAbmelden={abmelden} rolle={aktiveRolle} />;
   }
 
   const projekt = projekte.find(p => p.id === aktivId) || null;
@@ -873,14 +900,13 @@ export default function PolierApp() {
               </div>
             </div>
 
-            {/* Home Tabs */}
+            {/* Home Tabs — kein "Supervisor"-Tab mehr hier: ein
+                ist_supervisor-Profil erreicht diese Ansicht serverseitig gar
+                nicht mehr, siehe SupervisorShell-Weiche weiter oben in
+                App.jsx ("Der Supervisor soll Zugriff auf keine Unternehmen
+                haben, nur diese Fenster sehen"). */}
             <div style={{ display:"flex", gap:22, marginTop:18 }}>
-              {[["projekte","Baustellen"],["firmen","Unternehmen"],
-                // Nur für profile.ist_supervisor (serverseitig per Trigger
-                // unveränderbar, siehe Migration) — kein normaler
-                // Administrator sieht diesen Tab, auch nicht in der eigenen
-                // Firma.
-                ...(auth.profil?.ist_supervisor ? [["supervisor","Supervisor"]] : [])]
+              {[["projekte","Baustellen"],["firmen","Unternehmen"]]
                 .map(([id,label]) => (
                 <button key={id} onClick={() => setHomeTab(id)}
                   style={{ background:"none", border:"none", cursor:"pointer",
@@ -1049,10 +1075,6 @@ export default function PolierApp() {
                 firmaId={firma?.id}
               />
             )}
-
-            {homeTab === "supervisor" && auth.profil?.ist_supervisor && (
-              <SupervisorView session={auth.session} />
-            )}
           </div>
         </div>
 
@@ -1195,7 +1217,7 @@ export default function PolierApp() {
         onEdit={rolleConfig?.kannBearbeiten !== false ? () => setEditProjekt(true) : undefined} />}
 
       {/* ── CONTENT — einziger scrollender Bereich ── */}
-      <PlanGuard firma={firma} ressource="app">
+      <PlanGuard firma={firma} ressource="app" rolle={aktiveRolle}>
       <div style={{ padding:"16px 14px 20px", background:"var(--bg)",
         flex:"1 1 0", minHeight:0, overflowY:"auto", WebkitOverflowScrolling:"touch",
         overscrollBehaviorY:"contain" }}>
