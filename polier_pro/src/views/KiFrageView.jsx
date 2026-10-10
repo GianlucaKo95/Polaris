@@ -12,7 +12,7 @@ const VORSCHLAEGE = [
   "Wie ist die Terminlage?",
 ];
 
-export function KiFrageView({ projekt, aufgaben = [], kolonnen = [], session }) {
+export function KiFrageView({ projekt, aufgaben = [], kolonnen = [], tagesberichte = [], kommentare = [], session }) {
   const [verlauf,   setVerlauf]   = useState([]); // { rolle: "user"|"ki", text }
   const [eingabe,   setEingabe]   = useState("");
   const [laedt,     setLaedt]     = useState(false);
@@ -40,7 +40,7 @@ export function KiFrageView({ projekt, aufgaben = [], kolonnen = [], session }) 
     setLaedt(true);
     try {
       const antwort = await kiProjektFrage(frage, verlauf, {
-        projekt, aufgaben, kolonnen, wetterVorhersage,
+        projekt, aufgaben, kolonnen, wetterVorhersage, tagesberichte, kommentare,
         terminprognose: terminprognose(aufgaben),
       }, session);
       setVerlauf(prev => [...prev, { rolle: "ki", text: antwort || "Keine Antwort erhalten." }]);
@@ -60,8 +60,9 @@ export function KiFrageView({ projekt, aufgaben = [], kolonnen = [], session }) 
         {verlauf.length === 0 && (
           <div style={{ color:"var(--muted)", fontSize:12.5, marginBottom:14, lineHeight:1.5 }}>
             Fragen zu diesem Projekt — die Antwort stützt sich ausschließlich auf die
-            hier erfassten Aufgaben, Kolonnen, die Wettervorhersage und die
-            berechnete Terminprognose. Fehlen Daten, sagt die KI das offen statt zu raten.
+            hier erfassten Aufgaben (offen und erledigt), Kommentare, Tagesberichte,
+            Kolonnen, die Wettervorhersage und die berechnete Terminprognose. Fehlen
+            Daten, sagt die KI das offen statt zu raten.
           </div>
         )}
 

@@ -352,6 +352,7 @@ export default function PolierApp() {
   const [aktProjektAufgaben,  setAktProjektAufgaben]  = useState([]);
   const [aktProjektKolonnen,  setAktProjektKolonnen]  = useState([]);
   const [aktProjektBerichte,  setAktProjektBerichte]  = useState([]);
+  const [aktProjektKommentare, setAktProjektKommentare] = useState([]);
   const [aktProjektAngebote,  setAktProjektAngebote]  = useState([]);
   const [projektDatenLaden,   setProjektDatenLaden]   = useState(false);
   const [projektDatenFehler,  setProjektDatenFehler]  = useState("");
@@ -359,7 +360,7 @@ export default function PolierApp() {
   useEffect(() => {
     if (!aktivId || !auth.session?.access_token) {
       setAktProjektAufgaben([]); setAktProjektKolonnen([]); setAktProjektBerichte([]);
-      setAktProjektAngebote([]);
+      setAktProjektAngebote([]); setAktProjektKommentare([]);
       setZeitbuchungen([]);
       return;
     }
@@ -375,7 +376,16 @@ export default function PolierApp() {
       client.from("tagesberichte").select("*").eq("projekt_id", aktivId).order("datum", { ascending: false }),
       client.from("zeitbuchungen").select("*").eq("projekt_id", aktivId),
       client.from("angebote").select("*").eq("projekt_id", aktivId).order("created_at", { ascending: false }),
-    ]).then(([aRes, kRes, bRes, zRes, anRes]) => {
+      // Für den KI-Projektkontext (baueProjektKontext in lib/ai.js) — nur die
+      // letzten 40, sonst wächst der Prompt mit jedem weiteren Kommentar
+      // unbegrenzt. aufgaben!inner filtert serverseitig auf diese Baustelle,
+      // statt erst alle Kommentare der Firma zu laden und clientseitig zu sieben.
+      client.from("aufgaben_kommentare")
+        .select("*, aufgaben!inner(projekt_id, titel), autor:erstellt_von(vorname, nachname)")
+        .eq("aufgaben.projekt_id", aktivId)
+        .order("created_at", { ascending: false })
+        .limit(40),
+    ]).then(([aRes, kRes, bRes, zRes, anRes, koRes]) => {
       if (abgebrochen) return;
       const fehler = [];
       if (aRes.error) fehler.push(`Aufgaben: ${aRes.error.message}`);
@@ -392,6 +402,11 @@ export default function PolierApp() {
       setAktProjektBerichte(bRes.data || []);
       setZeitbuchungen(zRes.data || []);
       setAktProjektAngebote(anRes.data || []);
+      // Kommentar-Query bewusst nicht in die fehler-Liste oben aufgenommen und
+      // bei Fehler einfach als leer behandelt — sie füttert nur den optionalen
+      // KI-Kontext, ein Fehlschlag dort darf das Laden der Kernprojektdaten
+      // (Aufgaben/Kolonnen/Berichte) nicht als Fehler anzeigen.
+      setAktProjektKommentare(koRes.error ? [] : (koRes.data || []));
       setProjektDatenLaden(false);
     }).catch(e => {
       if (abgebrochen) return;
@@ -1292,7 +1307,7 @@ export default function PolierApp() {
             // auf die eigene Kolonne begrenzt, "alle" heißt für ihn also
             // "alle aus seiner Kolonne", nicht firmenweit.
             darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
-        {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} session={auth.session} />}
+        {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
         {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
         {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} session={auth.session} />}
