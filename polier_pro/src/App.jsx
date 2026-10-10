@@ -25,7 +25,7 @@ import { OnboardingFlow } from "./views/OnboardingFlow.jsx";
 import { ProjektFormular } from "./views/ProjektFormular.jsx";
 import { Chip } from "./components/Chip.jsx";
 import { FirmenView } from "./views/FirmenView.jsx";
-import { SupervisorView } from "./views/SupervisorView.jsx";
+import { SupervisorShell } from "./views/SupervisorShell.jsx";
 import { FirmaGesperrtScreen } from "./views/FirmaGesperrtScreen.jsx";
 import { Aktenregister } from "./components/Aktenregister.jsx";
 import { ProjektInfoStrip } from "./components/ProjektInfoStrip.jsx";
@@ -233,6 +233,11 @@ export default function PolierApp() {
   // trotz bereits vorhandener Firma in der Datenbank.
   const [firmaLadeFehler, setFirmaLadeFehler] = useState("");
   useEffect(() => {
+    // ist_supervisor lädt bewusst keine Firmendaten, selbst wenn das Profil
+    // (wie gk@koeven.de) daneben noch firma_id/rolle für die eigene Firma
+    // trägt — firma/projekte/subs usw. bleiben dadurch durchgängig leer,
+    // nicht nur die SupervisorShell-Weiche in der Render-Logik unten.
+    if (auth.profil?.ist_supervisor) return;
     if (auth.profil?.firma_id && auth.session?.access_token) {
       setFirmaLadeFehler("");
       const client = sbClientMitToken(auth.session);
@@ -482,6 +487,19 @@ export default function PolierApp() {
     // und meldet automatisch erneut an.
     await auth.abmelden?.();
     window.location.reload();
+  }
+
+  // ── Supervisor: komplett eigene, isolierte Ansicht ──
+  // "Der Supervisor soll Zugriff auf keine Unternehmen haben. Er ist nur
+  // zur Verwaltung da. Er soll auch nur diese Fenster sehen." — kommt
+  // deshalb bewusst VOR jeder firma-/projekt-bezogenen Weiche (PIN-Abfrage,
+  // Onboarding, Gesperrt-Screen, PlanGuard, normale Baustellen-Ansicht).
+  // gk@koeven.de bleibt dabei weiterhin administrator mit firma_id 1 in der
+  // profile-Zeile (für den Fall, dass ist_supervisor je zurückgenommen
+  // wird), aber SOLANGE ist_supervisor true ist, wird keine dieser anderen
+  // Ansichten je erreicht — unabhängig von rolle/firma_id auf dem Profil.
+  if (auth.profil?.ist_supervisor) {
+    return <SupervisorShell session={auth.session} onAbmelden={abmelden} />;
   }
 
   // ── App-Sperre ── vor allem anderen (auch vor der Facharbeiter-Ansicht),
@@ -882,14 +900,13 @@ export default function PolierApp() {
               </div>
             </div>
 
-            {/* Home Tabs */}
+            {/* Home Tabs — kein "Supervisor"-Tab mehr hier: ein
+                ist_supervisor-Profil erreicht diese Ansicht serverseitig gar
+                nicht mehr, siehe SupervisorShell-Weiche weiter oben in
+                App.jsx ("Der Supervisor soll Zugriff auf keine Unternehmen
+                haben, nur diese Fenster sehen"). */}
             <div style={{ display:"flex", gap:22, marginTop:18 }}>
-              {[["projekte","Baustellen"],["firmen","Unternehmen"],
-                // Nur für profile.ist_supervisor (serverseitig per Trigger
-                // unveränderbar, siehe Migration) — kein normaler
-                // Administrator sieht diesen Tab, auch nicht in der eigenen
-                // Firma.
-                ...(auth.profil?.ist_supervisor ? [["supervisor","Supervisor"]] : [])]
+              {[["projekte","Baustellen"],["firmen","Unternehmen"]]
                 .map(([id,label]) => (
                 <button key={id} onClick={() => setHomeTab(id)}
                   style={{ background:"none", border:"none", cursor:"pointer",
@@ -1057,10 +1074,6 @@ export default function PolierApp() {
                 session={auth.session}
                 firmaId={firma?.id}
               />
-            )}
-
-            {homeTab === "supervisor" && auth.profil?.ist_supervisor && (
-              <SupervisorView session={auth.session} />
             )}
           </div>
         </div>
