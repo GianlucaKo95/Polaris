@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { sbGetProfile, supabase, sbSignIn, sbSignOut, SUPABASE_URL } from "../lib/supabase.js";
-import { ROLLEN } from "../config/konstanten.js";
+import { ROLLEN, BENUTZERNAME_LOGIN_DOMAIN } from "../config/konstanten.js";
 
 export function useAuth() {
   const [session, setSession]   = useState(() => {
@@ -175,8 +175,19 @@ export function useAuth() {
     return () => window.removeEventListener("polaris-auth-invalid", handleAuthInvalid);
   }, [session?.access_token]);
 
-  async function anmelden(email, password) {
+  async function anmelden(emailOderBenutzername, password) {
     setLoading(true); setFehler("");
+    // Administratoren & Co. melden sich weiterhin mit einer echten E-Mail
+    // an — die geht hier unverändert durch, ohne jede Zusatzprüfung oder
+    // einen weiteren Request ("das System darf nicht zusätzlich auflösen").
+    // Nur eine Eingabe OHNE "@" (Benutzername, siehe EinladungScreen.jsx
+    // für zugangsart="benutzername") wird rein clientseitig und
+    // deterministisch zur selben synthetischen Adresse ergänzt, die
+    // supabase/functions/einladung-benutzername-registrieren/index.ts bei
+    // der Registrierung angelegt hat — keine serverseitige Auflösung, kein
+    // zusätzlicher Lookup, nur ein fester String-Suffix.
+    const wert = (emailOderBenutzername || "").trim();
+    const email = wert.includes("@") ? wert : `${wert.toLowerCase()}@${BENUTZERNAME_LOGIN_DOMAIN}`;
     const data = await sbSignIn(email, password);
     if (data.access_token) {
       localStorage.setItem("polaris-session", JSON.stringify(data));

@@ -120,9 +120,9 @@ export function LoginScreen({ auth, onDemoLogin, onRegistrieren }) {
         )}
 
         <div style={{ marginBottom:10 }}>
-          <Label>E-Mail</Label>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-            placeholder="name@firma.de" style={inputStyle()}
+          <Label>E-Mail oder Benutzername</Label>
+          <input type="text" autoCapitalize="none" autoCorrect="off" value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="name@firma.de oder Benutzername" style={inputStyle()}
             onKeyDown={e => e.key==="Enter" && auth.anmelden(email, password)} />
         </div>
 

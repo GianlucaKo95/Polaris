@@ -7,6 +7,7 @@ import { ROLLEN } from "../config/konstanten.js";
 export function EinladungGenerieren({ session, firmaId, kolonnen }) {
   const [rolle,      setRolle]      = useState("facharbeiter");
   const [kolonneId,  setKolonneId]  = useState("");
+  const [zugangsart, setZugangsart] = useState("email");
   const [email,      setEmail]      = useState("");
   const [tage,       setTage]       = useState(7);
   const [link,       setLink]       = useState("");
@@ -25,7 +26,8 @@ export function EinladungGenerieren({ session, firmaId, kolonnen }) {
         firma_id:     firmaId,
         rolle,
         kolonne_id:   kolonneId || null,
-        email:        email || null,
+        zugangsart,
+        email:        zugangsart === "email" ? (email || null) : null,
         läuft_ab_at:  new Date(Date.now() + tage * 86400000).toISOString(),
         max_nutzungen: 1,
       }).select();
@@ -92,11 +94,30 @@ export function EinladungGenerieren({ session, firmaId, kolonnen }) {
       )}
 
       <div style={{ marginBottom:10 }}>
-        <Label>E-Mail vorausfüllen (optional)</Label>
-        <input type="email" value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="mitarbeiter@firma.de" style={inputStyle()} />
+        <Label>Zugangsart</Label>
+        <select value={zugangsart} onChange={e => setZugangsart(e.target.value)}
+          style={{ ...inputStyle(), padding:"10px 12px" }}>
+          <option value="email">E-Mail</option>
+          <option value="benutzername">Benutzername (ohne Firmen-E-Mail)</option>
+        </select>
+        {zugangsart === "benutzername" && (
+          <div style={{ color:"var(--muted)", fontSize:11.5, marginTop:6, lineHeight:1.5 }}>
+            Für Mitarbeiter ohne eigene Firmen-Mailadresse — der/die Eingeladene
+            wählt beim Öffnen des Links selbst einen Benutzernamen statt einer
+            E-Mail. "Passwort vergessen" funktioniert dafür nicht; das Passwort
+            muss dann über die Nutzerverwaltung zurückgesetzt werden.
+          </div>
+        )}
       </div>
+
+      {zugangsart === "email" && (
+        <div style={{ marginBottom:10 }}>
+          <Label>E-Mail vorausfüllen (optional)</Label>
+          <input type="email" value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="mitarbeiter@firma.de" style={inputStyle()} />
+        </div>
+      )}
 
       {fehler && (
         <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,

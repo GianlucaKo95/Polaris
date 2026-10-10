@@ -1,3 +1,11 @@
+// Für Einladungen mit zugangsart="benutzername" (Mitarbeiter ohne
+// Firmen-Mailadresse, z.B. Vorarbeiter/Facharbeiter) — useAuth.js baut
+// beim Login aus dem eingegebenen Benutzernamen dieselbe synthetische
+// Adresse zusammen. MUSS exakt mit BENUTZERNAME_LOGIN_DOMAIN in der Edge
+// Function supabase/functions/einladung-benutzername-registrieren/index.ts
+// übereinstimmen, sonst findet der Login das dort angelegte Konto nicht.
+export const BENUTZERNAME_LOGIN_DOMAIN = "mitarbeiter.polier-pro.local";
+
 export const C = {
   bg:         "var(--bg)",
   bgMid:      "var(--surface)",
