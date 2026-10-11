@@ -30,10 +30,13 @@ Deno.serve(async (req: Request) => {
       const config = current.data.find(c => c.is_default) ?? current.data[0];
       // deno-lint-ignore no-explicit-any
       const products = ((config.features?.subscription_update as any)?.products ?? []).map((p: any) => {
+        const aq: Record<string, unknown> = { enabled: p.adjustable_quantity.enabled };
+        if (p.adjustable_quantity.minimum != null) aq.minimum = p.adjustable_quantity.minimum;
+        if (p.adjustable_quantity.maximum != null) aq.maximum = p.adjustable_quantity.maximum;
         if (p.prices.includes(STARTER_OVERAGE_PRICE) || p.prices.includes(PRO_OVERAGE_PRICE)) {
-          return { ...p, adjustable_quantity: { ...p.adjustable_quantity, minimum: 0 } };
+          aq.minimum = 0;
         }
-        return p;
+        return { product: p.product, prices: p.prices, adjustable_quantity: aq };
       });
       const updated = await stripe.billingPortal.configurations.update(config.id, {
         features: { subscription_update: { products } },
