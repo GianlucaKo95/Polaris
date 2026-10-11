@@ -19,8 +19,19 @@ const PRO_OVERAGE_PRICE     = "price_1UPI952NDq8Z1rRr2nC2VADo";
 Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
   const createConfigs = url.searchParams.get("create_configs") === "1";
+  const diag = url.searchParams.get("diag") === "1";
 
   try {
+    if (diag) {
+      const balance = await stripe.balance.retrieve();
+      const starterPrice = await stripe.prices.retrieve(STARTER_PRICE);
+      return json({
+        key_livemode: balance.livemode,
+        starter_price_livemode: starterPrice.livemode,
+        starter_price_product: starterPrice.product,
+      });
+    }
+
     if (createConfigs) {
       // Produkt-IDs automatisch aus den Price-IDs auflösen, statt sie
       // manuell im Dashboard nachschlagen zu müssen.
