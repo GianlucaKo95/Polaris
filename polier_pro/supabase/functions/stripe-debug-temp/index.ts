@@ -18,7 +18,10 @@ Deno.serve(async (req: Request) => {
   const subscriptionId = url.searchParams.get("subscription_id") ?? "";
 
   try {
-    const configs = await stripe.billingPortal.configurations.list({ limit: 10 });
+    const configs = await stripe.billingPortal.configurations.list({
+      limit: 10,
+      expand: ["data.features.subscription_update.products"],
+    } as never);
     let subscription = null;
     if (subscriptionId) {
       subscription = await stripe.subscriptions.retrieve(subscriptionId);
@@ -31,6 +34,7 @@ Deno.serve(async (req: Request) => {
         active: c.active,
         updated: c.updated,
         subscription_update: c.features?.subscription_update,
+        subscription_update_products: c.features?.subscription_update?.products,
         subscription_cancel: c.features?.subscription_cancel,
       })),
       subscription: subscription ? {
