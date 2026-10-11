@@ -13,11 +13,34 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body, null, 2), { status, headers: { "Content-Type": "application/json" } });
 }
 
+const STARTER_OVERAGE_PRICE = "price_1UPFiiRz7yITgYqT6TFUnzTS";
+const PRO_OVERAGE_PRICE     = "price_1UPFj8Rz7yITgYqTkrdgjBjK";
+
 Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
   const subscriptionId = url.searchParams.get("subscription_id") ?? "";
+  const fix = url.searchParams.get("fix") === "1";
 
   try {
+    if (fix) {
+      const current = await stripe.billingPortal.configurations.list({
+        limit: 10,
+        expand: ["data.features.subscription_update.products"],
+      } as never);
+      const config = current.data.find(c => c.is_default) ?? current.data[0];
+      // deno-lint-ignore no-explicit-any
+      const products = ((config.features?.subscription_update as any)?.products ?? []).map((p: any) => {
+        if (p.prices.includes(STARTER_OVERAGE_PRICE) || p.prices.includes(PRO_OVERAGE_PRICE)) {
+          return { ...p, adjustable_quantity: { ...p.adjustable_quantity, minimum: 0 } };
+        }
+        return p;
+      });
+      const updated = await stripe.billingPortal.configurations.update(config.id, {
+        features: { subscription_update: { products } },
+      } as never);
+      return json({ fixed: true, config_id: updated.id });
+    }
+
     const configs = await stripe.billingPortal.configurations.list({
       limit: 10,
       expand: ["data.features.subscription_update.products"],
