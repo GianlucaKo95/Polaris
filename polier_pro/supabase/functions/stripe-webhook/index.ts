@@ -63,23 +63,64 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-// Liest Plan + Overage-Menge aus den Subscription-Positionen heraus,
-// indem die Price-IDs gegen die bekannten Env-Variablen verglichen
-// werden — robuster als sich auf eine feste item-Reihenfolge zu
-// verlassen (Stripe garantiert die nicht).
-function planUndOverageAusSubscription(subscription: Stripe.Subscription): { plan: string | null; overageMenge: number } {
+// Liest Basis-Plan + alle Overage-Positionen aus den Subscription-
+// Positionen heraus, indem die Price-IDs gegen die bekannten Env-
+// Variablen verglichen werden — robuster als sich auf eine feste
+// item-Reihenfolge zu verlassen (Stripe garantiert die nicht).
+function subscriptionAnalysieren(subscription: Stripe.Subscription) {
   let plan: string | null = null;
-  let overageMenge = 0;
+  const overageItems: { itemId: string; plan: string; quantity: number }[] = [];
   for (const item of subscription.items.data) {
     const priceId = item.price.id;
     for (const [planKey, envName] of Object.entries(PLAN_PRICE_ENV)) {
       if (priceId === Deno.env.get(envName)) plan = planKey;
     }
     for (const [planKey, envName] of Object.entries(OVERAGE_PRICE_ENV)) {
-      if (priceId === Deno.env.get(envName)) overageMenge = item.quantity ?? 0;
+      if (priceId === Deno.env.get(envName)) overageItems.push({ itemId: item.id, plan: planKey, quantity: item.quantity ?? 0 });
     }
   }
-  return { plan, overageMenge };
+  return { plan, overageItems };
+}
+
+// Korrigiert eine zum aktuellen Basis-Plan nicht passende Overage-
+// Position — kann entstehen, wenn ein Kunde über das Customer Portal
+// zwischen Starter/Pro wechselt: Stripe tauscht dabei nur die Basis-
+// Position aus, eine bereits vorhandene Overage-Position (anderer Preis
+// für zusätzliche Baustellen je Plan, 19€ Starter / 15€ Pro) bleibt
+// unverändert stehen. Ohne diese Korrektur könnte eine Starter-Firma
+// nach einem Wechsel zu Pro und zurück auf dem günstigeren Pro-Preis
+// "hängen bleiben" — oder eine Pro-Firma würde nach einem Downgrade auf
+// Starter weiter zum günstigeren Pro-Preis abgerechnet. Schreibt direkt
+// über die Stripe-API zurück, läuft also unabhängig davon, wie die
+// Fehlzuordnung entstanden ist (Portal-Wechsel oder jeder andere Weg).
+async function overagePositionKorrigieren(plan: string, overageItems: { itemId: string; plan: string; quantity: number }[]): Promise<number> {
+  const passend = overageItems.find(o => o.plan === plan);
+  const unpassend = overageItems.filter(o => o.plan !== plan);
+  let overageMenge = passend?.quantity ?? 0;
+
+  for (const falsch of unpassend) {
+    if (falsch.quantity === 0) {
+      // Nichts zu übernehmen, aber die Position zeigt sonst dauerhaft auf
+      // den falschen Preis — trotzdem auf den passenden umstellen.
+      await stripe.subscriptionItems.update(falsch.itemId, { price: Deno.env.get(OVERAGE_PRICE_ENV[plan]) });
+      continue;
+    }
+    if (passend) {
+      // Menge in der passenden Position zusammenführen, die falsche
+      // Position entfernen statt zwei Positionen für dieselbe Sache zu
+      // behalten.
+      overageMenge = passend.quantity + falsch.quantity;
+      await stripe.subscriptionItems.update(passend.itemId, { quantity: overageMenge });
+      await stripe.subscriptionItems.del(falsch.itemId);
+    } else {
+      // Keine passende Position vorhanden — die falsche direkt auf den
+      // richtigen Preis ummappen, Menge bleibt erhalten.
+      overageMenge = falsch.quantity;
+      await stripe.subscriptionItems.update(falsch.itemId, { price: Deno.env.get(OVERAGE_PRICE_ENV[plan]), quantity: falsch.quantity });
+    }
+  }
+
+  return overageMenge;
 }
 
 // 'trialing'/'incomplete' bewusst nicht auf 'cancelled' gemappt — ein
@@ -102,13 +143,19 @@ function planStatusAusSubscription(status: Stripe.Subscription.Status): string {
 
 async function firmaUeberSubscriptionAktualisieren(subscription: Stripe.Subscription) {
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
-  const { plan, overageMenge } = planUndOverageAusSubscription(subscription);
+  const { plan, overageItems } = subscriptionAnalysieren(subscription);
 
   const update: Record<string, unknown> = {
     stripe_subscription_id: subscription.id,
     plan_status: planStatusAusSubscription(subscription.status),
   };
   if (plan) {
+    // overagePositionKorrigieren schreibt bei einer Fehlzuordnung selbst
+    // über die Stripe-API zurück — das löst hier wiederum ein neues
+    // customer.subscription.updated-Event aus, das dann bereits eine
+    // konsistente Zuordnung vorfindet und ohne weitere Korrektur
+    // terminiert (kein Endlosschleifen-Risiko).
+    const overageMenge = await overagePositionKorrigieren(plan, overageItems);
     update.plan = plan;
     update.max_baustellen = INKLUSIVE_BAUSTELLEN[plan] + overageMenge;
   }
