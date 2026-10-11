@@ -160,6 +160,16 @@ async function firmaUeberSubscriptionAktualisieren(subscription: Stripe.Subscrip
   const update: Record<string, unknown> = {
     stripe_subscription_id: subscription.id,
     plan_status: planStatusAusSubscription(subscription.status),
+    // Eine "Kündigung zum Periodenende" (Customer Portal, Standardfall)
+    // ändert subscription.status NICHT — der bleibt bis zum Laufzeitende
+    // "active", nur cancel_at_period_end/current_period_end zeigen die
+    // bevorstehende Kündigung an. Ohne das hier zu übernehmen, sähe die
+    // Firma in der App bis zum letzten Tag keinerlei Hinweis darauf, dass
+    // ihr Abo endet. plan_ends_at wird wieder null, falls der Kunde die
+    // Kündigung im Portal zurückzieht (cancel_at_period_end dann false).
+    plan_ends_at: subscription.cancel_at_period_end
+      ? new Date(subscription.current_period_end * 1000).toISOString()
+      : null,
   };
   if (plan) {
     // overagePositionKorrigieren schreibt bei einer Fehlzuordnung selbst

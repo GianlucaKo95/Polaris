@@ -234,6 +234,13 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
                   ` · Testphase bis ${new Date(firma.trial_ends_at).toLocaleDateString("de-DE")}`}
               </div>
 
+              {firma.plan_ends_at && (
+                <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:9,
+                  padding:"7px 11px", marginBottom:10, fontSize:12 }}>
+                  Gekündigt — läuft am {new Date(firma.plan_ends_at).toLocaleDateString("de-DE")} aus
+                </div>
+              )}
+
               {firma.stripe_subscription_id ? (
                 <button onClick={() => abrechnungOeffnen("portal")} disabled={abrechnungLaedt !== null}
                   style={{ width:"100%", background:"var(--yellow)", color:"#1a1200", border:"none", borderRadius:8,
