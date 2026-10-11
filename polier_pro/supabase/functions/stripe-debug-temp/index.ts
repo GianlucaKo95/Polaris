@@ -20,8 +20,14 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
   const subscriptionId = url.searchParams.get("subscription_id") ?? "";
   const fix = url.searchParams.get("fix") === "1";
+  const removeItem = url.searchParams.get("remove_item") ?? "";
 
   try {
+    if (removeItem) {
+      const deleted = await stripe.subscriptionItems.del(removeItem);
+      return json({ deleted });
+    }
+
     if (fix) {
       const current = await stripe.billingPortal.configurations.list({
         limit: 10,

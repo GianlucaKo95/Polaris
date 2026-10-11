@@ -94,18 +94,18 @@ function subscriptionAnalysieren(subscription: Stripe.Subscription) {
 // über die Stripe-API zurück, läuft also unabhängig davon, wie die
 // Fehlzuordnung entstanden ist (Portal-Wechsel oder jeder andere Weg).
 //
-// Fehlt die Overage-Position komplett (Regelfall direkt nach dem ersten
-// Checkout — stripe-checkout-session darf sie dort aus Stripe-
-// Validierungsgründen nicht mitschicken, eine Checkout-Zeile mit
-// quantity:0 lehnt Stripe grundsätzlich ab), wird sie hier mit Menge 0
-// nachträglich angehängt. Die Subscription-Items-API erlaubt quantity:0
-// (anders als Checkout-Zeilen) — erst dadurch taucht die Position im
-// Customer Portal überhaupt als anpassbar auf, ohne dass der Kunde beim
-// Checkout ungewollt gleich eine zusätzliche Baustelle mitbezahlt.
-// Scheitert das Anlegen, wird es bewusst verschluckt statt den ganzen
-// Webhook-Durchlauf (inkl. plan/plan_status-Sync) scheitern zu lassen —
-// das nächste Subscription-Event versucht es erneut.
-async function overagePositionKorrigieren(subscriptionId: string, plan: string, overageItems: { itemId: string; plan: string; quantity: number }[]): Promise<number> {
+// Fehlt die Overage-Position komplett (Regelfall: niemand hat bisher eine
+// zusätzliche Baustelle gebucht), wird hier bewusst NICHTS angehängt.
+// Ein früherer Versuch, sie vorsorglich mit Menge 0 anzulegen, ist
+// gescheitert: Stripe erlaubt im Customer Portal für ein mengenanpassbares
+// Produkt keine Mindestmenge von 0 ("This value must be greater than or
+// equal to 1") — eine bei 0 vorab angehängte Position stand damit
+// dauerhaft im Widerspruch zur Portal-Konfiguration und verhinderte dort
+// jede Aktualisierung, nicht nur die der Overage-Menge selbst. Der Kunde
+// fügt die Position bei Bedarf einfach direkt im Customer Portal hinzu
+// (Stripe erlaubt das Hinzufügen eines noch nicht vorhandenen, dafür
+// konfigurierten Produkts) — erst dann existiert sie mit Menge ≥ 1.
+async function overagePositionKorrigieren(plan: string, overageItems: { itemId: string; plan: string; quantity: number }[]): Promise<number> {
   const passend = overageItems.find(o => o.plan === plan);
   const unpassend = overageItems.filter(o => o.plan !== plan);
   let overageMenge = passend?.quantity ?? 0;
@@ -129,18 +129,6 @@ async function overagePositionKorrigieren(subscriptionId: string, plan: string, 
       // richtigen Preis ummappen, Menge bleibt erhalten.
       overageMenge = falsch.quantity;
       await stripe.subscriptionItems.update(falsch.itemId, { price: Deno.env.get(OVERAGE_PRICE_ENV[plan]), quantity: falsch.quantity });
-    }
-  }
-
-  if (!passend && unpassend.length === 0) {
-    try {
-      await stripe.subscriptionItems.create({
-        subscription: subscriptionId,
-        price: Deno.env.get(OVERAGE_PRICE_ENV[plan]),
-        quantity: 0,
-      });
-    } catch {
-      // Verschluckt — siehe Kommentar oben.
     }
   }
 
@@ -179,7 +167,7 @@ async function firmaUeberSubscriptionAktualisieren(subscription: Stripe.Subscrip
     // customer.subscription.updated-Event aus, das dann bereits eine
     // konsistente Zuordnung vorfindet und ohne weitere Korrektur
     // terminiert (kein Endlosschleifen-Risiko).
-    const overageMenge = await overagePositionKorrigieren(subscription.id, plan, overageItems);
+    const overageMenge = await overagePositionKorrigieren(plan, overageItems);
     update.plan = plan;
     update.max_baustellen = INKLUSIVE_BAUSTELLEN[plan] + overageMenge;
   }
