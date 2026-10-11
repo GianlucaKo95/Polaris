@@ -38,6 +38,11 @@ Deno.serve(async (req: Request) => {
       // deno-lint-ignore no-explicit-any
       const base = current.data.find(c => c.is_default) as any;
 
+      const businessProfile: Record<string, string> = {};
+      for (const [k, v] of Object.entries(base.business_profile ?? {})) {
+        if (typeof v === "string" && v !== "") businessProfile[k] = v;
+      }
+
       function productsFor(overagePrice: string, overageProduct: string) {
         return [
           { product: STARTER_PRODUCT, prices: [STARTER_PRICE], adjustable_quantity: { enabled: false } },
@@ -54,7 +59,7 @@ Deno.serve(async (req: Request) => {
       };
 
       const starterConfig = await stripe.billingPortal.configurations.create({
-        business_profile: base.business_profile,
+        business_profile: businessProfile,
         features: {
           ...sharedFeatures,
           subscription_update: {
@@ -66,7 +71,7 @@ Deno.serve(async (req: Request) => {
       } as never);
 
       const proConfig = await stripe.billingPortal.configurations.create({
-        business_profile: base.business_profile,
+        business_profile: businessProfile,
         features: {
           ...sharedFeatures,
           subscription_update: {
