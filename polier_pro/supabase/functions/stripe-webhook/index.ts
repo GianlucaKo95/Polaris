@@ -215,7 +215,18 @@ Deno.serve(async (req: Request) => {
       }
       case "customer.subscription.created":
       case "customer.subscription.updated": {
-        await firmaUeberSubscriptionAktualisieren(event.data.object as Stripe.Subscription);
+        // Bewusst NICHT event.data.object direkt verwenden: Stripe
+        // garantiert keine Zustellung in Entstehungsreihenfolge. Ein
+        // "created"-Event mit Status "incomplete" (Zahlung noch nicht
+        // verbucht) kann nach einem "updated"-Event mit Status "active"
+        // ankommen und den korrekten Stand sonst wieder überschreiben —
+        // genau das ist beim ersten Live-Test passiert (Zahlung bei
+        // Stripe sofort erfolgreich, firmen.plan_status blieb trotzdem auf
+        // "overdue" hängen). Ein frischer Abruf liefert immer den
+        // aktuellen Stand, unabhängig von der Ankunftsreihenfolge.
+        const subscriptionId = (event.data.object as Stripe.Subscription).id;
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        await firmaUeberSubscriptionAktualisieren(subscription);
         break;
       }
       case "customer.subscription.deleted": {
