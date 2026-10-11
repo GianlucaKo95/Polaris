@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { Building2, MapPin, User, Phone, Euro, RefreshCw, Pencil, Plus, CircleX, Trash2, ChevronLeft, ChevronRight, Lock, CreditCard, TriangleAlert } from "lucide-react";
 import { sbClientMitToken, sbSubSpeichern, sbSubLoeschen, sbStripeCheckoutStarten, sbStripePortalOeffnen } from "../lib/supabase.js";
-import { ALLE_GEWERKE, ONBOARDING_KEY, PLAN_CONFIG } from "../config/konstanten.js";
+import { ALLE_GEWERKE, ONBOARDING_KEY, PLAN_CONFIG, PLAN_STATUS_LABEL } from "../config/konstanten.js";
 import { Chip } from "../components/Chip.jsx";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { SwipeToDelete } from "../components/SwipeToDelete.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 
-export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboardingReset, session = null, firmaId = null, firma = null }) {
+export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboardingReset, session = null, firmaId = null, firma = null, projekte = [] }) {
   const [screen, setScreen]     = useState("home"); // home | eigene | subs | subEdit
   const [editSub, setEditSub]   = useState(null);
   const [editOwn, setEditOwn]   = useState(false);
@@ -228,10 +228,26 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
               <div style={{ display:"flex", alignItems:"center", gap:7, fontWeight:700, fontSize:13, marginBottom:8 }}>
                 <CreditCard size={15} />Abo &amp; Abrechnung
               </div>
-              <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10 }}>
+              <div style={{ color:"var(--muted)", fontSize:12, marginBottom:6,
+                display:"flex", alignItems:"center", flexWrap:"wrap", gap:6 }}>
                 Aktueller Plan: <strong style={{ color:"var(--text)" }}>{PLAN_CONFIG[firma.plan]?.label || firma.plan || "—"}</strong>
                 {firma.plan === "trial" && firma.trial_ends_at &&
                   ` · Testphase bis ${new Date(firma.trial_ends_at).toLocaleDateString("de-DE")}`}
+                {firma.plan_status && (() => {
+                  const s = PLAN_STATUS_LABEL[firma.plan_status] || { label: firma.plan_status, farbe:"var(--muted)" };
+                  return (
+                    <span style={{ color:s.farbe, fontWeight:700, fontSize:11,
+                      border:`1px solid ${s.farbe}`, borderRadius:999, padding:"1px 8px" }}>
+                      {s.label}
+                    </span>
+                  );
+                })()}
+              </div>
+
+              <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10 }}>
+                Baustellen genutzt: <strong style={{ color:"var(--text)" }}>
+                  {projekte.length}{firma.max_baustellen != null ? ` / ${firma.max_baustellen}` : " (unbegrenzt)"}
+                </strong>
               </div>
 
               {firma.plan_ends_at && (

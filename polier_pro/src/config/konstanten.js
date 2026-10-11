@@ -245,6 +245,18 @@ export const ALLE_GEWERKE = [
 // Durchsetzung läuft über firmen.max_baustellen (vom Supervisor pro Firma
 // gepflegt) und den projekte_baustellen_limit_pruefen-Trigger in der DB,
 // nicht über diese Konstante. null bei inklusiveBaustellen = unbegrenzt.
+// Werte MÜSSEN exakt zu PlanGuard.jsx passen — das ist die Stelle, die
+// plan_status tatsächlich auswertet und bei "cancelled"/"expired" den
+// Zugriff sperrt. "overdue" ist bewusst NICHT in dieser Sperrliste
+// (realistische Kulanzfrist bei Zahlungsproblemen, bevor der Zugang
+// tatsächlich blockiert wird) — nur Information, kein Blocker.
+export const PLAN_STATUS_LABEL = {
+  active:    { label: "Aktiv",      farbe: "var(--green)" },
+  overdue:   { label: "Überfällig", farbe: "var(--yellow)" },
+  cancelled: { label: "Gekündigt",  farbe: "var(--red)" },
+  expired:   { label: "Abgelaufen", farbe: "var(--red)" },
+};
+
 export const PLAN_CONFIG = {
   trial:      { label:"Testversion", preis:"kostenlos · 14 Tage", farbe:"#64748B", icon:"⏱️",
                 inklusiveBaustellen:null, preisJeWeitere:null },
