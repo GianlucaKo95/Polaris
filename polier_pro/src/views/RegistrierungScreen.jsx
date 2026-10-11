@@ -193,7 +193,7 @@ export function RegistrierungScreen({ auth, onZurueck }) {
             <Label>Plan (nach Testphase)</Label>
             <div style={{ display:"flex", flexDirection:"column", gap:8,
               marginTop:6, marginBottom:14 }}>
-              {Object.entries(PLAN_CONFIG).map(([key, p]) => (
+              {Object.entries(PLAN_CONFIG).filter(([key]) => key !== "enterprise").map(([key, p]) => (
                 <div key={key} style={{ background:"var(--surface2)",
                   borderRadius:12, padding:"9px 16px",
                   border:`1.5px solid ${key === "starter" ? "var(--blue)" : "var(--border)"}`,

@@ -100,10 +100,35 @@ serve(async (req: Request) => {
 
   const { data: firma, error: firmaError } = await admin
     .from("firmen")
-    .select("anthropic_api_key")
+    .select("anthropic_api_key, plan, plan_status, trial_ends_at, gesperrt")
     .eq("id", profil.firma_id)
     .maybeSingle();
-  if (firmaError || !firma?.anthropic_api_key) {
+  if (firmaError || !firma) {
+    return fehlerJSON("Firma nicht gefunden.", 403);
+  }
+
+  // Diese Function läuft komplett über den Service-Role-Client (bypasst
+  // RLS bewusst, siehe Kommentar oben) — eigene_firma_id() greift hier
+  // also NICHT automatisch wie bei normalen Tabellenzugriffen über den
+  // Browser-Client. Dieselben Sperrbedingungen müssen deshalb hier manuell
+  // geprüft werden, sonst könnte eine gesperrte/abgelaufene Firma über die
+  // KI-Funktionen trotzdem weiter auf ihren eigenen Anthropic-Key zugreifen.
+  // "starter" ist zusätzlich (anders als die anderen drei Bedingungen) kein
+  // Zugriffsentzug, sondern ein reines Plan-Feature — siehe PLAN_CONFIG in
+  // src/config/konstanten.js, KI-Funktionen sind dort ab "pro" enthalten.
+  if (firma.gesperrt) {
+    return fehlerJSON("Der Zugang dieser Firma ist gesperrt.", 403);
+  }
+  if (firma.plan === "trial" && firma.trial_ends_at && new Date(firma.trial_ends_at) < new Date()) {
+    return fehlerJSON("Die Testphase ist abgelaufen.", 403);
+  }
+  if (firma.plan_status === "cancelled" || firma.plan_status === "expired") {
+    return fehlerJSON("Das Abo ist nicht mehr aktiv.", 403);
+  }
+  if (firma.plan === "starter") {
+    return fehlerJSON("KI-Funktionen sind ab dem Pro-Plan verfügbar. Bitte den Plan upgraden.", 403);
+  }
+  if (!firma.anthropic_api_key) {
     return fehlerJSON("Für diese Firma ist noch kein Anthropic-API-Key hinterlegt (Unternehmen → Eigenes Unternehmen bearbeiten).", 412);
   }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Crown, UserPlus, TriangleAlert, CircleCheckBig, Building2, Pencil, X, Users, Ban, LockKeyhole } from "lucide-react";
+import { Crown, UserPlus, TriangleAlert, CircleCheckBig, Building2, Pencil, X, Users, Ban, LockKeyhole, HardHat } from "lucide-react";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { PLAN_CONFIG } from "../config/konstanten.js";
@@ -73,17 +73,23 @@ export function SupervisorView({ session }) {
       plan: f.plan, planStatus: f.plan_status,
       trialEndsAt: alsDatumInput(f.trial_ends_at), planEndsAt: alsDatumInput(f.plan_ends_at),
       gesperrt: f.gesperrt,
+      // "" im Eingabefeld = unbegrenzt (wird beim Speichern zum -1-Sentinel
+      // für die RPC) — f.max_baustellen ist bereits null, wenn unbegrenzt.
+      maxBaustellen: f.max_baustellen != null ? String(f.max_baustellen) : "",
     });
   }
 
   async function speichern(firmaId) {
     setSpeichert(true); setFirmenFehler("");
+    const maxBaustellenEingabe = editForm.maxBaustellen.trim();
     const { ok, fehler: f } = await sbSupervisorFirmaAktualisieren(firmaId, {
       plan: editForm.plan,
       planStatus: editForm.planStatus,
       trialEndsAt: editForm.trialEndsAt ? new Date(editForm.trialEndsAt).toISOString() : null,
       planEndsAt: editForm.planEndsAt ? new Date(editForm.planEndsAt).toISOString() : null,
       gesperrt: editForm.gesperrt,
+      // "" (unbegrenzt) -> -1-Sentinel, siehe sbSupervisorFirmaAktualisieren.
+      maxBaustellen: maxBaustellenEingabe === "" ? -1 : Number(maxBaustellenEingabe),
     }, session);
     setSpeichert(false);
     if (!ok) { setFirmenFehler(f); return; }
@@ -192,6 +198,9 @@ export function SupervisorView({ session }) {
                   <span style={{ color:"var(--muted)", fontSize:11, display:"flex", alignItems:"center", gap:3 }}>
                     <Users size={11} />{f.mitarbeiter_anzahl}
                   </span>
+                  <span style={{ color:"var(--muted)", fontSize:11, display:"flex", alignItems:"center", gap:3 }}>
+                    <HardHat size={11} />{f.aktive_baustellen}{f.max_baustellen != null ? ` / ${f.max_baustellen}` : ""}
+                  </span>
                 </div>
               </div>
               <button onClick={() => isEdit ? setEditId(null) : bearbeitenOeffnen(f)}
@@ -214,6 +223,17 @@ export function SupervisorView({ session }) {
                       <option key={k} value={k}>{p.icon} {p.label} — {p.preis}</option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <Label>Max. Baustellen (leer = unbegrenzt)</Label>
+                  <input type="number" min="0" value={editForm.maxBaustellen}
+                    onChange={e => setEditForm(p => ({ ...p, maxBaustellen: e.target.value }))}
+                    placeholder={`z.B. ${PLAN_CONFIG[editForm.plan]?.inklusiveBaustellen ?? "—"} (laut Plan inklusive)`}
+                    style={{ ...inputStyle(), padding:"8px 10px" }} />
+                  <div style={{ color:"var(--muted)", fontSize:11, marginTop:4 }}>
+                    Aktuell {f.aktive_baustellen} aktive Baustellen. Für bezahlte Zusatz-Baustellen
+                    über das Plan-Kontingent hinaus hier die Zahl erhöhen.
+                  </div>
                 </div>
                 <div>
                   <Label>Status</Label>

@@ -1,4 +1,8 @@
-import { Lock, Zap } from "lucide-react";
+import { useState } from "react";
+import { Lock, Zap, TriangleAlert } from "lucide-react";
+import { PLAN_CONFIG } from "../config/konstanten.js";
+import { sbStripeCheckoutStarten } from "../lib/supabase.js";
+import { Spinner } from "../components/Spinner.jsx";
 
 // Nur Administrator/Geschäftsführer können einen Plan wählen oder ein Abo
 // verlängern — ein Facharbeiter, der hier auf "Pro wählen, 99 €/Monat"
@@ -6,8 +10,21 @@ import { Lock, Zap } from "lucide-react";
 // Preise seiner Firma sehen). Die bekommen deshalb nur den Hinweis, sich an
 // ihren Administrator/Geschäftsführer zu wenden, statt der vollen
 // Upgrade-Auswahl.
-export function PlanGuard({ firma, children, ressource, rolle }) {
+export function PlanGuard({ firma, children, ressource, rolle, session }) {
+  const [laedtPlan, setLaedtPlan] = useState(null); // welcher Plan-Key gerade lädt
+  const [fehler,    setFehler]    = useState("");
+
   if (!firma) return children;
+
+  // Startet den Stripe-Checkout für Starter/Pro — Enterprise hat bewusst
+  // keinen Self-Service-Checkout (siehe stripe-checkout-session), dafür
+  // bleibt die mailto-Anfrage.
+  async function planWaehlen(planKey) {
+    setFehler(""); setLaedtPlan(planKey);
+    const { url, fehler: f } = await sbStripeCheckoutStarten(planKey, session);
+    if (!url) { setFehler(f || "Checkout konnte nicht gestartet werden."); setLaedtPlan(null); return; }
+    window.location.href = url;
+  }
 
   const trial_abgelaufen = firma.plan === "trial" &&
     firma.trial_ends_at && new Date(firma.trial_ends_at) < new Date();
@@ -58,8 +75,12 @@ export function PlanGuard({ firma, children, ressource, rolle }) {
       <div style={{ display:"flex", flexDirection:"column", gap:10,
         width:"100%", maxWidth:340 }}>
         {[
-          { key:"starter", label:"Starter",  preis:"49 €/Monat", features:"5 Projekte, 10 Nutzer" },
-          { key:"pro",     label:"Pro",       preis:"99 €/Monat", features:"20 Projekte, 50 Nutzer, API" },
+          { key:"starter",    label:PLAN_CONFIG.starter.label,    preis:PLAN_CONFIG.starter.preis,
+            features:`${PLAN_CONFIG.starter.inklusiveBaustellen} Baustellen inklusive, je weitere ${PLAN_CONFIG.starter.preisJeWeitere}` },
+          { key:"pro",        label:PLAN_CONFIG.pro.label,        preis:PLAN_CONFIG.pro.preis,
+            features:`${PLAN_CONFIG.pro.inklusiveBaustellen} Baustellen inklusive, je weitere ${PLAN_CONFIG.pro.preisJeWeitere}, + KI-Features & Kundenportal` },
+          { key:"enterprise", label:PLAN_CONFIG.enterprise.label, preis:PLAN_CONFIG.enterprise.preis,
+            features:"Unbegrenzte Baustellen, individuelle Vereinbarung" },
         ].map(p => (
           <div key={p.key} style={{ background:"var(--surface)", borderRadius:14,
             padding:"12px 20px", border:`2px solid ${p.key === "pro" ? "var(--yellow)" : "var(--border)"}` }}>
@@ -74,18 +95,32 @@ export function PlanGuard({ firma, children, ressource, rolle }) {
               {p.features}
             </div>
             <button
-              onClick={() => window.location.href = "mailto:support@polaris-app.de?subject=Plan%20Upgrade&body=Ich%20möchte%20auf%20den%20" + p.label + "-Plan%20wechseln."}
+              disabled={laedtPlan !== null}
+              onClick={() => p.key === "enterprise"
+                ? window.location.href = "mailto:support@polaris-app.de?subject=Enterprise-Plan&body=Wir%20interessieren%20uns%20für%20den%20Enterprise-Plan."
+                : planWaehlen(p.key)}
               style={{ width:"100%",
                 background: p.key === "pro" ? "var(--yellow)" : "var(--surface2)",
                 color: p.key === "pro" ? "#1a1200" : "var(--text)",
                 border:"none", borderRadius:10, padding:12, fontWeight:700,
-                cursor:"pointer", fontFamily:"inherit",
+                cursor: laedtPlan !== null ? "default" : "pointer", fontFamily:"inherit",
+                opacity: laedtPlan !== null && laedtPlan !== p.key ? 0.5 : 1,
                 display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-              {p.key === "pro" ? <><Zap size={14} /> Pro wählen</> : "Starter wählen"}
+              {laedtPlan === p.key
+                ? <Spinner size={14} />
+                : p.key === "pro" ? <><Zap size={14} /> Pro wählen</> : `${p.label} wählen`}
             </button>
           </div>
         ))}
       </div>
+
+      {fehler && (
+        <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
+          padding:"9px 14px", marginTop:14, fontSize:12.5, maxWidth:340,
+          display:"flex", alignItems:"center", gap:7 }}>
+          <TriangleAlert size={14} /> {fehler}
+        </div>
+      )}
     </div>
   );
 }

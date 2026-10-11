@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { Building2, MapPin, User, Phone, Euro, RefreshCw, Pencil, Plus, CircleX, Trash2, ChevronLeft, ChevronRight, Lock } from "lucide-react";
-import { sbClientMitToken, sbSubSpeichern, sbSubLoeschen } from "../lib/supabase.js";
-import { ALLE_GEWERKE, ONBOARDING_KEY } from "../config/konstanten.js";
+import { Building2, MapPin, User, Phone, Euro, RefreshCw, Pencil, Plus, CircleX, Trash2, ChevronLeft, ChevronRight, Lock, CreditCard, TriangleAlert } from "lucide-react";
+import { sbClientMitToken, sbSubSpeichern, sbSubLoeschen, sbStripeCheckoutStarten, sbStripePortalOeffnen } from "../lib/supabase.js";
+import { ALLE_GEWERKE, ONBOARDING_KEY, PLAN_CONFIG } from "../config/konstanten.js";
 import { Chip } from "../components/Chip.jsx";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { SwipeToDelete } from "../components/SwipeToDelete.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 
-export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboardingReset, session = null, firmaId = null }) {
+export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboardingReset, session = null, firmaId = null, firma = null }) {
   const [screen, setScreen]     = useState("home"); // home | eigene | subs | subEdit
   const [editSub, setEditSub]   = useState(null);
   const [editOwn, setEditOwn]   = useState(false);
@@ -21,6 +21,21 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
   const [neuerKiKey, setNeuerKiKey] = useState("");
   const [subFehler, setSubFehler] = useState("");
   const [subSpeichert, setSubSpeichert] = useState(false);
+  const [abrechnungLaedt, setAbrechnungLaedt] = useState(null); // "portal" | Plan-Key | null
+  const [abrechnungFehler, setAbrechnungFehler] = useState("");
+
+  // Checkout (Trial → erstes Abo) oder Portal (alles danach: Zahlungsmittel,
+  // Plan wechseln, Overage anpassen, kündigen) — siehe PlanGuard.jsx für
+  // dieselbe Logik, hier zusätzlich auch VOR einer Sperre erreichbar, falls
+  // jemand proaktiv upgraden will statt erst nach Ablauf der Testphase.
+  async function abrechnungOeffnen(planOderPortal) {
+    setAbrechnungFehler(""); setAbrechnungLaedt(planOderPortal);
+    const { url, fehler } = planOderPortal === "portal"
+      ? await sbStripePortalOeffnen(session)
+      : await sbStripeCheckoutStarten(planOderPortal, session);
+    if (!url) { setAbrechnungFehler(fehler || "Konnte nicht geöffnet werden."); setAbrechnungLaedt(null); return; }
+    window.location.href = url;
+  }
 
   async function subLoeschen(id) {
     setSubs(prev => prev.filter(x => x.id !== id));
@@ -200,6 +215,56 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
             <div style={{ color: "var(--yellow)", fontWeight:700, fontSize:16,
               display:"flex", alignItems:"center", gap:7 }}><Building2 size={15} /> Eigenes Unternehmen</div>
           </div>
+
+          {/* Abo & Abrechnung — nur sichtbar, wenn eine echte (nicht Demo-)
+              Firma mit Session geladen ist. Vor dem ersten Checkout:
+              Starter/Pro direkt wählbar (proaktives Upgrade, nicht erst
+              nach Ablauf der Testphase wie in PlanGuard.jsx). Danach nur
+              noch der Portal-Link — alles Weitere (Plan wechseln, Overage
+              anpassen, kündigen) übernimmt Stripe selbst. */}
+          {firma?.id && session && (
+            <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12,
+              padding:14, marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:7, fontWeight:700, fontSize:13, marginBottom:8 }}>
+                <CreditCard size={15} />Abo &amp; Abrechnung
+              </div>
+              <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10 }}>
+                Aktueller Plan: <strong style={{ color:"var(--text)" }}>{PLAN_CONFIG[firma.plan]?.label || firma.plan || "—"}</strong>
+                {firma.plan === "trial" && firma.trial_ends_at &&
+                  ` · Testphase bis ${new Date(firma.trial_ends_at).toLocaleDateString("de-DE")}`}
+              </div>
+
+              {firma.stripe_subscription_id ? (
+                <button onClick={() => abrechnungOeffnen("portal")} disabled={abrechnungLaedt !== null}
+                  style={{ width:"100%", background:"var(--yellow)", color:"#1a1200", border:"none", borderRadius:8,
+                    padding:"9px 16px", cursor: abrechnungLaedt ? "default" : "pointer", fontWeight:700,
+                    fontSize:12.5, fontFamily:"inherit", display:"flex", alignItems:"center",
+                    justifyContent:"center", gap:7 }}>
+                  {abrechnungLaedt === "portal" ? <Spinner size={13} /> : <>Zahlungsmittel, Plan & Kündigung verwalten</>}
+                </button>
+              ) : (
+                <div style={{ display:"flex", gap:8 }}>
+                  {["starter", "pro"].map(k => (
+                    <button key={k} onClick={() => abrechnungOeffnen(k)} disabled={abrechnungLaedt !== null}
+                      style={{ flex:1, background: k === "pro" ? "var(--yellow)" : "var(--surface2)",
+                        color: k === "pro" ? "#1a1200" : "var(--text)",
+                        border:"1px solid var(--border)", borderRadius:8, padding:"9px 10px",
+                        cursor: abrechnungLaedt ? "default" : "pointer", fontWeight:700, fontSize:12.5,
+                        fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                      {abrechnungLaedt === k ? <Spinner size={13} /> : `${PLAN_CONFIG[k].label} wählen — ${PLAN_CONFIG[k].preis}`}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {abrechnungFehler && (
+                <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:8,
+                  padding:"8px 12px", fontSize:11.5, marginTop:9, display:"flex", alignItems:"center", gap:6 }}>
+                  <TriangleAlert size={12} />{abrechnungFehler}
+                </div>
+              )}
+            </div>
+          )}
 
           {[
             ["Firmenname",          "name",              "Bauunternehmen GmbH"],
