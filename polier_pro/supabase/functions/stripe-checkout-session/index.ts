@@ -122,16 +122,19 @@ Deno.serve(async (req: Request) => {
       await admin.from("firmen").update({ stripe_customer_id: customerId }).eq("id", firma.id);
     }
 
+    // Nur die Basis-Position im Checkout — Stripe lehnt eine Checkout-
+    // Session-Zeile mit quantity:0 grundsätzlich ab (auch mit
+    // adjustable_quantity.minimum:0), unabhängig vom Startwert, den der
+    // Kunde später wählen können soll. Die Overage-Position (zusätzliche
+    // Baustellen, zunächst mit Menge 0) hängt stripe-webhook direkt nach
+    // dem Checkout über die Subscription-Items-API an — die erlaubt
+    // quantity:0, nur Checkout-Zeilen nicht. Erst dadurch taucht sie im
+    // Customer Portal überhaupt als anpassbar auf.
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
-      // adjustable_quantity auf der Overage-Position: der Kunde kann die
-      // Anzahl zusätzlicher Baustellen schon beim Checkout selbst wählen,
-      // und später im Customer Portal jederzeit anpassen (siehe
-      // stripe-webhook, das firmen.max_baustellen danach synchron hält).
       line_items: [
         { price: basePriceId, quantity: 1 },
-        { price: overagePriceId, quantity: 0, adjustable_quantity: { enabled: true, minimum: 0, maximum: 100 } },
       ],
       success_url: returnUrl,
       cancel_url: returnUrl,

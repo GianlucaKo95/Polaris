@@ -93,7 +93,19 @@ function subscriptionAnalysieren(subscription: Stripe.Subscription) {
 // Starter weiter zum günstigeren Pro-Preis abgerechnet. Schreibt direkt
 // über die Stripe-API zurück, läuft also unabhängig davon, wie die
 // Fehlzuordnung entstanden ist (Portal-Wechsel oder jeder andere Weg).
-async function overagePositionKorrigieren(plan: string, overageItems: { itemId: string; plan: string; quantity: number }[]): Promise<number> {
+//
+// Fehlt die Overage-Position komplett (Regelfall direkt nach dem ersten
+// Checkout — stripe-checkout-session darf sie dort aus Stripe-
+// Validierungsgründen nicht mitschicken, eine Checkout-Zeile mit
+// quantity:0 lehnt Stripe grundsätzlich ab), wird sie hier mit Menge 0
+// nachträglich angehängt. Die Subscription-Items-API erlaubt quantity:0
+// (anders als Checkout-Zeilen) — erst dadurch taucht die Position im
+// Customer Portal überhaupt als anpassbar auf, ohne dass der Kunde beim
+// Checkout ungewollt gleich eine zusätzliche Baustelle mitbezahlt.
+// Scheitert das Anlegen, wird es bewusst verschluckt statt den ganzen
+// Webhook-Durchlauf (inkl. plan/plan_status-Sync) scheitern zu lassen —
+// das nächste Subscription-Event versucht es erneut.
+async function overagePositionKorrigieren(subscriptionId: string, plan: string, overageItems: { itemId: string; plan: string; quantity: number }[]): Promise<number> {
   const passend = overageItems.find(o => o.plan === plan);
   const unpassend = overageItems.filter(o => o.plan !== plan);
   let overageMenge = passend?.quantity ?? 0;
@@ -117,6 +129,18 @@ async function overagePositionKorrigieren(plan: string, overageItems: { itemId: 
       // richtigen Preis ummappen, Menge bleibt erhalten.
       overageMenge = falsch.quantity;
       await stripe.subscriptionItems.update(falsch.itemId, { price: Deno.env.get(OVERAGE_PRICE_ENV[plan]), quantity: falsch.quantity });
+    }
+  }
+
+  if (!passend && unpassend.length === 0) {
+    try {
+      await stripe.subscriptionItems.create({
+        subscription: subscriptionId,
+        price: Deno.env.get(OVERAGE_PRICE_ENV[plan]),
+        quantity: 0,
+      });
+    } catch {
+      // Verschluckt — siehe Kommentar oben.
     }
   }
 
@@ -155,7 +179,7 @@ async function firmaUeberSubscriptionAktualisieren(subscription: Stripe.Subscrip
     // customer.subscription.updated-Event aus, das dann bereits eine
     // konsistente Zuordnung vorfindet und ohne weitere Korrektur
     // terminiert (kein Endlosschleifen-Risiko).
-    const overageMenge = await overagePositionKorrigieren(plan, overageItems);
+    const overageMenge = await overagePositionKorrigieren(subscription.id, plan, overageItems);
     update.plan = plan;
     update.max_baustellen = INKLUSIVE_BAUSTELLEN[plan] + overageMenge;
   }
