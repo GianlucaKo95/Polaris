@@ -308,6 +308,59 @@ export async function sbKolonneLoeschen(id, session) {
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
+// ── Abwesenheiten (Urlaub/Krankheit) ──
+// firma_id/profile_id/status werden serverseitig per BEFORE-INSERT-Trigger
+// gesetzt/überschrieben (siehe Migration abwesenheiten_urlaub_krankheit) —
+// hier wird nur das geschickt, was der jeweilige Vorgang tatsächlich
+// braucht, der Rest ist ohnehin nicht vertrauenswürdig vom Client.
+export async function sbUrlaubBeantragen({ vonDatum, bisDatum, notiz }, session) {
+  if (!session?.access_token) return { daten: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("abwesenheiten")
+      .insert({ typ: "urlaub", von_datum: vonDatum, bis_datum: bisDatum, notiz: notiz || null })
+      .select();
+    const fehler = sbSchreibfehler(error, data, false);
+    if (fehler) return { daten: null, fehler };
+    return { daten: data?.[0] || null, fehler: null };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbKrankheitErfassen({ profileId, vonDatum, bisDatum, notiz }, session) {
+  if (!session?.access_token || !profileId) return { daten: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("abwesenheiten")
+      .insert({ typ: "krankheit", profile_id: profileId, von_datum: vonDatum, bis_datum: bisDatum, notiz: notiz || null })
+      .select();
+    const fehler = sbSchreibfehler(error, data, false);
+    if (fehler) return { daten: null, fehler };
+    return { daten: data?.[0] || null, fehler: null };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbUrlaubEntscheiden(id, genehmigt, notiz, session) {
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("abwesenheiten")
+      .update({ status: genehmigt ? "genehmigt" : "abgelehnt", notiz: notiz || null })
+      .eq("id", id).select();
+    const fehler = sbSchreibfehler(error, data, true);
+    return { ok: !fehler, fehler };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbAbwesenheitLoeschen(id, session) {
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("abwesenheiten").delete().eq("id", id).select();
+    const fehler = sbSchreibfehler(error, data, true);
+    return { ok: !fehler, fehler };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
 // ── Kundenportal: Bauherren-Freigabe-Link ──
 export async function sbKundenportalLaden(projektId, session) {
   if (!session?.access_token || !projektId) return null;
