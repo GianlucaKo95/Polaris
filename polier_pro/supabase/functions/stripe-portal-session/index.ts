@@ -24,6 +24,18 @@ const SUPABASE_URL      = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 
+// Eine einzige, flache Produktliste im Customer Portal kann nicht danach
+// unterscheiden, ob die Firma aktuell Starter oder Pro hat — eine
+// Starter-Firma würde dort auch "Zusätzliche Baustelle (Pro)" angeboten
+// bekommen (und umgekehrt), obwohl das gar nicht zum aktuellen Plan passt.
+// Deshalb zwei separate Portal-Konfigurationen (je nur mit der zum Plan
+// passenden Overage-Position), zwischen denen hier anhand von firmen.plan
+// gewählt wird, statt die Standard-Konfiguration zu verwenden.
+const PORTAL_CONFIG_ENV: Record<string, string> = {
+  starter: "STRIPE_PORTAL_CONFIG_STARTER",
+  pro:     "STRIPE_PORTAL_CONFIG_PRO",
+};
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin":  "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -65,7 +77,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const { data: firma } = await admin
-    .from("firmen").select("stripe_customer_id").eq("id", profil.firma_id).maybeSingle();
+    .from("firmen").select("stripe_customer_id, plan").eq("id", profil.firma_id).maybeSingle();
   if (!firma?.stripe_customer_id) {
     return json({ error: "Für diese Firma besteht noch kein Abo. Bitte zuerst einen Plan wählen." }, 400);
   }
@@ -73,10 +85,18 @@ Deno.serve(async (req: Request) => {
   const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" });
 
   try {
+    const configEnvName = PORTAL_CONFIG_ENV[firma.plan as string];
+    const configuration = configEnvName ? Deno.env.get(configEnvName) : undefined;
+
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: firma.stripe_customer_id,
       return_url: returnUrl,
       locale: "de",
+      // Fällt auf die Standard-Konfiguration zurück, falls firmen.plan
+      // einen unerwarteten Wert hat oder das Secret noch fehlt — dann gilt
+      // zumindest die zuletzt im Dashboard gespeicherte Konfiguration,
+      // statt die ganze Portal-Session scheitern zu lassen.
+      ...(configuration ? { configuration } : {}),
     });
     return json({ url: portalSession.url });
   } catch (err) {

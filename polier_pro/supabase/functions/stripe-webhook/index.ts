@@ -94,18 +94,18 @@ function subscriptionAnalysieren(subscription: Stripe.Subscription) {
 // über die Stripe-API zurück, läuft also unabhängig davon, wie die
 // Fehlzuordnung entstanden ist (Portal-Wechsel oder jeder andere Weg).
 //
-// Fehlt die Overage-Position komplett (Regelfall direkt nach dem ersten
-// Checkout — stripe-checkout-session darf sie dort aus Stripe-
-// Validierungsgründen nicht mitschicken, eine Checkout-Zeile mit
-// quantity:0 lehnt Stripe grundsätzlich ab), wird sie hier mit Menge 0
-// nachträglich angehängt. Die Subscription-Items-API erlaubt quantity:0
-// (anders als Checkout-Zeilen) — erst dadurch taucht die Position im
-// Customer Portal überhaupt als anpassbar auf, ohne dass der Kunde beim
-// Checkout ungewollt gleich eine zusätzliche Baustelle mitbezahlt.
-// Scheitert das Anlegen, wird es bewusst verschluckt statt den ganzen
-// Webhook-Durchlauf (inkl. plan/plan_status-Sync) scheitern zu lassen —
-// das nächste Subscription-Event versucht es erneut.
-async function overagePositionKorrigieren(subscriptionId: string, plan: string, overageItems: { itemId: string; plan: string; quantity: number }[]): Promise<number> {
+// Fehlt die Overage-Position komplett (Regelfall: niemand hat bisher eine
+// zusätzliche Baustelle gebucht), wird hier bewusst NICHTS angehängt.
+// Ein früherer Versuch, sie vorsorglich mit Menge 0 anzulegen, ist
+// gescheitert: Stripe erlaubt im Customer Portal für ein mengenanpassbares
+// Produkt keine Mindestmenge von 0 ("This value must be greater than or
+// equal to 1") — eine bei 0 vorab angehängte Position stand damit
+// dauerhaft im Widerspruch zur Portal-Konfiguration und verhinderte dort
+// jede Aktualisierung, nicht nur die der Overage-Menge selbst. Der Kunde
+// fügt die Position bei Bedarf einfach direkt im Customer Portal hinzu
+// (Stripe erlaubt das Hinzufügen eines noch nicht vorhandenen, dafür
+// konfigurierten Produkts) — erst dann existiert sie mit Menge ≥ 1.
+async function overagePositionKorrigieren(plan: string, overageItems: { itemId: string; plan: string; quantity: number }[]): Promise<number> {
   const passend = overageItems.find(o => o.plan === plan);
   const unpassend = overageItems.filter(o => o.plan !== plan);
   let overageMenge = passend?.quantity ?? 0;
@@ -129,18 +129,6 @@ async function overagePositionKorrigieren(subscriptionId: string, plan: string, 
       // richtigen Preis ummappen, Menge bleibt erhalten.
       overageMenge = falsch.quantity;
       await stripe.subscriptionItems.update(falsch.itemId, { price: Deno.env.get(OVERAGE_PRICE_ENV[plan]), quantity: falsch.quantity });
-    }
-  }
-
-  if (!passend && unpassend.length === 0) {
-    try {
-      await stripe.subscriptionItems.create({
-        subscription: subscriptionId,
-        price: Deno.env.get(OVERAGE_PRICE_ENV[plan]),
-        quantity: 0,
-      });
-    } catch {
-      // Verschluckt — siehe Kommentar oben.
     }
   }
 
@@ -172,6 +160,20 @@ async function firmaUeberSubscriptionAktualisieren(subscription: Stripe.Subscrip
   const update: Record<string, unknown> = {
     stripe_subscription_id: subscription.id,
     plan_status: planStatusAusSubscription(subscription.status),
+    // Eine "Kündigung zum Periodenende" (Customer Portal, Standardfall)
+    // ändert subscription.status NICHT — der bleibt bis zum Laufzeitende
+    // "active", nur cancel_at_period_end/current_period_end zeigen die
+    // bevorstehende Kündigung an. Ohne das hier zu übernehmen, sähe die
+    // Firma in der App bis zum letzten Tag keinerlei Hinweis darauf, dass
+    // ihr Abo endet. plan_ends_at wird wieder null, falls der Kunde die
+    // Kündigung im Portal zurückzieht (cancel_at_period_end dann false).
+    plan_ends_at: subscription.cancel_at_period_end
+      ? new Date(subscription.current_period_end * 1000).toISOString()
+      : null,
+    // current_period_end ist unabhängig vom Kündigungsstatus immer die
+    // nächste Abrechnung — damit die Firma in der App sieht, wann als
+    // Nächstes abgebucht wird, nicht nur im (selteneren) Kündigungsfall.
+    plan_naechste_abrechnung: new Date(subscription.current_period_end * 1000).toISOString(),
   };
   if (plan) {
     // overagePositionKorrigieren schreibt bei einer Fehlzuordnung selbst
@@ -179,7 +181,7 @@ async function firmaUeberSubscriptionAktualisieren(subscription: Stripe.Subscrip
     // customer.subscription.updated-Event aus, das dann bereits eine
     // konsistente Zuordnung vorfindet und ohne weitere Korrektur
     // terminiert (kein Endlosschleifen-Risiko).
-    const overageMenge = await overagePositionKorrigieren(subscription.id, plan, overageItems);
+    const overageMenge = await overagePositionKorrigieren(plan, overageItems);
     update.plan = plan;
     update.max_baustellen = INKLUSIVE_BAUSTELLEN[plan] + overageMenge;
   }
@@ -215,13 +217,26 @@ Deno.serve(async (req: Request) => {
       }
       case "customer.subscription.created":
       case "customer.subscription.updated": {
-        await firmaUeberSubscriptionAktualisieren(event.data.object as Stripe.Subscription);
+        // Bewusst NICHT event.data.object direkt verwenden: Stripe
+        // garantiert keine Zustellung in Entstehungsreihenfolge. Ein
+        // "created"-Event mit Status "incomplete" (Zahlung noch nicht
+        // verbucht) kann nach einem "updated"-Event mit Status "active"
+        // ankommen und den korrekten Stand sonst wieder überschreiben —
+        // genau das ist beim ersten Live-Test passiert (Zahlung bei
+        // Stripe sofort erfolgreich, firmen.plan_status blieb trotzdem auf
+        // "overdue" hängen). Ein frischer Abruf liefert immer den
+        // aktuellen Stand, unabhängig von der Ankunftsreihenfolge.
+        const subscriptionId = (event.data.object as Stripe.Subscription).id;
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        await firmaUeberSubscriptionAktualisieren(subscription);
         break;
       }
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
-        await admin.from("firmen").update({ plan_status: "cancelled" }).eq("stripe_customer_id", customerId);
+        await admin.from("firmen")
+          .update({ plan_status: "cancelled", plan_naechste_abrechnung: null })
+          .eq("stripe_customer_id", customerId);
         break;
       }
       case "invoice.payment_failed": {
