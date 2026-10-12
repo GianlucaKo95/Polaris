@@ -1,6 +1,6 @@
 name: "Polier Pro"
 description: "Baustellenmanagement fuer Poliere"
-version: "1.47.5"
+version: "1.47.6"
 slug: "polier_pro"
 init: false
 arch:

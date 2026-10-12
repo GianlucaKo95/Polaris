@@ -4,15 +4,40 @@ import { Label, inputStyle } from "../components/Label.jsx";
 import { sbProjektKostenSpeichern } from "../lib/supabase.js";
 import { Spinner } from "../components/Spinner.jsx";
 
+const STANDARD_POSITIONEN = [
+  { id:1, bezeichnung:"Betonarbeiten",    menge:0, einheitspreis:0, budget:0, einheit:"m²" },
+  { id:2, bezeichnung:"Schalung",         menge:0, einheitspreis:0, budget:0, einheit:"m²" },
+  { id:3, bezeichnung:"Bewehrung",        menge:0, einheitspreis:0, budget:0, einheit:"t"  },
+  { id:4, bezeichnung:"Sonstige Arbeit",  menge:0, einheitspreis:0, budget:0, einheit:"h"  },
+  { id:5, bezeichnung:"Material",         budget:0, einheit:"€"  },
+];
+
+// Positionen mit Einheit "€" bleiben direkte Eurobeträge (Material hat
+// keine sinnvolle physische Einheit) — alle anderen werden aus Menge ×
+// Einheitspreis berechnet, budget ist dort immer nur das Ergebnis.
+//
+// Altdaten (vor dieser Änderung gespeichert) hatten nie menge/einheits-
+// preis, nur einen budget-Wert, der fälschlich 1:1 als € behandelt wurde,
+// obwohl daneben z.B. "m²" stand (siehe Bugreport: "120" + "m²" zeigte
+// oben "120 €"). Damit aus einer vorher gespeicherten Zahl keine neue,
+// andere Summe wird, übernehmen wir sie unverändert als menge mit
+// einheitspreis 1 — der Gesamtbetrag bleibt exakt gleich, ist jetzt aber
+// in zwei editierbare Felder aufgeteilt, die der Nutzer korrigieren kann.
+function positionNormalisieren(p) {
+  if (p.einheit === "€") return { ...p, budget: p.budget || 0 };
+  if (p.menge != null || p.einheitspreis != null) {
+    const menge = p.menge || 0, einheitspreis = p.einheitspreis || 0;
+    return { ...p, menge, einheitspreis, budget: menge * einheitspreis };
+  }
+  const menge = p.budget || 0;
+  return { ...p, menge, einheitspreis: 1, budget: menge };
+}
+
 export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, session, onKostenGespeichert }) {
-  const [budgetPos, setBudgetPos] = useState(projekt?.budget_positionen?.length ? projekt.budget_positionen : [
-    { id:1, bezeichnung:"Betonarbeiten",    budget:0, einheit:"m²" },
-    { id:2, bezeichnung:"Schalung",         budget:0, einheit:"m²" },
-    { id:3, bezeichnung:"Bewehrung",        budget:0, einheit:"t"  },
-    { id:4, bezeichnung:"Sonstige Arbeit",  budget:0, einheit:"h"  },
-    { id:5, bezeichnung:"Material",         budget:0, einheit:"€"  },
-  ]);
-  const [editPos, setEditPos] = useState(null);
+  const [budgetPos, setBudgetPos] = useState(
+    (projekt?.budget_positionen?.length ? projekt.budget_positionen : STANDARD_POSITIONEN)
+      .map(positionNormalisieren)
+  );
   const [stundensatz, setStundensatz] = useState(projekt?.stundensatz ?? 55); // €/h Default
   const [speichern, setSpeichern] = useState(false);
   const [gespeichertOk, setGespeichertOk] = useState(false);
@@ -40,6 +65,15 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, session
   const restBudget = budgetGesamt - istGesamt;
   const auslastung = budgetGesamt > 0
     ? Math.min(Math.round(istGesamt/budgetGesamt*100), 100) : 0;
+
+  function positionAendern(i, feld, wert) {
+    setBudgetPos(prev => prev.map((p,j) => {
+      if (j !== i) return p;
+      const neu = { ...p, [feld]: wert };
+      if (neu.einheit !== "€") neu.budget = (neu.menge||0) * (neu.einheitspreis||0);
+      return neu;
+    }));
+  }
 
   // Vorher per Hand mit einer Tausender-Regex + anschließendem
   // .replace(".",",") formatiert — der replace() ersetzt aber nur den
@@ -109,30 +143,58 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, session
       {/* Budget-Positionen */}
       <div style={{ color:"var(--text)", fontWeight:700, fontSize:14,
         marginBottom:7 }}>Budget-Positionen</div>
-      {budgetPos.map((pos,i) => (
-        <div key={pos.id} style={{ background:"var(--surface)", borderRadius:12,
-          padding:"10px 16px", marginBottom:6,
-          border:"1.5px solid var(--border)" }}>
-          <div style={{ display:"flex", justifyContent:"space-between",
-            alignItems:"center", marginBottom:6 }}>
-            <div style={{ color:"var(--text)", fontWeight:600, fontSize:13 }}>
-              {pos.bezeichnung}
+      {budgetPos.map((pos,i) => {
+        const istGeld = pos.einheit === "€";
+        return (
+          <div key={pos.id} style={{ background:"var(--surface)", borderRadius:12,
+            padding:"10px 16px", marginBottom:6,
+            border:"1.5px solid var(--border)" }}>
+            <div style={{ display:"flex", justifyContent:"space-between",
+              alignItems:"center", marginBottom:6 }}>
+              <div style={{ color:"var(--text)", fontWeight:600, fontSize:13 }}>
+                {pos.bezeichnung}
+              </div>
+              <div style={{ color:"var(--yellow)", fontWeight:800, fontSize:14 }}>
+                {(pos.budget||0).toLocaleString("de-DE")} €
+              </div>
             </div>
-            <div style={{ color:"var(--yellow)", fontWeight:800, fontSize:14 }}>
-              {(pos.budget||0).toLocaleString("de-DE")} €
-            </div>
+
+            {istGeld ? (
+              <div style={{ display:"flex", gap:8 }}>
+                <input type="number" value={pos.budget||""}
+                  onChange={e => positionAendern(i, "budget", Number(e.target.value))}
+                  placeholder="0"
+                  style={{ flex:1, minWidth:0, ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
+                <div style={{ color:"var(--muted)", fontSize:12, padding:"8px 0",
+                  flexShrink:0 }}>{pos.einheit}</div>
+              </div>
+            ) : (
+              // Menge × Einheitspreis statt eines einzelnen Felds — vorher
+              // stand neben dem Eingabefeld zwar "m²"/"t"/"h", der Wert
+              // wurde oben aber trotzdem 1:1 als € übernommen (120 m² →
+              // "120 €"). Jetzt rechnet sich das Budget tatsächlich aus
+              // beiden Werten zusammen.
+              <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <input type="number" value={pos.menge||""}
+                    onChange={e => positionAendern(i, "menge", Number(e.target.value))}
+                    placeholder="0"
+                    style={{ width:"100%", ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
+                  <div style={{ color:"var(--muted)", fontSize:10, marginTop:2 }}>Menge ({pos.einheit})</div>
+                </div>
+                <div style={{ color:"var(--muted)", fontSize:13, flexShrink:0, paddingTop:8 }}>×</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <input type="number" value={pos.einheitspreis||""}
+                    onChange={e => positionAendern(i, "einheitspreis", Number(e.target.value))}
+                    placeholder="0"
+                    style={{ width:"100%", ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
+                  <div style={{ color:"var(--muted)", fontSize:10, marginTop:2 }}>€ / {pos.einheit}</div>
+                </div>
+              </div>
+            )}
           </div>
-          <div style={{ display:"flex", gap:8 }}>
-            <input type="number" value={pos.budget||""}
-              onChange={e => setBudgetPos(prev => prev.map((p,j) =>
-                j===i ? { ...p, budget:Number(e.target.value) } : p))}
-              placeholder="0"
-              style={{ flex:1, ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
-            <div style={{ color:"var(--muted)", fontSize:12, padding:"8px 0",
-              flexShrink:0 }}>{pos.einheit}</div>
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
       <button onClick={jetztSpeichern} disabled={speichern}
         style={{ width:"100%", background: "var(--yellow)", color:"#1a1200",
