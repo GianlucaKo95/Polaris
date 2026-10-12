@@ -448,9 +448,23 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
           <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {["starter", "pro", "enterprise"].map(k => {
               const p = PLAN_CONFIG[k];
+              // Solange kein kostenpflichtiger Plan aktiv ist (Trial), wird
+              // Pro als Empfehlung hervorgehoben — sobald die Firma
+              // tatsächlich einen Plan gebucht hat, weicht das der
+              // Markierung des wirklich aktiven Plans.
+              const istAktiv = k === firma.plan;
+              const istEmpfohlen = !["starter", "pro"].includes(firma.plan) && k === "pro";
+              const hervorgehoben = istAktiv || istEmpfohlen;
               return (
                 <div key={k} style={{ background:"var(--surface)", borderRadius:14,
-                  padding:"14px 16px", border:`2px solid ${k === "pro" ? "var(--yellow)" : "var(--border)"}` }}>
+                  padding:"14px 16px", border:`2px solid ${hervorgehoben ? "var(--yellow)" : "var(--border)"}`,
+                  position:"relative" }}>
+                  {hervorgehoben && (
+                    <div style={{ position:"absolute", top:-10, right:16, background:"var(--yellow)",
+                      color:"#1A1200", fontSize:10, fontWeight:800, padding:"3px 10px", borderRadius:999 }}>
+                      {istAktiv ? "DERZEIT AKTIV" : "AM BELIEBTESTEN"}
+                    </div>
+                  )}
                   <div style={{ display:"flex", justifyContent:"space-between",
                     alignItems:"center", marginBottom:10 }}>
                     <div style={{ fontWeight:800, fontSize:16, color:"var(--text)",
