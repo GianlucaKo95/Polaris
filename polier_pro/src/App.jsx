@@ -1301,7 +1301,13 @@ export default function PolierApp() {
             onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}
             zeitbuchungen={zeitbuchungen} projekt={projekt}
             session={auth.session} firmaId={firma?.id} profil={aktiveProfil} />}
-        {tab === "kosten"        && <KostenView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
+        {/* key={projekt?.id}: KostenView hält Budget-Positionen/Stundensatz
+            in lokalem State, initialisiert nur aus dem projekt-Prop beim
+            ersten Mount — ohne key blieb beim Wechsel der Baustelle (ohne
+            Tab-Wechsel weg von "kosten") der Stand der vorherigen Baustelle
+            stehen, "Speichern" hätte dann sogar das falsche Projekt
+            überschrieben. Der key erzwingt einen frischen Mount pro Baustelle. */}
+        {tab === "kosten"        && <KostenView key={projekt?.id} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "stempeln"      && <StempeluhrView profil={aktiveProfil}
             projekte={aktiveProfil?.kolonne_id
               ? projekte.filter(p => (p.kolonnen||[]).some(k => k.id === aktiveProfil.kolonne_id)).length > 0

@@ -41,6 +41,14 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, session
   const auslastung = budgetGesamt > 0
     ? Math.min(Math.round(istGesamt/budgetGesamt*100), 100) : 0;
 
+  // Vorher per Hand mit einer Tausender-Regex + anschließendem
+  // .replace(".",",") formatiert — der replace() ersetzt aber nur den
+  // ERSTEN Punkt im String, bei Beträgen ≥ 1.000 wurde also aus dem
+  // Tausenderpunkt ein Komma (z.B. "12345" → "12,345" statt "12.345"),
+  // bei ≥ 100.000 sogar nur der erste von mehreren Tausenderpunkten.
+  // toLocaleString("de-DE") macht das korrekt, wie bei "Budget gesamt".
+  const euro = n => `${Math.round(n).toLocaleString("de-DE")} €`;
+
   return (
     <div>
       {/* Übersicht */}
@@ -51,9 +59,9 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, session
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10,
           marginBottom:10 }}>
           {[
-            ["Budget gesamt",  `${budgetGesamt.toLocaleString("de-DE")} €`, "var(--text)"],
-            ["Ist bisher",     `${istGesamt.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,".").replace(".",",")} €`, auslastung>80?"var(--red)":"var(--green)"],
-            ["Rest-Budget",    `${restBudget.toFixed(0)} €`, restBudget<0?"var(--red)":"var(--green)"],
+            ["Budget gesamt",  euro(budgetGesamt), "var(--text)"],
+            ["Ist bisher",     euro(istGesamt), auslastung>80?"var(--red)":"var(--green)"],
+            ["Rest-Budget",    euro(restBudget), restBudget<0?"var(--red)":"var(--green)"],
             ["Stunden",        `${stundenGesamt.toFixed(1)} h`, "var(--blue)"],
           ].map(([l,v,c]) => (
             <div key={l} style={{ background:"var(--surface2)", borderRadius:12,
