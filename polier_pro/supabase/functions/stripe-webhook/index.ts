@@ -170,6 +170,10 @@ async function firmaUeberSubscriptionAktualisieren(subscription: Stripe.Subscrip
     plan_ends_at: subscription.cancel_at_period_end
       ? new Date(subscription.current_period_end * 1000).toISOString()
       : null,
+    // current_period_end ist unabhängig vom Kündigungsstatus immer die
+    // nächste Abrechnung — damit die Firma in der App sieht, wann als
+    // Nächstes abgebucht wird, nicht nur im (selteneren) Kündigungsfall.
+    plan_naechste_abrechnung: new Date(subscription.current_period_end * 1000).toISOString(),
   };
   if (plan) {
     // overagePositionKorrigieren schreibt bei einer Fehlzuordnung selbst
@@ -230,7 +234,9 @@ Deno.serve(async (req: Request) => {
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
-        await admin.from("firmen").update({ plan_status: "cancelled" }).eq("stripe_customer_id", customerId);
+        await admin.from("firmen")
+          .update({ plan_status: "cancelled", plan_naechste_abrechnung: null })
+          .eq("stripe_customer_id", customerId);
         break;
       }
       case "invoice.payment_failed": {

@@ -382,11 +382,23 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
               })()}
             </div>
 
-            <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10 }}>
+            <div style={{ color:"var(--muted)", fontSize:12, marginBottom:4 }}>
               Baustellen genutzt: <strong style={{ color:"var(--text)" }}>
                 {projekte.length}{firma.max_baustellen != null ? ` / ${firma.max_baustellen}` : " (unbegrenzt)"}
               </strong>
             </div>
+
+            {/* Nur bei aktivem, nicht gekündigtem Abo — bei einer
+                Kündigung zum Periodenende steht ohnehin derselbe Termin
+                schon im roten Hinweis darunter ("läuft am ... aus"), eine
+                zweite Anzeige desselben Datums wäre redundant. */}
+            {firma.stripe_subscription_id && !firma.plan_ends_at && firma.plan_naechste_abrechnung && (
+              <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10 }}>
+                Nächste Abrechnung: <strong style={{ color:"var(--text)" }}>
+                  {new Date(firma.plan_naechste_abrechnung).toLocaleDateString("de-DE")}
+                </strong>
+              </div>
+            )}
 
             {firma.plan_ends_at && (
               <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:9,
