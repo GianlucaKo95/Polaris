@@ -1,6 +1,6 @@
 import { LockKeyhole, LogOut, Mail } from "lucide-react";
 
-const SUPPORT_MAIL = "support@polaris-app.de";
+const SUPPORT_MAIL = "gk@koeven.de";
 
 // Wird gezeigt, sobald firma.gesperrt true ist (siehe App.jsx — der Lesezugriff
 // auf die eigene firmen-Zeile bleibt laut firmen_eigen-Policy bewusst auch
