@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building2, MapPin, User, Phone, Euro, RefreshCw, Pencil, Plus, CircleX, Trash2, ChevronLeft, ChevronRight, Lock, CreditCard, TriangleAlert } from "lucide-react";
+import { Building2, MapPin, User, Phone, Euro, RefreshCw, Pencil, Plus, CircleX, Trash2, ChevronLeft, ChevronRight, Lock, CreditCard, TriangleAlert, Check } from "lucide-react";
 import { sbClientMitToken, sbSubSpeichern, sbSubLoeschen, sbStripeCheckoutStarten, sbStripePortalOeffnen } from "../lib/supabase.js";
 import { ALLE_GEWERKE, ONBOARDING_KEY, PLAN_CONFIG, PLAN_STATUS_LABEL } from "../config/konstanten.js";
 import { Chip } from "../components/Chip.jsx";
@@ -126,6 +126,36 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
             </div>
           </div>
 
+          {/* Abo & Abrechnung — eigene Karte statt im Formular "Eigenes
+              Unternehmen" versteckt, nur sichtbar, wenn eine echte (nicht
+              Demo-) Firma mit Session geladen ist. */}
+          {firma?.id && session && (
+            <div onClick={() => setScreen("abo")}
+              style={{ background: "var(--surface)", borderRadius:14, padding:"12px 18px", marginBottom:14,
+                border:"1px solid var(--border)", cursor:"pointer" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div>
+                  <div style={{ color: "var(--muted)", fontSize:11, marginBottom:2,
+                    display:"flex", alignItems:"center", gap:4 }}><CreditCard size={11} /> Abo &amp; Abrechnung</div>
+                  <div style={{ color: "var(--text)", fontWeight:700, fontSize:16,
+                    display:"flex", alignItems:"center", gap:7 }}>
+                    {PLAN_CONFIG[firma.plan]?.label || firma.plan || "—"}
+                    {firma.plan_status && firma.plan_status !== "active" && (() => {
+                      const s = PLAN_STATUS_LABEL[firma.plan_status] || { label: firma.plan_status, farbe:"var(--muted)" };
+                      return (
+                        <span style={{ color:s.farbe, fontWeight:700, fontSize:11,
+                          border:`1px solid ${s.farbe}`, borderRadius:999, padding:"1px 8px" }}>
+                          {s.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <div style={{ color: "var(--muted)", display:"flex" }}><ChevronRight size={20} /></div>
+              </div>
+            </div>
+          )}
+
           {/* Subunternehmer */}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:7 }}>
             <div style={{ color: "var(--text)", fontWeight:700 }}>Subunternehmer ({subs.length})</div>
@@ -215,79 +245,6 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
             <div style={{ color: "var(--yellow)", fontWeight:700, fontSize:16,
               display:"flex", alignItems:"center", gap:7 }}><Building2 size={15} /> Eigenes Unternehmen</div>
           </div>
-
-          {/* Abo & Abrechnung — nur sichtbar, wenn eine echte (nicht Demo-)
-              Firma mit Session geladen ist. Vor dem ersten Checkout:
-              Starter/Pro direkt wählbar (proaktives Upgrade, nicht erst
-              nach Ablauf der Testphase wie in PlanGuard.jsx). Danach nur
-              noch der Portal-Link — alles Weitere (Plan wechseln, Overage
-              anpassen, kündigen) übernimmt Stripe selbst. */}
-          {firma?.id && session && (
-            <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12,
-              padding:14, marginBottom:14 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:7, fontWeight:700, fontSize:13, marginBottom:8 }}>
-                <CreditCard size={15} />Abo &amp; Abrechnung
-              </div>
-              <div style={{ color:"var(--muted)", fontSize:12, marginBottom:6,
-                display:"flex", alignItems:"center", flexWrap:"wrap", gap:6 }}>
-                Aktueller Plan: <strong style={{ color:"var(--text)" }}>{PLAN_CONFIG[firma.plan]?.label || firma.plan || "—"}</strong>
-                {firma.plan === "trial" && firma.trial_ends_at &&
-                  ` · Testphase bis ${new Date(firma.trial_ends_at).toLocaleDateString("de-DE")}`}
-                {firma.plan_status && (() => {
-                  const s = PLAN_STATUS_LABEL[firma.plan_status] || { label: firma.plan_status, farbe:"var(--muted)" };
-                  return (
-                    <span style={{ color:s.farbe, fontWeight:700, fontSize:11,
-                      border:`1px solid ${s.farbe}`, borderRadius:999, padding:"1px 8px" }}>
-                      {s.label}
-                    </span>
-                  );
-                })()}
-              </div>
-
-              <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10 }}>
-                Baustellen genutzt: <strong style={{ color:"var(--text)" }}>
-                  {projekte.length}{firma.max_baustellen != null ? ` / ${firma.max_baustellen}` : " (unbegrenzt)"}
-                </strong>
-              </div>
-
-              {firma.plan_ends_at && (
-                <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:9,
-                  padding:"7px 11px", marginBottom:10, fontSize:12 }}>
-                  Gekündigt — läuft am {new Date(firma.plan_ends_at).toLocaleDateString("de-DE")} aus
-                </div>
-              )}
-
-              {firma.stripe_subscription_id ? (
-                <button onClick={() => abrechnungOeffnen("portal")} disabled={abrechnungLaedt !== null}
-                  style={{ width:"100%", background:"var(--yellow)", color:"#1a1200", border:"none", borderRadius:8,
-                    padding:"9px 16px", cursor: abrechnungLaedt ? "default" : "pointer", fontWeight:700,
-                    fontSize:12.5, fontFamily:"inherit", display:"flex", alignItems:"center",
-                    justifyContent:"center", gap:7 }}>
-                  {abrechnungLaedt === "portal" ? <Spinner size={13} /> : <>Zahlungsmittel, Plan & Kündigung verwalten</>}
-                </button>
-              ) : (
-                <div style={{ display:"flex", gap:8 }}>
-                  {["starter", "pro"].map(k => (
-                    <button key={k} onClick={() => abrechnungOeffnen(k)} disabled={abrechnungLaedt !== null}
-                      style={{ flex:1, background: k === "pro" ? "var(--yellow)" : "var(--surface2)",
-                        color: k === "pro" ? "#1a1200" : "var(--text)",
-                        border:"1px solid var(--border)", borderRadius:8, padding:"9px 10px",
-                        cursor: abrechnungLaedt ? "default" : "pointer", fontWeight:700, fontSize:12.5,
-                        fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-                      {abrechnungLaedt === k ? <Spinner size={13} /> : `${PLAN_CONFIG[k].label} wählen — ${PLAN_CONFIG[k].preis}`}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {abrechnungFehler && (
-                <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:8,
-                  padding:"8px 12px", fontSize:11.5, marginTop:9, display:"flex", alignItems:"center", gap:6 }}>
-                  <TriangleAlert size={12} />{abrechnungFehler}
-                </div>
-              )}
-            </div>
-          )}
 
           {[
             ["Firmenname",          "name",              "Bauunternehmen GmbH"],
@@ -385,6 +342,132 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
               display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
             {speichern ? <><Spinner size={14} /> Speichert…</> : "Speichern"}
           </button>
+        </div>
+      )}
+
+      {/* Abo & Abrechnung — eigener Screen statt kompaktem Umschalter im
+          Formular "Eigenes Unternehmen": Status oben (aktueller Plan, ggf.
+          Kündigungshinweis, Baustellen-Nutzung, Portal-/Checkout-Button),
+          darunter die vollständigen Plan-Karten zum Vergleich. Vor dem
+          ersten Checkout sind Starter/Pro direkt wählbar (proaktives
+          Upgrade, nicht erst nach Ablauf der Testphase wie in
+          PlanGuard.jsx). Danach nur noch der Portal-Link — alles Weitere
+          (Plan wechseln, Overage anpassen, kündigen) übernimmt Stripe
+          selbst. */}
+      {screen === "abo" && firma?.id && session && (
+        <div>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+            <button onClick={() => setScreen("home")}
+              style={{ background: "var(--border)", border:"none", color: "var(--text)", borderRadius:8,
+                padding:"6px 10px", cursor:"pointer", display:"flex" }}><ChevronLeft size={16} /></button>
+            <div style={{ color: "var(--yellow)", fontWeight:700, fontSize:16,
+              display:"flex", alignItems:"center", gap:7 }}><CreditCard size={15} /> Abo &amp; Abrechnung</div>
+          </div>
+
+          <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12,
+            padding:14, marginBottom:18 }}>
+            <div style={{ color:"var(--muted)", fontSize:12, marginBottom:6,
+              display:"flex", alignItems:"center", flexWrap:"wrap", gap:6 }}>
+              Aktueller Plan: <strong style={{ color:"var(--text)" }}>{PLAN_CONFIG[firma.plan]?.label || firma.plan || "—"}</strong>
+              {firma.plan === "trial" && firma.trial_ends_at &&
+                ` · Testphase bis ${new Date(firma.trial_ends_at).toLocaleDateString("de-DE")}`}
+              {firma.plan_status && (() => {
+                const s = PLAN_STATUS_LABEL[firma.plan_status] || { label: firma.plan_status, farbe:"var(--muted)" };
+                return (
+                  <span style={{ color:s.farbe, fontWeight:700, fontSize:11,
+                    border:`1px solid ${s.farbe}`, borderRadius:999, padding:"1px 8px" }}>
+                    {s.label}
+                  </span>
+                );
+              })()}
+            </div>
+
+            <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10 }}>
+              Baustellen genutzt: <strong style={{ color:"var(--text)" }}>
+                {projekte.length}{firma.max_baustellen != null ? ` / ${firma.max_baustellen}` : " (unbegrenzt)"}
+              </strong>
+            </div>
+
+            {firma.plan_ends_at && (
+              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:9,
+                padding:"7px 11px", marginBottom:10, fontSize:12 }}>
+                Gekündigt — läuft am {new Date(firma.plan_ends_at).toLocaleDateString("de-DE")} aus
+              </div>
+            )}
+
+            {firma.stripe_subscription_id ? (
+              <button onClick={() => abrechnungOeffnen("portal")} disabled={abrechnungLaedt !== null}
+                style={{ width:"100%", background:"var(--yellow)", color:"#1a1200", border:"none", borderRadius:8,
+                  padding:"9px 16px", cursor: abrechnungLaedt ? "default" : "pointer", fontWeight:700,
+                  fontSize:12.5, fontFamily:"inherit", display:"flex", alignItems:"center",
+                  justifyContent:"center", gap:7 }}>
+                {abrechnungLaedt === "portal" ? <Spinner size={13} /> : <>Zahlungsmittel, Plan & Kündigung verwalten</>}
+              </button>
+            ) : (
+              <div style={{ display:"flex", gap:8 }}>
+                {["starter", "pro"].map(k => (
+                  <button key={k} onClick={() => abrechnungOeffnen(k)} disabled={abrechnungLaedt !== null}
+                    style={{ flex:1, background: k === "pro" ? "var(--yellow)" : "var(--surface2)",
+                      color: k === "pro" ? "#1a1200" : "var(--text)",
+                      border:"1px solid var(--border)", borderRadius:8, padding:"9px 10px",
+                      cursor: abrechnungLaedt ? "default" : "pointer", fontWeight:700, fontSize:12.5,
+                      fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                    {abrechnungLaedt === k ? <Spinner size={13} /> : `${PLAN_CONFIG[k].label} wählen — ${PLAN_CONFIG[k].preis}`}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {abrechnungFehler && (
+              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:8,
+                padding:"8px 12px", fontSize:11.5, marginTop:9, display:"flex", alignItems:"center", gap:6 }}>
+                <TriangleAlert size={12} />{abrechnungFehler}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}>
+            <div style={{ color:"var(--green)", fontSize:12, fontWeight:700,
+              display:"flex", alignItems:"center", gap:6 }}>
+              <Check size={14} /> Keine Mindestlaufzeit, monatlich kündbar
+            </div>
+          </div>
+
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            {["starter", "pro", "enterprise"].map(k => {
+              const p = PLAN_CONFIG[k];
+              return (
+                <div key={k} style={{ background:"var(--surface)", borderRadius:14,
+                  padding:"14px 16px", border:`2px solid ${k === "pro" ? "var(--yellow)" : "var(--border)"}` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between",
+                    alignItems:"center", marginBottom:10 }}>
+                    <div style={{ fontWeight:800, fontSize:16, color:"var(--text)",
+                      display:"flex", alignItems:"center", gap:7 }}>
+                      <span>{p.icon}</span>{p.label}
+                    </div>
+                    <div style={{ fontWeight:700, color:"var(--yellow)", fontSize:13 }}>{p.preis}</div>
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    {p.features.map((f, i) => (
+                      <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:7,
+                        color:"var(--text2)", fontSize:12.5, lineHeight:1.4 }}>
+                        <Check size={13} style={{ color:"var(--green)", marginTop:2, flexShrink:0 }} />
+                        {f}
+                      </div>
+                    ))}
+                  </div>
+                  {k === "enterprise" && (
+                    <button onClick={() => window.location.href = "mailto:support@polaris-app.de?subject=Enterprise-Plan&body=Wir%20interessieren%20uns%20für%20den%20Enterprise-Plan."}
+                      style={{ width:"100%", background:"var(--surface2)", color:"var(--text)",
+                        border:"1px solid var(--border)", borderRadius:8, padding:"9px 10px", marginTop:12,
+                        cursor:"pointer", fontWeight:700, fontSize:12.5, fontFamily:"inherit" }}>
+                      Kontakt aufnehmen
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

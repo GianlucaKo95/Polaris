@@ -257,15 +257,38 @@ export const PLAN_STATUS_LABEL = {
   expired:   { label: "Abgelaufen", farbe: "var(--red)" },
 };
 
+// features: ausführliche Stichpunktliste für die Plan-Vergleichskarten in
+// FirmenView (Abo & Abrechnung) — bildet nur ab, was die Pläne technisch
+// tatsächlich freischalten (KI-Funktionen/Kundenportal ab Pro, siehe
+// ki-proxy/kundenportal_freigabe_plan_pruefen), nichts Zusätzliches.
 export const PLAN_CONFIG = {
   trial:      { label:"Testversion", preis:"kostenlos · 14 Tage", farbe:"#64748B", icon:"⏱️",
                 inklusiveBaustellen:null, preisJeWeitere:null },
   starter:    { label:"Starter",     preis:"59 € / Monat",        farbe:"#2563EB", icon:"🚀",
-                inklusiveBaustellen:3,    preisJeWeitere:"19 € / Monat" },
+                inklusiveBaustellen:3,    preisJeWeitere:"19 € / Monat",
+                features:[
+                  "Baustellenmanagement, Gantt-Planung, Felder/Positionen",
+                  "Bautagebuch",
+                  "Zeiterfassung & Stempeln",
+                  "Kolonnenverwaltung",
+                  "Angebotserstellung",
+                  "3 Baustellen inklusive, je weitere 19 € / Monat",
+                ] },
   pro:        { label:"Pro",         preis:"129 € / Monat",       farbe:"#F5C400", icon:"⚡",
-                inklusiveBaustellen:10,   preisJeWeitere:"15 € / Monat" },
+                inklusiveBaustellen:10,   preisJeWeitere:"15 € / Monat",
+                features:[
+                  "Alles aus Starter",
+                  "KI-Assistent (Fragen zu Baustellen, Terminprognosen, Wetterrisiken)",
+                  "Kundenportal (Kunden sehen Fortschritt live, können Mängel melden)",
+                  "10 Baustellen inklusive, je weitere 15 € / Monat",
+                ] },
   enterprise: { label:"Enterprise",  preis:"ab 349 € / Monat",    farbe:"#7C3AED", icon:"🏢",
-                inklusiveBaustellen:null, preisJeWeitere:null },
+                inklusiveBaustellen:null, preisJeWeitere:null,
+                features:[
+                  "Alles aus Pro",
+                  "Unbegrenzte Baustellen",
+                  "Persönlicher Ansprechpartner, individuelle Vertragskonditionen",
+                ] },
 };
 
 export const ONBOARDING_KEY = "polier_pro_onboarding_done";
