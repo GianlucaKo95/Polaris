@@ -29,7 +29,7 @@ export function WordExportButton({ bericht, projekt, eigeneFirma, wetter, kolonn
         {laedt ? <><Spinner size={13} /> Generiere…</> : <><FileText size={13} /> Generieren</>}
       </button>
 
-      <DocxVorschauModal blob={blob} dateiname={`Bautagebuch_${bericht.datum}.docx`} onClose={() => setBlob(null)} />
+      <DocxVorschauModal blob={blob} dateiname={`Bautagebuch_${bericht.datum}.docx`} eigeneFirma={eigeneFirma} onClose={() => setBlob(null)} />
     </>
   );
 }

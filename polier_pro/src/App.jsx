@@ -1303,7 +1303,7 @@ export default function PolierApp() {
                 : projekte
               : projekte}
             session={auth.session} kolonnen={kolonnen} aufgaben={felder} />}
-        {tab === "stunden"       && <StundenExportView profil={aktiveProfil} session={auth.session} projekte={projekte}
+        {tab === "stunden"       && <StundenExportView profil={aktiveProfil} session={auth.session} projekte={projekte} eigeneFirma={eigeneFirma}
             // darfAlleSehen steuert hier nur die Mitarbeiter-Filter-Anzeige
             // innerhalb der bereits per RLS eingeschränkten Treffermenge —
             // bei Vorarbeiter ist das durch die zeitbuchungen-Policy schon
