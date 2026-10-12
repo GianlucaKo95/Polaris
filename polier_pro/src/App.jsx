@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
-  CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight,
+  CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight, ChevronLeft,
   Building2, Calendar, Euro, CloudSun, ChartColumn, FileText, Settings,
   UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree } from "lucide-react";
 import { useTheme } from "./hooks/useTheme.js";
@@ -1207,16 +1207,22 @@ export default function PolierApp() {
         flexShrink:0, zIndex:60 }}>
         <div style={{ display:"flex", justifyContent:"space-between",
           alignItems:"center", marginBottom:7 }}>
-          <div style={{ minWidth:0, flexShrink:1, overflow:"hidden" }}>
+          {/* Zurück zur Übersicht — bisher gab es dafür keinen Weg in der
+              App selbst (aktivId wurde nirgends außer per Browser-Zurück
+              wieder auf null gesetzt), in einer installierten PWA ganz ohne
+              Browser-Chrome kam man faktisch nie mehr zurück. */}
+          <button onClick={() => { setAktivId(null); setTab("dashboard"); }}
+            style={{ display:"flex", alignItems:"center", gap:4, minWidth:0, flexShrink:1,
+              overflow:"hidden", background:"none", border:"none", padding:0, cursor:"pointer" }}>
+            <ChevronLeft size={18} color="var(--ink-text2)" style={{ flexShrink:0 }} />
             <div style={{ fontWeight:800, fontSize:18, letterSpacing:-0.6,
               color:"#fff", lineHeight:1, whiteSpace:"nowrap" }}>
               <span style={{ color:"var(--yellow)" }}>★</span> POLARIS
             </div>
-          </div>
+          </button>
           <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0 }}>
             <div style={{ width:8, height:8, borderRadius:4, flexShrink:0,
               background: sbConnected ? "#22C55E" : "var(--ink-text2)" }} />
-            <RollenBadge rolle={aktiveRolle} />
             <ThemeToggle dark={theme.dark} toggle={theme.toggle} />
             <button onClick={abmelden}
               style={{ width:34, height:34, flexShrink:0,
