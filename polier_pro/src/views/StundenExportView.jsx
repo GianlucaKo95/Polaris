@@ -1,15 +1,16 @@
 import { useState } from "react";
-import { ChartColumn, Search, Download } from "lucide-react";
+import { ChartColumn, Search, FileSpreadsheet } from "lucide-react";
 import { sbFetch } from "../lib/supabase.js";
 import { TAETIGKEITEN } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
+import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 
 const SPALTEN = [
   { width: 11 }, { width: 20 }, { width: 22 }, { width: 14 }, { width: 8 },
   { width: 8 }, { width: 12 }, { width: 11 }, { width: 26 }, { width: 24 },
 ];
 
-export function StundenExportView({ profil, session, projekte, darfAlleSehen = false }) {
+export function StundenExportView({ profil, session, projekte, eigeneFirma, darfAlleSehen = false }) {
   const [vonDatum, setVonDatum] = useState(() => {
     const d = new Date(); d.setDate(1); // Monatserster
     return d.toISOString().slice(0,10);
@@ -19,6 +20,8 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
   const [buchungen,setBuchungen]= useState([]);
   const [geladen,  setGeladen]  = useState(false);
   const [gewaehlteMA, setGewaehlteMA] = useState("alle");
+  const [vorschauRows, setVorschauRows] = useState(null);
+  const [vorschauDateiname, setVorschauDateiname] = useState("");
 
   async function ladeZeitraum() {
     setLaden(true); setGeladen(false);
@@ -72,7 +75,10 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
   // (Prototype Pollution, ReDoS) und war deshalb keine Option.
   const zelle = (value, extra) => ({ value, ...extra });
 
-  async function exportExcel() {
+  // Baut nur die rows-Struktur (für Vorschau-Tabelle UND writeXlsxFile) —
+  // kein Download hier, das übernimmt ExcelVorschauModal erst auf Klick,
+  // nachdem der Nutzer die Vorschau gesehen hat.
+  function baueRows() {
     const gruppen = new Map();
     for (const b of sichtbareBuchungen) {
       const name = buchungName(b);
@@ -124,15 +130,15 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
       ]);
     }
 
+    return rows;
+  }
+
+  function vorschauOeffnen() {
     const maSuffix = gewaehlteMA !== "alle"
       ? "_" + (mitarbeiterOptionen.find(m => String(m.id) === String(gewaehlteMA))?.name || "MA").replace(/\s+/g, "_")
       : "";
-    // Dynamisch statt statisch importiert: ein Top-Level-Import hätte die
-    // Bibliothek in jeden Seiten-Load eingebunden, obwohl der Stunden-Export
-    // nur gelegentlich genutzt wird.
-    const { default: writeXlsxFile } = await import("write-excel-file/browser");
-    await writeXlsxFile(rows, { columns: SPALTEN })
-      .toFile(`Stunden_${vonDatum}_bis_${bisDatum}${maSuffix}.xlsx`);
+    setVorschauDateiname(`Stunden_${vonDatum}_bis_${bisDatum}${maSuffix}.xlsx`);
+    setVorschauRows(baueRows());
   }
 
   return (
@@ -196,12 +202,12 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
           </div>
 
           {sichtbareBuchungen.length > 0 && (
-            <button onClick={exportExcel}
+            <button onClick={vorschauOeffnen}
               style={{ width:"100%", background:"var(--yellow)", color:"#1a1200",
                 border:"none", borderRadius:12, padding:14, fontWeight:800,
                 fontSize:15, cursor:"pointer", fontFamily:"inherit",
                 marginBottom:16, display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-              <Download size={15} /> Als Excel exportieren
+              <FileSpreadsheet size={15} /> Vorschau & Excel-Export
             </button>
           )}
 
@@ -236,6 +242,9 @@ export function StundenExportView({ profil, session, projekte, darfAlleSehen = f
           })}
         </>
       )}
+
+      <ExcelVorschauModal rows={vorschauRows} columns={SPALTEN} dateiname={vorschauDateiname}
+        eigeneFirma={eigeneFirma} onClose={() => setVorschauRows(null)} />
     </div>
   );
 }

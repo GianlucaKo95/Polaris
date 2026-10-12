@@ -681,7 +681,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
         )}
       </div>
 
-      <DocxVorschauModal blob={wordBlob} dateiname={("Angebot_"+a.titel.replace(/ /g,"_")+".docx")} onClose={() => setWordBlob(null)} />
+      <DocxVorschauModal blob={wordBlob} dateiname={("Angebot_"+a.titel.replace(/ /g,"_")+".docx")} eigeneFirma={eigeneFirma} onClose={() => setWordBlob(null)} />
 
     </div>
   );

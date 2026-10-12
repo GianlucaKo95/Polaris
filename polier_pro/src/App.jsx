@@ -1277,6 +1277,7 @@ export default function PolierApp() {
         {tab === "tagebuch"  && <TagesbuchView
             berichte={berichte} setBerichte={setBerichte} sbConnected={sbConnected}
             projekt={projekt} eigeneFirma={eigeneFirma} kolonnen={kolonnen}
+            zeitbuchungen={zeitbuchungen}
             tagebuchVorlage={tagebuchVorlage}
             offlineSpeichern={offline.speichereOffline}
             aufgaben={felder} setAufgaben={setFelder}
@@ -1302,7 +1303,7 @@ export default function PolierApp() {
                 : projekte
               : projekte}
             session={auth.session} kolonnen={kolonnen} aufgaben={felder} />}
-        {tab === "stunden"       && <StundenExportView profil={aktiveProfil} session={auth.session} projekte={projekte}
+        {tab === "stunden"       && <StundenExportView profil={aktiveProfil} session={auth.session} projekte={projekte} eigeneFirma={eigeneFirma}
             // darfAlleSehen steuert hier nur die Mitarbeiter-Filter-Anzeige
             // innerhalb der bereits per RLS eingeschränkten Treffermenge —
             // bei Vorarbeiter ist das durch die zeitbuchungen-Policy schon
