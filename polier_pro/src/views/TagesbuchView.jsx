@@ -11,7 +11,7 @@ import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
 import { AUFGABEN_STATUS, AUFGABEN_PRIO } from "../config/konstanten.js";
 
-export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eigeneFirma, kolonnen, tagebuchVorlage, offlineSpeichern, aufgaben, setAufgaben, session, onNavigate }) {
+export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eigeneFirma, kolonnen, zeitbuchungen, tagebuchVorlage, offlineSpeichern, aufgaben, setAufgaben, session, onNavigate }) {
   const [open,       setOpen]       = useState(false);
   const [detail,     setDetail]     = useState(null);
   const [form,       setForm]       = useState({ taetigkeit:"", besonderheiten:"", material:"", arbeiter:0, maengel:0 });
@@ -62,6 +62,22 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
       reader.readAsDataURL(file);
     });
     e.target.value = ""; // Reset damit gleiche Datei erneut wählbar
+  }
+
+  // Die Kolonnen-Konfiguration (kolonnen-Prop, Name/Vorarbeiter/Mitarbeiter)
+  // kennt selbst keine Arbeitsstunden — die tatsächlich geleisteten Stunden
+  // pro Kolonne kommen aus der Stempeluhr (zeitbuchungen), eingegrenzt auf
+  // genau den Tag dieses Berichts. Ohne diese Zuordnung blieb "Personal &
+  // Stunden" im Bautagebuch-Export immer leer (k.stunden war nie gesetzt).
+  function kolonnenMitStundenFuerTag(datumIso) {
+    if (!datumIso) return kolonnen || [];
+    return (kolonnen || []).map(k => {
+      const minuten = (zeitbuchungen || [])
+        .filter(z => z.kolonne_id === k.id && z.status === "abgeschlossen"
+          && (z.eingestempelt_at || "").slice(0, 10) === datumIso)
+        .reduce((s, z) => s + (z.netto_minuten || 0), 0);
+      return { ...k, stunden: minuten / 60 };
+    });
   }
 
   function bildEntfernen(i) {
@@ -222,7 +238,8 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
           <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6, alignItems:"flex-start" }}>
             <div style={{ color: "var(--text)", fontWeight:700 }}>{b.datum}</div>
             <div style={{ display:"flex", gap:6, alignItems:"center" }} onClick={e => e.stopPropagation()}>
-              <WordExportButton bericht={b} projekt={projekt} eigeneFirma={eigeneFirma} wetter={b.wetterData || wetter} kolonnen={kolonnen} tagebuchVorlage={tagebuchVorlage} />
+              <WordExportButton bericht={b} projekt={projekt} eigeneFirma={eigeneFirma} wetter={b.wetterData || wetter}
+                kolonnen={kolonnenMitStundenFuerTag(b.datumRaw || b.datum)} tagebuchVorlage={tagebuchVorlage} />
               {b.bilder?.length > 0 && (
                 <div style={{ background: "var(--blue)"+"33", color: "var(--blue)", fontSize:10, padding:"2px 7px", display:"flex", alignItems:"center", gap:3 }}>
                   <Camera size={10} />{b.bilder.length}

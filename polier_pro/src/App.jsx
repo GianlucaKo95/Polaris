@@ -1277,6 +1277,7 @@ export default function PolierApp() {
         {tab === "tagebuch"  && <TagesbuchView
             berichte={berichte} setBerichte={setBerichte} sbConnected={sbConnected}
             projekt={projekt} eigeneFirma={eigeneFirma} kolonnen={kolonnen}
+            zeitbuchungen={zeitbuchungen}
             tagebuchVorlage={tagebuchVorlage}
             offlineSpeichern={offline.speichereOffline}
             aufgaben={felder} setAufgaben={setFelder}
