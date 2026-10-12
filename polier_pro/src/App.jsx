@@ -1382,6 +1382,12 @@ export default function PolierApp() {
               background:"var(--surface)", transform:`translateY(${mehrDragY}px)`,
               transition: mehrDragging ? "none" : "transform 0.25s ease",
               padding:"14px 16px", paddingBottom:"calc(20px + env(safe-area-inset-bottom))" }}>
+            {/* Der sichtbare Griff ist nur 4px hoch — als alleiniges Touch-
+                Ziel auf einem echten Finger (~40-44px) praktisch nicht
+                sicher zu treffen, das Wischen landete also meist neben dem
+                Element und onTouchStart feuerte nie. Die Touch-Handler
+                sitzen jetzt auf einem deutlich größeren, unsichtbaren
+                Bereich darum herum statt direkt auf dem 4px-Strich. */}
             <div
               onTouchStart={e => { mehrDragStartY.current = e.touches[0].clientY; setMehrDragging(true); }}
               onTouchMove={e => {
@@ -1395,8 +1401,10 @@ export default function PolierApp() {
                 mehrDragStartY.current = null;
                 setMehrDragging(false);
               }}
-              style={{ width:40, height:4, background:"rgba(0,0,0,.15)",
-                margin:"0 auto 18px", touchAction:"none" }} />
+              style={{ display:"flex", justifyContent:"center",
+                padding:"12px 0 20px", margin:"-12px 0 -2px", touchAction:"none" }}>
+              <div style={{ width:40, height:4, background:"rgba(0,0,0,.15)" }} />
+            </div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
               <div style={{ color:"var(--text)", fontWeight:800, fontSize:15 }}>Weitere Funktionen</div>
               <button onClick={() => setZeigeMehr(false)}
