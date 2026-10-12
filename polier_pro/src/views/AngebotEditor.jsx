@@ -9,6 +9,7 @@ import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { kiAngebotErstellen } from "../lib/ai.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
+import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
 // seine Bedeutung hängt aber vom Aufgabentyp ab (siehe extraLabel in
@@ -35,6 +36,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [kiFehler,  setKiFehler]  = useState("");
   const [speichertLaedt, setSpeichertLaedt] = useState(false);
   const [wordLaedt, setWordLaedt] = useState(false);
+  const [wordBlob,  setWordBlob]  = useState(null);
 
   // Positions-Rabatt (pro Zeile) wirkt VOR dem Gesamt-Rabatt im
   // Einstellungen-Tab — beide sind unabhängig kombinierbar, ohne dass
@@ -294,11 +296,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
     if (wordLaedt) return;
     setWordLaedt(true);
     try {
-      const blob = await erzeugeAngebotDocx({ angebot: a, projekt, eigeneFirma, angebotVorlage });
-      const url  = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url; link.download = ("Angebot_"+a.titel.replace(/ /g,"_")+".docx");
-      link.click(); URL.revokeObjectURL(url);
+      const neuerBlob = await erzeugeAngebotDocx({ angebot: a, projekt, eigeneFirma, angebotVorlage });
+      setWordBlob(neuerBlob);
     } finally {
       setWordLaedt(false);
     }
@@ -681,6 +680,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
           </div>
         )}
       </div>
+
+      <DocxVorschauModal blob={wordBlob} dateiname={("Angebot_"+a.titel.replace(/ /g,"_")+".docx")} onClose={() => setWordBlob(null)} />
 
     </div>
   );

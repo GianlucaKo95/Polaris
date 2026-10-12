@@ -16,6 +16,23 @@ export async function extrahiereDocxText(file) {
   return result.value || "";
 }
 
+// Wandelt ein selbst erzeugtes .docx (Angebot/Bautagebuch, siehe
+// erzeugeAngebotDocx/erzeugeBerichtDocx) in HTML für die Vorschau vor dem
+// Download um. convertToHtml statt extractRawText (oben) — die Vorschau
+// soll nach einem Word-Dokument aussehen (Absätze, Fett/Kursiv, Tabellen),
+// nicht nach Fließtext ohne Struktur. mammoth bildet dafür nur die
+// tatsächlichen docx-Formatierungselemente auf HTML-Tags ab; reiner
+// Nutzertext aus den Positionen/Berichten landet unverändert als
+// Text-Inhalt dieser Tags — deshalb ist das Ergebnis safe für
+// dangerouslySetInnerHTML, obwohl es z.B. Angebotstexte enthält, die der
+// Nutzer selbst eingegeben hat.
+export async function erzeugeDocxVorschauHtml(blob) {
+  const { default: mammoth } = await import("mammoth");
+  const arrayBuffer = await blob.arrayBuffer();
+  const result = await mammoth.convertToHtml({ arrayBuffer });
+  return result.value || "";
+}
+
 // Wandelt ein per FileReader.readAsDataURL geladenes Firmenlogo (so wird es
 // app-weit gespeichert, siehe OnboardingFlow/FirmenView) in die Bytes um,
 // die die docx-Bibliothek für ein ImageRun braucht.

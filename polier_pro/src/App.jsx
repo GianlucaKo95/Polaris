@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
   CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight,
   Building2, Calendar, Euro, CloudSun, ChartColumn, FileText, Settings,
-  UserCog, RefreshCw, User, Sparkles, FlaskConical, Check } from "lucide-react";
+  UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree } from "lucide-react";
 import { useTheme } from "./hooks/useTheme.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { useBackButton } from "./hooks/useBackButton.js";
@@ -44,6 +44,7 @@ import { AngebotView } from "./views/AngebotView.jsx";
 import { AdminParameterView } from "./views/AdminParameterView.jsx";
 import { NutzerVerwaltungView } from "./views/NutzerVerwaltungView.jsx";
 import { MeinProfilView } from "./views/MeinProfilView.jsx";
+import { AbwesenheitenView } from "./views/AbwesenheitenView.jsx";
 import { PWABanner } from "./components/PWABanner.jsx";
 import { PushBanner } from "./components/PushBanner.jsx";
 
@@ -1163,6 +1164,7 @@ export default function PolierApp() {
     // (Browser/Android) tat das zufällig mit, in einer installierten iOS-PWA
     // ganz ohne Browser-Chrome also faktisch nie.
     { id:"firmen",        icon:"🏢",  label:"Unternehmen", rollen:["administrator"] },
+    { id:"abwesenheiten", icon:"🌴",  label:"Abwesenheit", rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter","facharbeiter"] },
     { id:"profil",        icon:"👤",  label:"Mein Profil", rollen:["geschaeftsfuehrer","bauleiter","polier","vorarbeiter","facharbeiter"] },
   ];
   const TABS = ALLE_TABS.filter(t => !aktiveRolle || t.rollen.includes(aktiveRolle));
@@ -1182,7 +1184,7 @@ export default function PolierApp() {
   const aktivInMehr = mehrTabs.some(t => t.id === tab);
   const TAB_ICONS = { dashboard:LayoutGrid, aufgaben:CircleCheckBig, tagebuch:NotebookPen,
     kolonnen:Users, stempeln:Clock, gantt:Calendar, kosten:Euro, wetter:CloudSun,
-    stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, firmen:Building2, profil:User, ki_frage:Sparkles, simulation:FlaskConical };
+    stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, firmen:Building2, profil:User, ki_frage:Sparkles, simulation:FlaskConical, abwesenheiten:Palmtree };
 
   return (
     // position:fixed auf html/body war der Bug (siehe theme.css) — aber
@@ -1315,6 +1317,7 @@ export default function PolierApp() {
         {tab === "firmen"       && <FirmenView owneFirma={eigeneFirma} setEigeneFirma={setEigeneFirma} subs={subs} setSubs={setSubs}
             onOnboardingReset={() => setOnboardingDone(false)} session={auth.session} firmaId={firma?.id} firma={firma} projekte={projekte} />}
         {tab === "profil"       && <MeinProfilView profil={aktiveProfil} session={auth.session} onProfilAktualisiert={auth.profilAktualisieren} pinPflicht={!!firma?.pin_pflicht} />}
+        {tab === "abwesenheiten" && <AbwesenheitenView session={auth.session} profil={aktiveProfil} />}
       </div>
       </PlanGuard>
 

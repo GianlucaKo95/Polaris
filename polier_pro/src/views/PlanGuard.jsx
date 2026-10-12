@@ -97,7 +97,7 @@ export function PlanGuard({ firma, children, ressource, rolle, session }) {
             <button
               disabled={laedtPlan !== null}
               onClick={() => p.key === "enterprise"
-                ? window.location.href = "mailto:support@polaris-app.de?subject=Enterprise-Plan&body=Wir%20interessieren%20uns%20für%20den%20Enterprise-Plan."
+                ? window.location.href = "mailto:gk@koeven.de?subject=Enterprise-Plan&body=Wir%20interessieren%20uns%20für%20den%20Enterprise-Plan."
                 : planWaehlen(p.key)}
               style={{ width:"100%",
                 background: p.key === "pro" ? "var(--yellow)" : "var(--surface2)",

@@ -483,7 +483,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
                     ))}
                   </div>
                   {k === "enterprise" && (
-                    <button onClick={() => window.location.href = "mailto:support@polaris-app.de?subject=Enterprise-Plan&body=Wir%20interessieren%20uns%20für%20den%20Enterprise-Plan."}
+                    <button onClick={() => window.location.href = "mailto:gk@koeven.de?subject=Enterprise-Plan&body=Wir%20interessieren%20uns%20für%20den%20Enterprise-Plan."}
                       style={{ width:"100%", background:"var(--surface2)", color:"var(--text)",
                         border:"1px solid var(--border)", borderRadius:8, padding:"9px 10px", marginTop:12,
                         cursor:"pointer", fontWeight:700, fontSize:12.5, fontFamily:"inherit" }}>
