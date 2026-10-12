@@ -400,6 +400,22 @@ export const AUFGABEN_TYPEN = {
   mangel:     { label:"Mangel",      icon:"⚠️",  farbe:"#DC2626" },
 };
 
+// zeitbuchungen.taetigkeit trägt entweder einen TAETIGKEITEN-Schlüssel
+// (freie Zeiterfassung ohne Aufgabenbezug: Aufräumen/Transport/
+// Vorbereitung/Sonstiges) oder, wenn die Buchung an eine Aufgabe
+// gekoppelt ist, direkt deren typ — und Aufgaben sind meistens
+// "allgemein" (Standardwert beim Anlegen), das es in TAETIGKEITEN gar
+// nicht gibt. Bisher wurde die Tätigkeit nur bei den fünf gemeinsamen
+// Schlüsseln (Beton/Schalung/Bewehrung/Abdichtung/Estrich) automatisch
+// von der gewählten Aufgabe übernommen, beim weit häufigeren "allgemein"
+// blieb sie dem Nutzer überlassen — in der Praxis matchte die erfasste
+// Tätigkeit dadurch kaum je zur tatsächlichen Aufgabe. Diese Hilfsfunktion
+// löst beide Schlüsselräume einheitlich auf, statt sie künstlich
+// deckungsgleich zu halten.
+export function taetigkeitAnzeige(key) {
+  return TAETIGKEITEN[key] || AUFGABEN_TYPEN[key] || null;
+}
+
 export const AUFGABEN_STATUS = {
   offen:         { label:"Offen",       icon:"○",  farbe:"#64748B", bg:"var(--surface2)" },
   in_arbeit:     { label:"In Arbeit",   icon:"◑",  farbe:"#F5C400", bg:"var(--ybg)" },

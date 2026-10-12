@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChartColumn, Search, FileSpreadsheet } from "lucide-react";
 import { sbFetch } from "../lib/supabase.js";
-import { TAETIGKEITEN } from "../config/konstanten.js";
+import { taetigkeitAnzeige } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 
@@ -104,7 +104,7 @@ export function StundenExportView({ profil, session, projekte, eigeneFirma, darf
           zelle(von.toLocaleDateString("de-DE"), { type: String }),
           zelle(name, { type: String }),
           zelle(projektName(b.projekt_id), { type: String }),
-          zelle(TAETIGKEITEN[b.taetigkeit]?.label || "—", { type: String }),
+          zelle(taetigkeitAnzeige(b.taetigkeit)?.label || "—", { type: String }),
           zelle(von.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}), { type: String }),
           zelle(bis ? bis.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) : "—", { type: String }),
           zelle(b.pause_minuten || 0, { type: Number }),
@@ -230,7 +230,7 @@ export function StundenExportView({ profil, session, projekte, eigeneFirma, darf
                     </div>
                     <div style={{ color:"var(--muted)", fontSize:11, marginTop:2 }}>
                       {projektName(b.projekt_id)}
-                      {b.taetigkeit && ` · ${TAETIGKEITEN[b.taetigkeit]?.icon} ${TAETIGKEITEN[b.taetigkeit]?.label}`}
+                      {b.taetigkeit && ` · ${taetigkeitAnzeige(b.taetigkeit)?.icon} ${taetigkeitAnzeige(b.taetigkeit)?.label}`}
                     </div>
                   </div>
                   <div style={{ color:"var(--text)", fontWeight:700, fontSize:13 }}>
