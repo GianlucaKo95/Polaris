@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { RefreshCw, Info, CircleX, Plus } from "lucide-react";
 import { ERFASST_PROXY, erfasstQuery } from "../lib/erfasst.js";
 import { sbFetch } from "../lib/supabase.js";
-import { TAETIGKEITEN } from "../config/konstanten.js";
+import { taetigkeitAnzeige } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { KolonneKarte } from "../components/KolonneKarte.jsx";
 
@@ -19,7 +19,7 @@ function alsZeitEintrag(b) {
     hours:    Math.floor(minuten / 60),
     minutes:  minuten % 60,
     date:     b.eingestempelt_at,
-    activity: b.taetigkeit ? { name: TAETIGKEITEN[b.taetigkeit]?.label || b.taetigkeit } : null,
+    activity: b.taetigkeit ? { name: taetigkeitAnzeige(b.taetigkeit)?.label || b.taetigkeit } : null,
     note:     b.notiz || "",
   };
 }

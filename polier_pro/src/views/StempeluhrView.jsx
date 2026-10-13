@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Play, Pause, Square, Check, MapPin, Users, SatelliteDish, Clock3 } from "lucide-react";
-import { ROLLEN, TAETIGKEITEN } from "../config/konstanten.js";
+import { ROLLEN, TAETIGKEITEN, taetigkeitAnzeige } from "../config/konstanten.js";
 import { KolonnenSammelstempel } from "./KolonnenSammelstempel.jsx";
 import { sbFetch } from "../lib/supabase.js";
 import { getGPSPosition, reverseGeocode, geocodeAdresse, haversineMeters } from "../lib/geo.js";
@@ -401,7 +401,7 @@ export function StempeluhrView({ profil, projekte, session, kolonnen = [], aufga
                   background:"var(--ink)", color:"#fff", padding:"10px 14px",
                   cursor:"pointer", marginTop:6 }}>
                 <span style={{ fontSize:12.5, fontWeight:700 }}>
-                  {TAETIGKEITEN[taetigkeit]?.icon} {TAETIGKEITEN[taetigkeit]?.label}
+                  {taetigkeitAnzeige(taetigkeit)?.icon} {taetigkeitAnzeige(taetigkeit)?.label}
                   <span style={{ fontWeight:500, color:"var(--ink-text2)", marginLeft:7 }}>
                     · von Aufgabe übernommen
                   </span>
@@ -431,13 +431,14 @@ export function StempeluhrView({ profil, projekte, session, kolonnen = [], aufga
                   const id = e.target.value ? Number(e.target.value) : null;
                   setAufgabeId(id);
                   const gewaehlte = offeneAufgaben.find(a => a.id === id);
-                  // Aufgaben- und Tätigkeitstypen teilen sich dieselben
-                  // Schlüssel für Beton/Schalung/Bewehrung/Abdichtung/Estrich
-                  // (TAETIGKEITEN hat zusätzlich Aufräumen/Transport/
-                  // Vorarbeit/Sonstiges, AUFGABEN_TYPEN zusätzlich Allgemein/
-                  // Mangel) — nur bei einem gemeinsamen Schlüssel automatisch
-                  // übernehmen, sonst bleibt die Auswahl dem Nutzer überlassen.
-                  if (gewaehlte && TAETIGKEITEN[gewaehlte.typ]) {
+                  // Tätigkeit immer vom typ der gewählten Aufgabe übernehmen
+                  // — auch "allgemein"/"mangel", die es in TAETIGKEITEN gar
+                  // nicht gibt (taetigkeitAnzeige() löst beide Schlüsselräume
+                  // beim Anzeigen einheitlich auf). Vorher wurde nur bei den
+                  // fünf gemeinsamen Schlüsseln automatisch übernommen, beim
+                  // weit häufigeren "allgemein" blieb die Tätigkeit dem
+                  // Nutzer überlassen und matchte dadurch kaum je zur Aufgabe.
+                  if (gewaehlte) {
                     setTaetigkeit(gewaehlte.typ);
                     setTaetigkeitEingeklappt(true);
                   } else {
@@ -477,7 +478,7 @@ export function StempeluhrView({ profil, projekte, session, kolonnen = [], aufga
           {aktiveBuchung.taetigkeit && (
             <div style={{ color:"var(--ydark)", fontSize:12, marginTop:4,
               fontWeight:600 }}>
-              {TAETIGKEITEN[aktiveBuchung.taetigkeit]?.icon} {TAETIGKEITEN[aktiveBuchung.taetigkeit]?.label}
+              {taetigkeitAnzeige(aktiveBuchung.taetigkeit)?.icon} {taetigkeitAnzeige(aktiveBuchung.taetigkeit)?.label}
             </div>
           )}
           {aktiveBuchung.ein_adresse && (
@@ -564,7 +565,7 @@ export function StempeluhrView({ profil, projekte, session, kolonnen = [], aufga
                 {b.ein_adresse && <div style={{ fontSize:10, color:"var(--muted)", marginTop:2 }}>{b.ein_adresse}</div>}
                 {b.taetigkeit && (
                   <div style={{ fontSize:10, color:"var(--ydark)", marginTop:2, fontWeight:600 }}>
-                    {TAETIGKEITEN[b.taetigkeit]?.icon} {TAETIGKEITEN[b.taetigkeit]?.label}
+                    {taetigkeitAnzeige(b.taetigkeit)?.icon} {taetigkeitAnzeige(b.taetigkeit)?.label}
                   </div>
                 )}
               </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
-  CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight,
+  CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight, ChevronLeft,
   Building2, Calendar, Euro, CloudSun, ChartColumn, FileText, Settings,
   UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree } from "lucide-react";
 import { useTheme } from "./hooks/useTheme.js";
@@ -1207,16 +1207,22 @@ export default function PolierApp() {
         flexShrink:0, zIndex:60 }}>
         <div style={{ display:"flex", justifyContent:"space-between",
           alignItems:"center", marginBottom:7 }}>
-          <div style={{ minWidth:0, flexShrink:1, overflow:"hidden" }}>
+          {/* Zurück zur Übersicht — bisher gab es dafür keinen Weg in der
+              App selbst (aktivId wurde nirgends außer per Browser-Zurück
+              wieder auf null gesetzt), in einer installierten PWA ganz ohne
+              Browser-Chrome kam man faktisch nie mehr zurück. */}
+          <button onClick={() => { setAktivId(null); setTab("dashboard"); }}
+            style={{ display:"flex", alignItems:"center", gap:4, minWidth:0, flexShrink:1,
+              overflow:"hidden", background:"none", border:"none", padding:0, cursor:"pointer" }}>
+            <ChevronLeft size={18} color="var(--ink-text2)" style={{ flexShrink:0 }} />
             <div style={{ fontWeight:800, fontSize:18, letterSpacing:-0.6,
               color:"#fff", lineHeight:1, whiteSpace:"nowrap" }}>
               <span style={{ color:"var(--yellow)" }}>★</span> POLARIS
             </div>
-          </div>
+          </button>
           <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0 }}>
             <div style={{ width:8, height:8, borderRadius:4, flexShrink:0,
               background: sbConnected ? "#22C55E" : "var(--ink-text2)" }} />
-            <RollenBadge rolle={aktiveRolle} />
             <ThemeToggle dark={theme.dark} toggle={theme.toggle} />
             <button onClick={abmelden}
               style={{ width:34, height:34, flexShrink:0,
@@ -1295,7 +1301,13 @@ export default function PolierApp() {
             onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}
             zeitbuchungen={zeitbuchungen} projekt={projekt}
             session={auth.session} firmaId={firma?.id} profil={aktiveProfil} />}
-        {tab === "kosten"        && <KostenView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
+        {/* key={projekt?.id}: KostenView hält Budget-Positionen/Stundensatz
+            in lokalem State, initialisiert nur aus dem projekt-Prop beim
+            ersten Mount — ohne key blieb beim Wechsel der Baustelle (ohne
+            Tab-Wechsel weg von "kosten") der Stand der vorherigen Baustelle
+            stehen, "Speichern" hätte dann sogar das falsche Projekt
+            überschrieben. Der key erzwingt einen frischen Mount pro Baustelle. */}
+        {tab === "kosten"        && <KostenView key={projekt?.id} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "stempeln"      && <StempeluhrView profil={aktiveProfil}
             projekte={aktiveProfil?.kolonne_id
               ? projekte.filter(p => (p.kolonnen||[]).some(k => k.id === aktiveProfil.kolonne_id)).length > 0
@@ -1370,6 +1382,12 @@ export default function PolierApp() {
               background:"var(--surface)", transform:`translateY(${mehrDragY}px)`,
               transition: mehrDragging ? "none" : "transform 0.25s ease",
               padding:"14px 16px", paddingBottom:"calc(20px + env(safe-area-inset-bottom))" }}>
+            {/* Der sichtbare Griff ist nur 4px hoch — als alleiniges Touch-
+                Ziel auf einem echten Finger (~40-44px) praktisch nicht
+                sicher zu treffen, das Wischen landete also meist neben dem
+                Element und onTouchStart feuerte nie. Die Touch-Handler
+                sitzen jetzt auf einem deutlich größeren, unsichtbaren
+                Bereich darum herum statt direkt auf dem 4px-Strich. */}
             <div
               onTouchStart={e => { mehrDragStartY.current = e.touches[0].clientY; setMehrDragging(true); }}
               onTouchMove={e => {
@@ -1383,8 +1401,10 @@ export default function PolierApp() {
                 mehrDragStartY.current = null;
                 setMehrDragging(false);
               }}
-              style={{ width:40, height:4, background:"rgba(0,0,0,.15)",
-                margin:"0 auto 18px", touchAction:"none" }} />
+              style={{ display:"flex", justifyContent:"center",
+                padding:"12px 0 20px", margin:"-12px 0 -2px", touchAction:"none" }}>
+              <div style={{ width:40, height:4, background:"rgba(0,0,0,.15)" }} />
+            </div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
               <div style={{ color:"var(--text)", fontWeight:800, fontSize:15 }}>Weitere Funktionen</div>
               <button onClick={() => setZeigeMehr(false)}

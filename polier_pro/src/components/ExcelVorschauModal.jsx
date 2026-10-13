@@ -23,44 +23,45 @@ export function ExcelVorschauModal({ rows, columns, dateiname, eigeneFirma, onCl
     }
   }
 
-  const gesamtBreite = (columns || []).reduce((s, c) => s + (c.width || 10), 0) || 1;
-
   return (
     <VorschauModal offen={offen} titel={dateiname} Icon={FileSpreadsheet} eigeneFirma={eigeneFirma}
       onClose={onClose} letterhead downloadLabel={laedt ? "Wird erzeugt…" : "Als Excel herunterladen"}
       onDownload={herunterladen}>
-      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
-        {columns?.length > 0 && (
-          <colgroup>
-            {columns.map((c, i) => (
-              <col key={i} style={{ width: `${((c.width || 10) / gesamtBreite) * 100}%` }} />
-            ))}
-          </colgroup>
-        )}
-        <tbody>
-          {(rows || []).map((zeile, i) => {
-            const zellen = zeile.filter(Boolean);
-            if (zellen.length === 0) {
-              return <tr key={i}><td style={{ padding: "6px 0" }}>&nbsp;</td></tr>;
-            }
-            return (
-              <tr key={i}>
-                {zellen.map((z, j) => (
-                  <td key={j} colSpan={z.columnSpan || 1}
-                    style={{
-                      border: "1px solid #ddd", padding: "5px 8px",
-                      fontWeight: z.fontWeight === "bold" ? 700 : 400,
-                      textAlign: z.type === Number ? "right" : "left",
-                      whiteSpace: "nowrap",
-                    }}>
-                    {z.type === Number && typeof z.value === "number" ? z.value.toLocaleString("de-DE") : String(z.value ?? "")}
-                  </td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      {/* Die Tabelle hat 10 Spalten mit teils langem Freitext (Projekt,
+          Adresse, Notiz) — auf Handybreite passt das nie nebeneinander.
+          Eigener Scroll-Container statt feste %-Spaltenbreiten: table-layout
+          bleibt "auto", also bestimmt ohnehin der Inhalt (whiteSpace:nowrap)
+          die tatsächliche Breite, %-Breiten auf <col> würden dagegen nur bei
+          table-layout:fixed greifen und hier nichts bewirken. So bleibt die
+          Tabelle vollständig sichtbar, nur eben seitlich scrollbar statt
+          rechts einfach abgeschnitten. */}
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", maxWidth: "100%" }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 12.5 }}>
+          <tbody>
+            {(rows || []).map((zeile, i) => {
+              const zellen = zeile.filter(Boolean);
+              if (zellen.length === 0) {
+                return <tr key={i}><td style={{ padding: "6px 0" }}>&nbsp;</td></tr>;
+              }
+              return (
+                <tr key={i}>
+                  {zellen.map((z, j) => (
+                    <td key={j} colSpan={z.columnSpan || 1}
+                      style={{
+                        border: "1px solid #ddd", padding: "5px 8px",
+                        fontWeight: z.fontWeight === "bold" ? 700 : 400,
+                        textAlign: z.type === Number ? "right" : "left",
+                        whiteSpace: "nowrap",
+                      }}>
+                      {z.type === Number && typeof z.value === "number" ? z.value.toLocaleString("de-DE") : String(z.value ?? "")}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </VorschauModal>
   );
 }

@@ -226,12 +226,18 @@ export function SimulationView({ aufgaben = [], kolonnen = [], projekt, projekte
 
       {modus === "wetter" && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
-          <div>
+          {/* minWidth:0 auf beiden Spalten — ein <input type="date"> hat auf
+              iOS/Safari eine native Mindestbreite, die größer sein kann als
+              die halbe Spaltenbreite auf schmalen Handys. Ohne minWidth:0
+              bleibt ein Grid-Kind (per Spec min-width:auto) mindestens so
+              breit wie sein Inhalt, sprengt dadurch die 1fr-Spalte und
+              schiebt "Anzahl Tage" sichtbar daneben/darunter. */}
+          <div style={{ minWidth:0 }}>
             <Label>Regen ab</Label>
             <input type="date" value={wetterStart} onChange={e => setWetterStart(e.target.value)}
               style={inputStyle()} />
           </div>
-          <div>
+          <div style={{ minWidth:0 }}>
             <Label>Anzahl Tage</Label>
             <input type="number" min="1" value={wetterTage} onChange={e => setWetterTage(e.target.value)} style={inputStyle()} />
           </div>
