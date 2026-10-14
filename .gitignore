@@ -31,3 +31,21 @@ Thumbs.db
 # Temp
 *.tmp
 *.temp
+
+# Capacitor native projects (android/ und ios/ selbst werden committet, nur
+# lokale Build-Artefakte und maschinenspezifische Dateien nicht) — public/
+# ist die von "npx cap sync" aus dist/ kopierte Web-App, kein Quellcode,
+# wird vor jedem nativen Build automatisch neu erzeugt (siehe package.json
+# cap:sync/android:open/ios:open).
+polier_pro/android/app/src/main/assets/public/
+polier_pro/ios/App/App/public/
+polier_pro/android/app/build/
+polier_pro/android/capacitor-cordova-android-plugins/build/
+polier_pro/android/.gradle/
+polier_pro/android/local.properties
+polier_pro/ios/App/build/
+polier_pro/ios/App/Pods/
+polier_pro/ios/App/App.xcworkspace/xcuserdata/
+polier_pro/ios/App/App.xcodeproj/xcuserdata/
+polier_pro/ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
+polier_pro/ios/App/DerivedData/
