@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
   CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight, ChevronLeft,
   Building2, Calendar, Euro, CloudSun, ChartColumn, FileText, Settings,
-  UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree } from "lucide-react";
+  UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree, Archive } from "lucide-react";
 import { useTheme } from "./hooks/useTheme.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { useBackButton } from "./hooks/useBackButton.js";
@@ -37,6 +37,8 @@ import { KolonnenView } from "./views/KolonnenView.jsx";
 import { TagesbuchView } from "./views/TagesbuchView.jsx";
 import { AufgabenView } from "./views/AufgabenView.jsx";
 import { KiFrageView } from "./views/KiFrageView.jsx";
+import { BaustellenAbschlussView } from "./views/BaustellenAbschlussView.jsx";
+import { ArchivView } from "./views/ArchivView.jsx";
 import { SimulationView } from "./views/SimulationView.jsx";
 import { KostenView } from "./views/KostenView.jsx";
 import { StundenExportView } from "./views/StundenExportView.jsx";
@@ -623,6 +625,21 @@ export default function PolierApp() {
     setProjekte(prev => prev.map(p => p.id===id ? { ...p, ...changes } : p));
   }
 
+  // Aus dem Archiv heraus eine abgeschlossene Baustelle öffnen — die liegt
+  // (anders als aktive Baustellen) nicht schon im projekte-State, weil die
+  // Hauptabfrage oben bewusst nur archiviert=false lädt. Komplette Zeile
+  // einmalig nachladen und einhängen, statt einen zweiten, parallelen
+  // "aktives Projekt"-Mechanismus zu bauen.
+  async function archivProjektOeffnen(id) {
+    if (!projekte.find(p => p.id === id)) {
+      const client = sbClientMitToken(auth.session);
+      const { data } = await client.from("projekte").select("*").eq("id", id).single();
+      if (data) setProjekte(prev => [...prev, data]);
+    }
+    setAktivId(id);
+    setTab("abschluss");
+  }
+
 
   const felder    = aktProjektAufgaben;
   const berichte  = aktProjektBerichte;
@@ -861,7 +878,11 @@ export default function PolierApp() {
     // (andere Stellen wie der Stempeln-Tab verlassen sich auf projekte[0]
     // als Default-Auswahl). .sort() ist stabil, "zuletzt" behält also die
     // von Supabase gelieferte created_at.desc-Reihenfolge einfach bei.
-    const projekteSortiert = [...projekte].sort((a, b) => {
+    // Archivierte Baustellen (siehe archivProjektOeffnen) können in diesem
+    // selben projekte-Array landen, sobald man sie aus dem Archiv öffnet —
+    // hier trotzdem ausblenden, die gehören in den Archiv-Tab, nicht in
+    // "Meine Baustellen".
+    const projekteSortiert = [...projekte].filter(p => !p.archiviert).sort((a, b) => {
       if (projektSort === "name")   return (a.name||"").localeCompare(b.name||"", "de");
       if (projektSort === "nummer") return (a.projektnummer||"").localeCompare(b.projektnummer||"", "de", { numeric:true });
       return 0;
@@ -931,7 +952,7 @@ export default function PolierApp() {
                 App.jsx ("Der Supervisor soll Zugriff auf keine Unternehmen
                 haben, nur diese Fenster sehen"). */}
             <div style={{ display:"flex", gap:22, marginTop:18 }}>
-              {[["projekte","Baustellen"],["firmen","Unternehmen"]]
+              {[["projekte","Baustellen"],["firmen","Unternehmen"],["archiv","Archiv"]]
                 .map(([id,label]) => (
                 <button key={id} onClick={() => setHomeTab(id)}
                   style={{ background:"none", border:"none", cursor:"pointer",
@@ -1089,6 +1110,10 @@ export default function PolierApp() {
               </>
             )}
 
+            {homeTab === "archiv" && (
+              <ArchivView firmaId={firma?.id} session={auth.session} onOeffnen={archivProjektOeffnen} />
+            )}
+
             {homeTab === "firmen" && (
               <FirmenView
                 owneFirma={eigeneFirma}
@@ -1153,6 +1178,10 @@ export default function PolierApp() {
     { id:"ki_frage",      icon:"💬",  label:"KI fragen",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     { id:"simulation",    icon:"🧪",  label:"Simulation",  rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     { id:"angebot",       icon:"📄",  label:"Angebot",     rollen:["administrator","geschaeftsfuehrer"] },
+    // Ein Vorarbeiter führt eine Kolonne, keine ganze Baustelle (siehe
+    // Kommentar bei der vorarbeiter-Rolle weiter unten) — deshalb weder
+    // Abschluss-Button noch Lese-Zugriff auf die Abschlussakte für ihn.
+    { id:"abschluss",     icon:"🗂️",  label:"Abschluss",   rollen:["administrator","geschaeftsfuehrer","polier"] },
     { id:"admin_params",  icon:"⚙️",  label:"Parameter",   rollen:["administrator"] },
     { id:"nutzer",        icon:"👥",  label:"Nutzer",      rollen:["administrator"] },
     // Fehlte bisher komplett in dieser Liste, obwohl ROLLEN.administrator.tabs
@@ -1184,7 +1213,7 @@ export default function PolierApp() {
   const aktivInMehr = mehrTabs.some(t => t.id === tab);
   const TAB_ICONS = { dashboard:LayoutGrid, aufgaben:CircleCheckBig, tagebuch:NotebookPen,
     kolonnen:Users, stempeln:Clock, gantt:Calendar, kosten:Euro, wetter:CloudSun,
-    stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, firmen:Building2, profil:User, ki_frage:Sparkles, simulation:FlaskConical, abwesenheiten:Palmtree };
+    stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, firmen:Building2, profil:User, ki_frage:Sparkles, simulation:FlaskConical, abwesenheiten:Palmtree, abschluss:Archive };
 
   return (
     // position:fixed auf html/body war der Bug (siehe theme.css) — aber
@@ -1323,6 +1352,7 @@ export default function PolierApp() {
             // "alle aus seiner Kolonne", nicht firmenweit.
             darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
+        {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
         {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
         {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} session={auth.session} />}

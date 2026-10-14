@@ -765,6 +765,76 @@ export async function sbDokumentHashSpeichern({ firmaId, profilId, hash, bericht
   } catch { return false; }
 }
 
+// Alle Kommentare eines Projekts, unbegrenzt (anders als die auf 40 gekappte
+// Variante in App.jsx für den laufenden KI-Chat-Kontext) — der
+// Baustellenabschluss braucht die vollständige Historie, nicht nur die
+// letzten Einträge.
+export async function sbAlleProjektKommentare(projektId, session) {
+  if (!session?.access_token || !projektId) return [];
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("aufgaben_kommentare")
+      .select("*, aufgaben!inner(projekt_id, titel), autor:erstellt_von(vorname, nachname)")
+      .eq("aufgaben.projekt_id", projektId)
+      .order("created_at", { ascending: true });
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
+}
+
+// Setzt ein Projekt auf archiviert + speichert die beim Abschluss erzeugte
+// Akte (Zusammenfassung/Entscheidungen von der KI, siehe
+// kiBaustellenabschluss) dauerhaft — läuft über die normale
+// projekte_update-RLS-Policy (administrator/geschaeftsfuehrer/polier/
+// vorarbeiter), keine eigene RPC nötig.
+export async function sbProjektAbschliessen(projektId, { akte, dokumentId }, session) {
+  if (!session?.access_token || !projektId) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("projekte").update({
+      archiviert: true,
+      abschluss_datum: new Date().toISOString(),
+      abschluss_von: session.user?.id || null,
+      abschluss_akte: akte,
+      abschluss_dokument_id: dokumentId,
+    }).eq("id", projektId).select();
+    const fehler = sbSchreibfehler(error, data, true);
+    if (fehler) return { ok: false, fehler };
+    return { ok: true, fehler: null };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// Abgeschlossene (archivierte) Baustellen einer Firma, neueste zuerst.
+export async function sbArchivListe(firmaId, session) {
+  if (!session?.access_token || !firmaId) return [];
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("projekte").select("*")
+      .eq("firma_id", firmaId).eq("archiviert", true)
+      .order("abschluss_datum", { ascending: false });
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
+}
+
+// Analog zu sbDokumentHashSpeichern, aber für den Baustellenabschluss-
+// Export (eigene aktion/objekt_typ im audit_log statt "tagesbericht").
+export async function sbAbschlussDokumentHashSpeichern({ firmaId, profilId, hash, projektId }, session) {
+  if (!session?.access_token || !firmaId) return false;
+  try {
+    const client = sbClientMitToken(session);
+    const { error } = await client.from("audit_log").insert({
+      firma_id: firmaId,
+      profil_id: profilId || null,
+      aktion: "baustellenabschluss_export",
+      objekt_typ: "projekt",
+      objekt_id: projektId != null ? String(projektId) : null,
+      details: { hash },
+    });
+    return !error;
+  } catch { return false; }
+}
+
 export async function sbSignIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
