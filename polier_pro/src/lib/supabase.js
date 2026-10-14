@@ -601,6 +601,19 @@ export async function sbSupervisorFirmenListe(session) {
   } catch { return null; }
 }
 
+// Plan-Definitionen (Preis, inkludierte Baustellen, Features) kommen aus der
+// DB (public.plan_config), nicht mehr aus einer Frontend-Konstante — die
+// Tabelle hat nur eine SELECT-Policy, ist also vom Client aus nie änderbar.
+export async function sbPlanConfigListe(session) {
+  if (!session?.access_token) return null;
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("plan_config").select("*");
+    if (error) return null;
+    return data || [];
+  } catch { return null; }
+}
+
 // maxBaustellen: undefined/null = nicht ändern, -1 = explizit auf
 // "unbegrenzt" setzen, sonst die neue Zahl — siehe Kommentar in der
 // Migration zu supervisor_firma_aktualisieren (ein reines COALESCE in der

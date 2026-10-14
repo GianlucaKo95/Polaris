@@ -2,14 +2,32 @@ import { useState, useEffect } from "react";
 import { Crown, UserPlus, TriangleAlert, CircleCheckBig, Building2, Pencil, X, Users, Ban, LockKeyhole, HardHat } from "lucide-react";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { Spinner } from "../components/Spinner.jsx";
-import { PLAN_CONFIG, PLAN_STATUS_LABEL } from "../config/konstanten.js";
-import { sbSupervisorNutzerEinladen, sbSupervisorFirmenListe, sbSupervisorFirmaAktualisieren } from "../lib/supabase.js";
+import { PLAN_STATUS_LABEL } from "../config/konstanten.js";
+import { sbSupervisorNutzerEinladen, sbSupervisorFirmenListe, sbSupervisorFirmaAktualisieren, sbPlanConfigListe } from "../lib/supabase.js";
 
 // ISO-Timestamp -> value für <input type="date"> (YYYY-MM-DD), bzw. "" wenn
 // nicht gesetzt — das Datumsfeld selbst bleibt bewusst nur tageweise genau,
 // die Uhrzeit aus trial_ends_at/plan_ends_at interessiert hier nicht.
 function alsDatumInput(iso) {
   return iso ? iso.slice(0, 10) : "";
+}
+
+// public.plan_config-Zeile (DB, nur per SELECT-Policy lesbar, vom Client aus
+// nie änderbar) auf die Anzeige-Form bringen, die dieser View schon kennt.
+function planAnzeige(row) {
+  const preis =
+    row.preis_monat == null ? "individuell" :
+    Number(row.preis_monat) === 0 ? "kostenlos · 14 Tage" :
+    `${Math.round(Number(row.preis_monat))} € / Monat`;
+  return {
+    label: row.label,
+    preis,
+    icon: row.icon || "",
+    inklusiveBaustellen: row.baustellen_inklusive,
+    preisJeWeitere: row.preis_je_weitere_baustelle != null
+      ? `${Math.round(Number(row.preis_je_weitere_baustelle))} € / Monat`
+      : null,
+  };
 }
 
 // Nur erreichbar für profile.ist_supervisor = true (siehe App.jsx — der
@@ -32,8 +50,14 @@ export function SupervisorView({ session }) {
   const [editId,       setEditId]       = useState(null);
   const [editForm,     setEditForm]     = useState(null);
   const [speichert,    setSpeichert]    = useState(false);
+  const [planConfig,   setPlanConfig]   = useState({});
 
-  useEffect(() => { ladeFirmen(); }, []);
+  useEffect(() => { ladeFirmen(); ladePlanConfig(); }, []);
+
+  async function ladePlanConfig() {
+    const rows = await sbPlanConfigListe(session);
+    setPlanConfig(Object.fromEntries((rows || []).map(r => [r.plan, planAnzeige(r)])));
+  }
 
   async function ladeFirmen() {
     setFirmenLaedt(true); setFirmenFehler("");
@@ -155,7 +179,7 @@ export function SupervisorView({ session }) {
 
       {!firmenLaedt && firmen.map(f => {
         const isEdit = editId === f.id;
-        const planInfo = PLAN_CONFIG[f.plan];
+        const planInfo = planConfig[f.plan];
         const statusInfo = PLAN_STATUS_LABEL[f.plan_status] || { label: f.plan_status, farbe: "var(--muted)" };
         return (
           <div key={f.id} style={{ background:"var(--surface)", borderRadius:14,
@@ -205,8 +229,8 @@ export function SupervisorView({ session }) {
                   <Label>Plan</Label>
                   <select value={editForm.plan} onChange={e => setEditForm(p => ({ ...p, plan: e.target.value }))}
                     style={{ ...inputStyle(), padding:"8px 10px" }}>
-                    {!PLAN_CONFIG[editForm.plan] && <option value={editForm.plan}>{editForm.plan} (unbekannt)</option>}
-                    {Object.entries(PLAN_CONFIG).map(([k, p]) => (
+                    {!planConfig[editForm.plan] && <option value={editForm.plan}>{editForm.plan} (unbekannt)</option>}
+                    {Object.entries(planConfig).map(([k, p]) => (
                       <option key={k} value={k}>{p.icon} {p.label} — {p.preis}</option>
                     ))}
                   </select>
@@ -215,7 +239,7 @@ export function SupervisorView({ session }) {
                   <Label>Max. Baustellen (leer = unbegrenzt)</Label>
                   <input type="number" min="0" value={editForm.maxBaustellen}
                     onChange={e => setEditForm(p => ({ ...p, maxBaustellen: e.target.value }))}
-                    placeholder={`z.B. ${PLAN_CONFIG[editForm.plan]?.inklusiveBaustellen ?? "—"} (laut Plan inklusive)`}
+                    placeholder={`z.B. ${planConfig[editForm.plan]?.inklusiveBaustellen ?? "—"} (laut Plan inklusive)`}
                     style={{ ...inputStyle(), padding:"8px 10px" }} />
                   <div style={{ color:"var(--muted)", fontSize:11, marginTop:4 }}>
                     Aktuell {f.aktive_baustellen} aktive Baustellen. Für bezahlte Zusatz-Baustellen
