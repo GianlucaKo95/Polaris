@@ -32,7 +32,7 @@
   --radius-lg: 0px;
   /* Redesign 2026-08: fester dunkler Anker-Header, unabhängig vom Hell/Dunkel-Toggle
      der restlichen Fläche — siehe Polaris Redesign (Runde 1), "Ink-Header als Anker". */
-  --ink:     #0B1120;
+  --ink:     #1C2027;
   --ink-text2: #8B9EC8;
   --font-ui: 'Archivo', system-ui, -apple-system, sans-serif;
 }
