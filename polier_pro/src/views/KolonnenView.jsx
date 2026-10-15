@@ -132,12 +132,19 @@ export function KolonnenView({ kolonnen, projekt, setKolonnen, darfBearbeiten = 
           <Label>Bis</Label>
           <input type="date" value={bisDatum} onChange={e => setBisDatum(e.target.value)} style={inputStyle()} />
         </div>
-        <button onClick={ladeZeiten}
-          style={{ background: "var(--border)", border:"none", color: "var(--text)",
-            borderRadius:8, padding:"10px 12px", cursor:"pointer",
-            height:40, display:"flex", alignItems:"center" }}>
-          <RefreshCw size={16} />
-        </button>
+        <div>
+          {/* Unsichtbarer Platzhalter in Label-Höhe, damit der Button genauso
+              hoch startet wie die Von/Bis-Felder daneben — sonst (wie vorher)
+              blieb er kürzer und falsch ausgerichtet, weil nur die Felder
+              selbst ein Label über sich haben. */}
+          <div style={{ visibility:"hidden" }}><Label>·</Label></div>
+          <button onClick={ladeZeiten}
+            style={{ width:"100%", background: "var(--border)", border:`1.5px solid ${'var(--border2)'}`,
+              color: "var(--text)", borderRadius:8, padding:"13px 14px", boxSizing:"border-box",
+              cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <RefreshCw size={16} />
+          </button>
+        </div>
       </div>
 
       {/* Status-Banner */}
