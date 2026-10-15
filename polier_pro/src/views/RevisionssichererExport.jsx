@@ -42,6 +42,14 @@ export function RevisionssichererExport({ bericht, projekt, eigeneFirma, wetter,
     // "+N weitere" statt das Dokument beliebig in die Länge zu ziehen.
     const fotosSichtbar = fotos.length > 6 ? fotos.slice(0, 5) : fotos;
     const fotosRest = fotos.length > 6 ? fotos.length - 5 : 0;
+    // .filter(Boolean): eine leere eigeneFirma.strasse/.telefon ließ sonst
+    // ein verwaistes ", 12345 Musterstadt" bzw. " · " mit führendem
+    // Trenner stehen statt den fehlenden Teil einfach wegzulassen.
+    const firmaAdresszeile = [
+      eigeneFirma?.strasse,
+      [eigeneFirma?.plz, eigeneFirma?.ort].filter(Boolean).join(" "),
+    ].filter(Boolean).join(", ");
+    const firmaKontaktzeile = [eigeneFirma?.telefon, eigeneFirma?.email].filter(Boolean).join("  ·  ");
     const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -101,8 +109,8 @@ body { font-family:Arial,sans-serif; font-size:11pt; color:#1a1a1a; }
 <div class="header">
   <div>
     <div class="logo"><span>★</span> POLARIS</div>
-    <div class="firma">${escapeHtml(eigeneFirma?.name)}  ·  ${escapeHtml(eigeneFirma?.strasse)}, ${escapeHtml(eigeneFirma?.plz)} ${escapeHtml(eigeneFirma?.ort)}</div>
-    <div class="firma">${escapeHtml(eigeneFirma?.telefon)}  ·  ${escapeHtml(eigeneFirma?.email)}</div>
+    <div class="firma">${escapeHtml(eigeneFirma?.name)}${firmaAdresszeile ? `  ·  ${escapeHtml(firmaAdresszeile)}` : ""}</div>
+    ${firmaKontaktzeile ? `<div class="firma">${escapeHtml(firmaKontaktzeile)}</div>` : ""}
   </div>
   <div class="doc-title">
     <h1>Tagesbericht</h1>

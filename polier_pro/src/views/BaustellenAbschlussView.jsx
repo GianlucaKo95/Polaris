@@ -27,6 +27,13 @@ function offeneRestpunkteAus(aufgaben) {
 }
 
 function erstelleAbschlussHtml({ projekt, eigeneFirma, akte, chronologie, hash }) {
+  // .filter(Boolean): eine leere eigeneFirma.strasse (z.B. noch nicht
+  // hinterlegt) ließ sonst ein verwaistes ", 12345 Musterstadt" mit
+  // führendem Komma stehen statt den fehlenden Teil einfach wegzulassen.
+  const firmaAdresszeile = [
+    eigeneFirma?.strasse,
+    [eigeneFirma?.plz, eigeneFirma?.ort].filter(Boolean).join(" "),
+  ].filter(Boolean).join(", ");
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -63,7 +70,7 @@ body { font-family:Arial,sans-serif; font-size:11pt; color:#1a1a1a; }
 <div class="header">
   <div>
     <div class="logo"><span>★</span> POLARIS</div>
-    <div class="firma">${escapeHtml(eigeneFirma?.name)}  ·  ${escapeHtml(eigeneFirma?.strasse)}, ${escapeHtml(eigeneFirma?.plz)} ${escapeHtml(eigeneFirma?.ort)}</div>
+    <div class="firma">${escapeHtml(eigeneFirma?.name)}${firmaAdresszeile ? `  ·  ${escapeHtml(firmaAdresszeile)}` : ""}</div>
   </div>
   <div class="doc-title">
     <h1>Baustellenabschlussakte</h1>

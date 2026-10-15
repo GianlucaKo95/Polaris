@@ -4,6 +4,14 @@ export function buildBerichtHTML(bericht, projekt, eigeneFirma, wetter) {
   const datum = escapeHtml(bericht.datum || new Date().toLocaleDateString("de-DE"));
   const fotos = bericht.bilder || [];
   const logo  = eigeneFirma?.logo || null;
+  // .filter(Boolean): eine leere eigeneFirma.strasse/.telefon ließ sonst
+  // ein verwaistes " · 12345 Musterstadt" bzw. " · " mit führendem
+  // Trenner stehen statt den fehlenden Teil einfach wegzulassen.
+  const firmaAdresszeile = [
+    eigeneFirma?.strasse,
+    [eigeneFirma?.plz, eigeneFirma?.ort].filter(Boolean).join(" "),
+  ].filter(Boolean).join(" · ");
+  const firmaKontaktzeile = [eigeneFirma?.telefon, eigeneFirma?.email].filter(Boolean).join(" · ");
 
   return `<!DOCTYPE html>
 <html lang="de">
@@ -53,8 +61,8 @@ export function buildBerichtHTML(bericht, projekt, eigeneFirma, wetter) {
         : `<div class="logo-placeholder">⚒</div>`}
       <div>
         <div class="firma-name">${escapeHtml(eigeneFirma?.name) || "Polaris"}</div>
-        <div class="firma-sub">${escapeHtml(eigeneFirma?.strasse)} · ${escapeHtml(eigeneFirma?.plz)} ${escapeHtml(eigeneFirma?.ort)}</div>
-        <div class="firma-sub">${escapeHtml(eigeneFirma?.telefon)} · ${escapeHtml(eigeneFirma?.email)}</div>
+        ${firmaAdresszeile ? `<div class="firma-sub">${escapeHtml(firmaAdresszeile)}</div>` : ""}
+        ${firmaKontaktzeile ? `<div class="firma-sub">${escapeHtml(firmaKontaktzeile)}</div>` : ""}
       </div>
     </div>
     <div class="doc-title">
@@ -173,6 +181,9 @@ export function buildBerichtHTML(bericht, projekt, eigeneFirma, wetter) {
 export function buildBetonprotokollHTML(feld, projekt, eigeneFirma, wetter) {
   const heute = escapeHtml(new Date().toLocaleDateString("de-DE"));
   const logo  = eigeneFirma?.logo || null;
+  // .filter(Boolean): eine leere eigeneFirma.strasse ließ sonst ein
+  // verwaistes " · Musterstadt" mit führendem Trenner stehen.
+  const firmaAdresszeile = [eigeneFirma?.strasse, eigeneFirma?.ort].filter(Boolean).join(" · ");
   return `<!DOCTYPE html>
 <html lang="de">
 <head>
@@ -212,7 +223,7 @@ export function buildBetonprotokollHTML(feld, projekt, eigeneFirma, wetter) {
       ${logo ? `<img class="logo" src="${logo}" alt="Logo"/>` : `<div class="logo-placeholder">⚒</div>`}
       <div>
         <div class="firma-name">${escapeHtml(eigeneFirma?.name) || "Polaris"}</div>
-        <div style="font-size:9pt;color:#666;">${escapeHtml(eigeneFirma?.strasse)} · ${escapeHtml(eigeneFirma?.ort)}</div>
+        ${firmaAdresszeile ? `<div style="font-size:9pt;color:#666;">${escapeHtml(firmaAdresszeile)}</div>` : ""}
       </div>
     </div>
     <div style="text-align:right;">
