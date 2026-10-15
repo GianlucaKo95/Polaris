@@ -49,14 +49,15 @@ body { font-family:Arial,sans-serif; font-size:11pt; color:#1a1a1a; }
 .page { width:210mm; padding:14mm 18mm; }
 .header { display:flex; justify-content:space-between; align-items:flex-start;
   border-bottom:3px solid #F5C400; padding-bottom:10px; margin-bottom:14px; }
-.logo { font-size:22pt; font-weight:900; letter-spacing:-1px; }
+.logo { font-size:22pt; font-weight:900; letter-spacing:-1px; flex-shrink:0; }
 .logo span { color:#F5C400; }
 .firma { font-size:9pt; color:#666; margin-top:3px; }
-.doc-title { text-align:right; }
+.doc-title { text-align:right; max-width:55%; min-width:0; }
 .doc-title h1 { font-size:14pt; font-weight:bold; }
 .doc-title .meta { font-size:9pt; color:#666; margin-top:3px; }
 .hash-badge { background:#1a1a1a; color:#F5C400; padding:4px 10px;
-  border-radius:4px; font-size:9pt; font-family:monospace; margin-top:4px; display:inline-block; }
+  border-radius:4px; font-size:9pt; font-family:monospace; margin-top:4px; display:inline-block;
+  max-width:100%; word-break:break-all; }
 .kennzahlen { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
 .kz { background:#f8f8f8; border-radius:6px; padding:9px 10px 8px; position:relative; overflow:hidden; }
 .kz::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:#F5C400; }
@@ -93,6 +94,8 @@ body { font-family:Arial,sans-serif; font-size:11pt; color:#1a1a1a; }
 .sig-name { font-size:8pt; color:#888; margin-top:4px; text-align:center; }
 .footer { border-top:1px solid #ddd; margin-top:16px; padding-top:8px;
   font-size:7.5pt; color:#aaa; display:flex; justify-content:space-between; font-family:monospace; }
+.footer span { word-break:break-all; min-width:0; }
+.footer span:first-child { flex-shrink:2; margin-right:12px; }
 </style></head><body><div class="page">
 
 <div class="header">
