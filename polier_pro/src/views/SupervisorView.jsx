@@ -3,31 +3,13 @@ import { Crown, UserPlus, TriangleAlert, CircleCheckBig, Building2, Pencil, X, U
 import { Label, inputStyle } from "../components/Label.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { PLAN_STATUS_LABEL } from "../config/konstanten.js";
-import { sbSupervisorNutzerEinladen, sbSupervisorFirmenListe, sbSupervisorFirmaAktualisieren, sbPlanConfigListe } from "../lib/supabase.js";
+import { sbSupervisorNutzerEinladen, sbSupervisorFirmenListe, sbSupervisorFirmaAktualisieren, sbPlanConfigListe, planConfigAnzeige } from "../lib/supabase.js";
 
 // ISO-Timestamp -> value für <input type="date"> (YYYY-MM-DD), bzw. "" wenn
 // nicht gesetzt — das Datumsfeld selbst bleibt bewusst nur tageweise genau,
 // die Uhrzeit aus trial_ends_at/plan_ends_at interessiert hier nicht.
 function alsDatumInput(iso) {
   return iso ? iso.slice(0, 10) : "";
-}
-
-// public.plan_config-Zeile (DB, nur per SELECT-Policy lesbar, vom Client aus
-// nie änderbar) auf die Anzeige-Form bringen, die dieser View schon kennt.
-function planAnzeige(row) {
-  const preis =
-    row.preis_monat == null ? "individuell" :
-    Number(row.preis_monat) === 0 ? "kostenlos · 14 Tage" :
-    `${Math.round(Number(row.preis_monat))} € / Monat`;
-  return {
-    label: row.label,
-    preis,
-    icon: row.icon || "",
-    inklusiveBaustellen: row.baustellen_inklusive,
-    preisJeWeitere: row.preis_je_weitere_baustelle != null
-      ? `${Math.round(Number(row.preis_je_weitere_baustelle))} € / Monat`
-      : null,
-  };
 }
 
 // Nur erreichbar für profile.ist_supervisor = true (siehe App.jsx — der
@@ -56,7 +38,7 @@ export function SupervisorView({ session }) {
 
   async function ladePlanConfig() {
     const rows = await sbPlanConfigListe(session);
-    setPlanConfig(Object.fromEntries((rows || []).map(r => [r.plan, planAnzeige(r)])));
+    setPlanConfig(Object.fromEntries((rows || []).map(r => [r.plan, planConfigAnzeige(r)])));
   }
 
   async function ladeFirmen() {

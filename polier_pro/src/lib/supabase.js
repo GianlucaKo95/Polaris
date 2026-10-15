@@ -603,15 +603,39 @@ export async function sbSupervisorFirmenListe(session) {
 
 // Plan-Definitionen (Preis, inkludierte Baustellen, Features) kommen aus der
 // DB (public.plan_config), nicht mehr aus einer Frontend-Konstante — die
-// Tabelle hat nur eine SELECT-Policy, ist also vom Client aus nie änderbar.
+// Tabelle hat nur SELECT-Policies (authenticated UND anon, siehe Migration
+// plan_config_oeffentlich_lesbar — die Registrierung läuft vor dem Login,
+// braucht also Lesezugriff ohne Session), ist also vom Client aus nie
+// änderbar. sbClientMitToken(session) fällt bei fehlender Session von
+// selbst auf den anon-Client zurück, kein eigener Fall nötig.
 export async function sbPlanConfigListe(session) {
-  if (!session?.access_token) return null;
   try {
     const client = sbClientMitToken(session);
     const { data, error } = await client.from("plan_config").select("*");
     if (error) return null;
     return data || [];
   } catch { return null; }
+}
+
+// DB-Zeile aus plan_config auf die Anzeige-Form bringen, die alle
+// Plan-Screens (Supervisor, PlanGuard, FirmenView, Registrierung) erwarten.
+// Ein Objekt {plan: anzeige} daraus bauen via
+// Object.fromEntries(rows.map(r => [r.plan, planConfigAnzeige(r)])).
+export function planConfigAnzeige(row) {
+  const preis =
+    row.preis_monat == null ? "individuell" :
+    Number(row.preis_monat) === 0 ? "kostenlos · 14 Tage" :
+    `${Math.round(Number(row.preis_monat))} € / Monat`;
+  return {
+    label: row.label,
+    preis,
+    icon: row.icon || "",
+    inklusiveBaustellen: row.baustellen_inklusive,
+    preisJeWeitere: row.preis_je_weitere_baustelle != null
+      ? `${Math.round(Number(row.preis_je_weitere_baustelle))} € / Monat`
+      : null,
+    features: row.features || [],
+  };
 }
 
 // maxBaustellen: undefined/null = nicht ändern, -1 = explizit auf

@@ -20,35 +20,56 @@ import { LoginScreen } from "./views/LoginScreen.jsx";
 import { PinSperreScreen } from "./views/PinSperreScreen.jsx";
 import { RollenBadge } from "./components/RollenBadge.jsx";
 import { ThemeToggle } from "./components/ThemeToggle.jsx";
-import { StempeluhrView } from "./views/StempeluhrView.jsx";
 import { OnboardingFlow } from "./views/OnboardingFlow.jsx";
 import { ProjektFormular } from "./views/ProjektFormular.jsx";
 import { Chip } from "./components/Chip.jsx";
-import { FirmenView } from "./views/FirmenView.jsx";
 import { SupervisorShell } from "./views/SupervisorShell.jsx";
 import { FirmaGesperrtScreen } from "./views/FirmaGesperrtScreen.jsx";
 import { Aktenregister } from "./components/Aktenregister.jsx";
 import { ProjektInfoStrip } from "./components/ProjektInfoStrip.jsx";
 import { PlanGuard } from "./views/PlanGuard.jsx";
 import { DashboardView } from "./views/DashboardView.jsx";
-import { GanttView } from "./views/GanttView.jsx";
-import { WeatherView } from "./views/WeatherView.jsx";
-import { KolonnenView } from "./views/KolonnenView.jsx";
-import { TagesbuchView } from "./views/TagesbuchView.jsx";
 import { AufgabenView } from "./views/AufgabenView.jsx";
-import { KiFrageView } from "./views/KiFrageView.jsx";
-import { BaustellenAbschlussView } from "./views/BaustellenAbschlussView.jsx";
 import { ArchivView } from "./views/ArchivView.jsx";
-import { SimulationView } from "./views/SimulationView.jsx";
-import { KostenView } from "./views/KostenView.jsx";
-import { StundenExportView } from "./views/StundenExportView.jsx";
-import { AngebotView } from "./views/AngebotView.jsx";
-import { AdminParameterView } from "./views/AdminParameterView.jsx";
-import { NutzerVerwaltungView } from "./views/NutzerVerwaltungView.jsx";
-import { MeinProfilView } from "./views/MeinProfilView.jsx";
-import { AbwesenheitenView } from "./views/AbwesenheitenView.jsx";
+import { Spinner } from "./components/Spinner.jsx";
 import { PWABanner } from "./components/PWABanner.jsx";
 import { PushBanner } from "./components/PushBanner.jsx";
+
+// Alles unten: Views, die erst nach Login UND erst beim tatsächlichen
+// Öffnen des jeweiligen Tabs gebraucht werden (anders als Dashboard/
+// Aufgaben, die praktisch immer die ersten Klicks nach dem Login sind, oder
+// Onboarding/Login/ProjektFormular, die auf dem kritischen Erststart-Pfad
+// liegen) — lazy statt statisch importiert, damit sie nicht alle im
+// initialen Bundle landen. .then(m => ({default: m.X})), weil die Views
+// benannte statt default-Exports verwenden; React.lazy() verlangt einen
+// default-Export im aufgelösten Modul.
+const StempeluhrView        = React.lazy(() => import("./views/StempeluhrView.jsx").then(m => ({ default: m.StempeluhrView })));
+const FirmenView            = React.lazy(() => import("./views/FirmenView.jsx").then(m => ({ default: m.FirmenView })));
+const GanttView              = React.lazy(() => import("./views/GanttView.jsx").then(m => ({ default: m.GanttView })));
+const WeatherView            = React.lazy(() => import("./views/WeatherView.jsx").then(m => ({ default: m.WeatherView })));
+const KolonnenView           = React.lazy(() => import("./views/KolonnenView.jsx").then(m => ({ default: m.KolonnenView })));
+const TagesbuchView          = React.lazy(() => import("./views/TagesbuchView.jsx").then(m => ({ default: m.TagesbuchView })));
+const KiFrageView            = React.lazy(() => import("./views/KiFrageView.jsx").then(m => ({ default: m.KiFrageView })));
+const BaustellenAbschlussView = React.lazy(() => import("./views/BaustellenAbschlussView.jsx").then(m => ({ default: m.BaustellenAbschlussView })));
+const SimulationView         = React.lazy(() => import("./views/SimulationView.jsx").then(m => ({ default: m.SimulationView })));
+const KostenView             = React.lazy(() => import("./views/KostenView.jsx").then(m => ({ default: m.KostenView })));
+const StundenExportView      = React.lazy(() => import("./views/StundenExportView.jsx").then(m => ({ default: m.StundenExportView })));
+const AngebotView            = React.lazy(() => import("./views/AngebotView.jsx").then(m => ({ default: m.AngebotView })));
+const AdminParameterView     = React.lazy(() => import("./views/AdminParameterView.jsx").then(m => ({ default: m.AdminParameterView })));
+const NutzerVerwaltungView   = React.lazy(() => import("./views/NutzerVerwaltungView.jsx").then(m => ({ default: m.NutzerVerwaltungView })));
+const MeinProfilView         = React.lazy(() => import("./views/MeinProfilView.jsx").then(m => ({ default: m.MeinProfilView })));
+const AbwesenheitenView      = React.lazy(() => import("./views/AbwesenheitenView.jsx").then(m => ({ default: m.AbwesenheitenView })));
+
+// Fallback für den kurzen Moment, in dem einer der obigen Lazy-Chunks noch
+// nachlädt — kein Layout-Sprung, einfach ein zentrierter Spinner an der
+// Stelle, an der gleich der Tab-Inhalt erscheint.
+function TabLadeFallback() {
+  return (
+    <div style={{ display:"flex", justifyContent:"center", padding:"40px 0" }}>
+      <Spinner size={22} />
+    </div>
+  );
+}
 
 export class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -1098,15 +1119,20 @@ export default function PolierApp() {
                   );
                 })}
 
-                {/* Neue Baustelle */}
-                <div onClick={() => setNeuProjekt(true)}
-                  style={{ border:"2px dashed var(--yellow)",
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                    padding:"12px", textAlign:"center", cursor:"pointer",
-                    background:"var(--ybg)", color:"var(--ydark)",
-                    fontWeight:700, fontSize:14 }}>
-                  <Plus size={18} />Neue Baustelle
-                </div>
+                {/* Neue Baustelle — nur wenn schon mindestens eine existiert:
+                    im Leerzustand übernimmt der große "Erste Baustelle
+                    anlegen"-Button oben dieselbe Aktion, zwei Buttons dafür
+                    wären doppelt. */}
+                {projekte.length > 0 && (
+                  <div onClick={() => setNeuProjekt(true)}
+                    style={{ border:"2px dashed var(--yellow)",
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                      padding:"12px", textAlign:"center", cursor:"pointer",
+                      background:"var(--ybg)", color:"var(--ydark)",
+                      fontWeight:700, fontSize:14 }}>
+                    <Plus size={18} />Neue Baustelle
+                  </div>
+                )}
               </>
             )}
 
@@ -1115,15 +1141,17 @@ export default function PolierApp() {
             )}
 
             {homeTab === "firmen" && (
-              <FirmenView
-                owneFirma={eigeneFirma}
-                setEigeneFirma={setEigeneFirma}
-                subs={subs}
-                setSubs={setSubs}
-                onOnboardingReset={() => setOnboardingDone(false)}
-                session={auth.session}
-                firmaId={firma?.id}
-              />
+              <React.Suspense fallback={<TabLadeFallback />}>
+                <FirmenView
+                  owneFirma={eigeneFirma}
+                  setEigeneFirma={setEigeneFirma}
+                  subs={subs}
+                  setSubs={setSubs}
+                  onOnboardingReset={() => setOnboardingDone(false)}
+                  session={auth.session}
+                  firmaId={firma?.id}
+                />
+              </React.Suspense>
             )}
           </div>
         </div>
@@ -1302,6 +1330,7 @@ export default function PolierApp() {
               else setAufgabenFilter("alle");
               setTab(tabId);
             }} />}
+        <React.Suspense fallback={<TabLadeFallback />}>
         {tab === "gantt"     && <GanttView felder={felder}
             onAufgabeKlick={id => { setAufgabenEditId(id); setAufgabenFilter("alle"); setTab("aufgaben"); }} />}
         {tab === "wetter"    && <WeatherView ort={projekt?.ort} plz={projekt?.plz} projektId={projekt?.id} />}
@@ -1361,6 +1390,7 @@ export default function PolierApp() {
             onOnboardingReset={() => setOnboardingDone(false)} session={auth.session} firmaId={firma?.id} firma={firma} projekte={projekte} />}
         {tab === "profil"       && <MeinProfilView profil={aktiveProfil} session={auth.session} onProfilAktualisiert={auth.profilAktualisieren} pinPflicht={!!firma?.pin_pflicht} />}
         {tab === "abwesenheiten" && <AbwesenheitenView session={auth.session} profil={aktiveProfil} />}
+        </React.Suspense>
       </div>
       </PlanGuard>
 

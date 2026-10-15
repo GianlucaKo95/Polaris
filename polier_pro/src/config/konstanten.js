@@ -257,6 +257,14 @@ export const PLAN_STATUS_LABEL = {
   expired:   { label: "Abgelaufen", farbe: "var(--red)" },
 };
 
+// Einzige echte Quelle für Plan-Preise/-Inhalte ist jetzt public.plan_config
+// in der DB (siehe sbPlanConfigListe/planConfigAnzeige in lib/supabase.js) —
+// Registrierung, PlanGuard, FirmenView und SupervisorView laden von dort.
+// PLAN_CONFIG hier dient nur noch als Startwert/Fallback (sofortige Anzeige
+// vor dem ersten Laden, funktioniert auch bei einem Netzwerkfehler weiter),
+// wird aber nie direkt im UI gerendert. Bei einer Preisänderung MUSS die
+// DB-Tabelle geändert werden — hier mitzuziehen ist nur für den Fallback-
+// Fall sinnvoll, keine Pflicht.
 // features: ausführliche Stichpunktliste für die Plan-Vergleichskarten in
 // FirmenView (Abo & Abrechnung) — bildet nur ab, was die Pläne technisch
 // tatsächlich freischalten (KI-Funktionen/Kundenportal ab Pro, siehe
