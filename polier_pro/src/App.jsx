@@ -1365,7 +1365,7 @@ export default function PolierApp() {
             Tab-Wechsel weg von "kosten") der Stand der vorherigen Baustelle
             stehen, "Speichern" hätte dann sogar das falsche Projekt
             überschrieben. Der key erzwingt einen frischen Mount pro Baustelle. */}
-        {tab === "kosten"        && <KostenView key={projekt?.id} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
+        {tab === "kosten"        && <KostenView key={projekt?.id} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} angebote={angebote} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "stempeln"      && <StempeluhrView profil={aktiveProfil}
             projekte={aktiveProfil?.kolonne_id
               ? projekte.filter(p => (p.kolonnen||[]).some(k => k.id === aktiveProfil.kolonne_id)).length > 0
