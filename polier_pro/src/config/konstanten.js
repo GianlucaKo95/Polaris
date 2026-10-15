@@ -257,6 +257,14 @@ export const PLAN_STATUS_LABEL = {
   expired:   { label: "Abgelaufen", farbe: "var(--red)" },
 };
 
+// Einzige echte Quelle für Plan-Preise/-Inhalte ist jetzt public.plan_config
+// in der DB (siehe sbPlanConfigListe/planConfigAnzeige in lib/supabase.js) —
+// Registrierung, PlanGuard, FirmenView und SupervisorView laden von dort.
+// PLAN_CONFIG hier dient nur noch als Startwert/Fallback (sofortige Anzeige
+// vor dem ersten Laden, funktioniert auch bei einem Netzwerkfehler weiter),
+// wird aber nie direkt im UI gerendert. Bei einer Preisänderung MUSS die
+// DB-Tabelle geändert werden — hier mitzuziehen ist nur für den Fallback-
+// Fall sinnvoll, keine Pflicht.
 // features: ausführliche Stichpunktliste für die Plan-Vergleichskarten in
 // FirmenView (Abo & Abrechnung) — bildet nur ab, was die Pläne technisch
 // tatsächlich freischalten (KI-Funktionen/Kundenportal ab Pro, siehe
@@ -264,7 +272,7 @@ export const PLAN_STATUS_LABEL = {
 export const PLAN_CONFIG = {
   trial:      { label:"Testversion", preis:"kostenlos · 14 Tage", farbe:"#64748B", icon:"⏱️",
                 inklusiveBaustellen:null, preisJeWeitere:null },
-  starter:    { label:"Starter",     preis:"59 € / Monat",        farbe:"#2563EB", icon:"🚀",
+  starter:    { label:"Starter",     preis:"79 € / Monat",        farbe:"#2563EB", icon:"🚀",
                 inklusiveBaustellen:3,    preisJeWeitere:"19 € / Monat",
                 features:[
                   "Baustellenmanagement, Gantt-Planung, Felder/Positionen",
@@ -274,7 +282,7 @@ export const PLAN_CONFIG = {
                   "Angebotserstellung",
                   "3 Baustellen inklusive, je weitere 19 € / Monat",
                 ] },
-  pro:        { label:"Pro",         preis:"129 € / Monat",       farbe:"#F5C400", icon:"⚡",
+  pro:        { label:"Pro",         preis:"199 € / Monat",       farbe:"#F5C400", icon:"⚡",
                 inklusiveBaustellen:10,   preisJeWeitere:"15 € / Monat",
                 features:[
                   "Alles aus Starter",
@@ -282,7 +290,7 @@ export const PLAN_CONFIG = {
                   "Kundenportal (Kunden sehen Fortschritt live, können Mängel melden)",
                   "10 Baustellen inklusive, je weitere 15 € / Monat",
                 ] },
-  enterprise: { label:"Enterprise",  preis:"ab 349 € / Monat",    farbe:"#7C3AED", icon:"🏢",
+  enterprise: { label:"Enterprise",  preis:"individuell",         farbe:"#7C3AED", icon:"🏢",
                 inklusiveBaustellen:null, preisJeWeitere:null,
                 features:[
                   "Alles aus Pro",

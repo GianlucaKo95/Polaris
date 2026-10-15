@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Building2, MapPin, User, Phone, Euro, RefreshCw, Pencil, Plus, CircleX, Trash2, ChevronLeft, ChevronRight, Lock, CreditCard, TriangleAlert, Check } from "lucide-react";
-import { sbClientMitToken, sbSubSpeichern, sbSubLoeschen, sbStripeCheckoutStarten, sbStripePortalOeffnen } from "../lib/supabase.js";
+import { sbClientMitToken, sbSubSpeichern, sbSubLoeschen, sbStripeCheckoutStarten, sbStripePortalOeffnen, sbPlanConfigListe, planConfigAnzeige } from "../lib/supabase.js";
 import { ALLE_GEWERKE, ONBOARDING_KEY, PLAN_CONFIG, PLAN_STATUS_LABEL } from "../config/konstanten.js";
 import { Chip } from "../components/Chip.jsx";
 import { Label, inputStyle } from "../components/Label.jsx";
@@ -14,6 +14,15 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
   const [tmpFirma, setTmpFirma] = useState(owneFirma);
   const [speichern, setSpeichern] = useState(false);
   const [speicherFehler, setSpeicherFehler] = useState("");
+  // PLAN_CONFIG nur als Startwert/Fallback — siehe PlanGuard.jsx für
+  // dieselbe Begründung, einzige echte Quelle ist plan_config in der DB.
+  const [planConfig, setPlanConfig] = useState(PLAN_CONFIG);
+
+  useEffect(() => {
+    sbPlanConfigListe(session).then(rows => {
+      if (rows) setPlanConfig(Object.fromEntries(rows.map(r => [r.plan, planConfigAnzeige(r)])));
+    });
+  }, [session?.access_token]);
   // Der KI-Key wird bewusst NIE aus der Datenbank geladen/vorausgefüllt
   // (siehe App.jsx: die firmen-Abfrage lässt anthropic_api_key explizit
   // aus) — das Feld ist reines "write-only": leer lassen behält den
@@ -139,7 +148,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
                     display:"flex", alignItems:"center", gap:4 }}><CreditCard size={11} /> Abo &amp; Abrechnung</div>
                   <div style={{ color: "var(--text)", fontWeight:700, fontSize:16,
                     display:"flex", alignItems:"center", gap:7 }}>
-                    {PLAN_CONFIG[firma.plan]?.label || firma.plan || "—"}
+                    {planConfig[firma.plan]?.label || firma.plan || "—"}
                     {firma.plan_status && firma.plan_status !== "active" && (() => {
                       const s = PLAN_STATUS_LABEL[firma.plan_status] || { label: firma.plan_status, farbe:"var(--muted)" };
                       return (
@@ -368,7 +377,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
             padding:14, marginBottom:18 }}>
             <div style={{ color:"var(--muted)", fontSize:12, marginBottom:6,
               display:"flex", alignItems:"center", flexWrap:"wrap", gap:6 }}>
-              Aktueller Plan: <strong style={{ color:"var(--text)" }}>{PLAN_CONFIG[firma.plan]?.label || firma.plan || "—"}</strong>
+              Aktueller Plan: <strong style={{ color:"var(--text)" }}>{planConfig[firma.plan]?.label || firma.plan || "—"}</strong>
               {firma.plan === "trial" && firma.trial_ends_at &&
                 ` · Testphase bis ${new Date(firma.trial_ends_at).toLocaleDateString("de-DE")}`}
               {firma.plan_status && (() => {
@@ -424,7 +433,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
                       border:"1px solid var(--border)", borderRadius:8, padding:"9px 10px",
                       cursor: abrechnungLaedt ? "default" : "pointer", fontWeight:700, fontSize:12.5,
                       fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-                    {abrechnungLaedt === k ? <Spinner size={13} /> : `${PLAN_CONFIG[k].label} wählen — ${PLAN_CONFIG[k].preis}`}
+                    {abrechnungLaedt === k ? <Spinner size={13} /> : `${planConfig[k].label} wählen — ${planConfig[k].preis}`}
                   </button>
                 ))}
               </div>
@@ -447,7 +456,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
 
           <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {["starter", "pro", "enterprise"].map(k => {
-              const p = PLAN_CONFIG[k];
+              const p = planConfig[k];
               // Solange kein kostenpflichtiger Plan aktiv ist (Trial), wird
               // Pro als Empfehlung hervorgehoben — sobald die Firma
               // tatsächlich einen Plan gebucht hat, weicht das der

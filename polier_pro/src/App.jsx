@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
   CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight, ChevronLeft,
   Building2, Calendar, Euro, CloudSun, ChartColumn, FileText, Settings,
-  UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree } from "lucide-react";
+  UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree, Archive } from "lucide-react";
 import { useTheme } from "./hooks/useTheme.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { useBackButton } from "./hooks/useBackButton.js";
@@ -20,33 +20,56 @@ import { LoginScreen } from "./views/LoginScreen.jsx";
 import { PinSperreScreen } from "./views/PinSperreScreen.jsx";
 import { RollenBadge } from "./components/RollenBadge.jsx";
 import { ThemeToggle } from "./components/ThemeToggle.jsx";
-import { StempeluhrView } from "./views/StempeluhrView.jsx";
 import { OnboardingFlow } from "./views/OnboardingFlow.jsx";
 import { ProjektFormular } from "./views/ProjektFormular.jsx";
 import { Chip } from "./components/Chip.jsx";
-import { FirmenView } from "./views/FirmenView.jsx";
 import { SupervisorShell } from "./views/SupervisorShell.jsx";
 import { FirmaGesperrtScreen } from "./views/FirmaGesperrtScreen.jsx";
 import { Aktenregister } from "./components/Aktenregister.jsx";
 import { ProjektInfoStrip } from "./components/ProjektInfoStrip.jsx";
 import { PlanGuard } from "./views/PlanGuard.jsx";
 import { DashboardView } from "./views/DashboardView.jsx";
-import { GanttView } from "./views/GanttView.jsx";
-import { WeatherView } from "./views/WeatherView.jsx";
-import { KolonnenView } from "./views/KolonnenView.jsx";
-import { TagesbuchView } from "./views/TagesbuchView.jsx";
 import { AufgabenView } from "./views/AufgabenView.jsx";
-import { KiFrageView } from "./views/KiFrageView.jsx";
-import { SimulationView } from "./views/SimulationView.jsx";
-import { KostenView } from "./views/KostenView.jsx";
-import { StundenExportView } from "./views/StundenExportView.jsx";
-import { AngebotView } from "./views/AngebotView.jsx";
-import { AdminParameterView } from "./views/AdminParameterView.jsx";
-import { NutzerVerwaltungView } from "./views/NutzerVerwaltungView.jsx";
-import { MeinProfilView } from "./views/MeinProfilView.jsx";
-import { AbwesenheitenView } from "./views/AbwesenheitenView.jsx";
+import { ArchivView } from "./views/ArchivView.jsx";
+import { Spinner } from "./components/Spinner.jsx";
 import { PWABanner } from "./components/PWABanner.jsx";
 import { PushBanner } from "./components/PushBanner.jsx";
+
+// Alles unten: Views, die erst nach Login UND erst beim tatsächlichen
+// Öffnen des jeweiligen Tabs gebraucht werden (anders als Dashboard/
+// Aufgaben, die praktisch immer die ersten Klicks nach dem Login sind, oder
+// Onboarding/Login/ProjektFormular, die auf dem kritischen Erststart-Pfad
+// liegen) — lazy statt statisch importiert, damit sie nicht alle im
+// initialen Bundle landen. .then(m => ({default: m.X})), weil die Views
+// benannte statt default-Exports verwenden; React.lazy() verlangt einen
+// default-Export im aufgelösten Modul.
+const StempeluhrView        = React.lazy(() => import("./views/StempeluhrView.jsx").then(m => ({ default: m.StempeluhrView })));
+const FirmenView            = React.lazy(() => import("./views/FirmenView.jsx").then(m => ({ default: m.FirmenView })));
+const GanttView              = React.lazy(() => import("./views/GanttView.jsx").then(m => ({ default: m.GanttView })));
+const WeatherView            = React.lazy(() => import("./views/WeatherView.jsx").then(m => ({ default: m.WeatherView })));
+const KolonnenView           = React.lazy(() => import("./views/KolonnenView.jsx").then(m => ({ default: m.KolonnenView })));
+const TagesbuchView          = React.lazy(() => import("./views/TagesbuchView.jsx").then(m => ({ default: m.TagesbuchView })));
+const KiFrageView            = React.lazy(() => import("./views/KiFrageView.jsx").then(m => ({ default: m.KiFrageView })));
+const BaustellenAbschlussView = React.lazy(() => import("./views/BaustellenAbschlussView.jsx").then(m => ({ default: m.BaustellenAbschlussView })));
+const SimulationView         = React.lazy(() => import("./views/SimulationView.jsx").then(m => ({ default: m.SimulationView })));
+const KostenView             = React.lazy(() => import("./views/KostenView.jsx").then(m => ({ default: m.KostenView })));
+const StundenExportView      = React.lazy(() => import("./views/StundenExportView.jsx").then(m => ({ default: m.StundenExportView })));
+const AngebotView            = React.lazy(() => import("./views/AngebotView.jsx").then(m => ({ default: m.AngebotView })));
+const AdminParameterView     = React.lazy(() => import("./views/AdminParameterView.jsx").then(m => ({ default: m.AdminParameterView })));
+const NutzerVerwaltungView   = React.lazy(() => import("./views/NutzerVerwaltungView.jsx").then(m => ({ default: m.NutzerVerwaltungView })));
+const MeinProfilView         = React.lazy(() => import("./views/MeinProfilView.jsx").then(m => ({ default: m.MeinProfilView })));
+const AbwesenheitenView      = React.lazy(() => import("./views/AbwesenheitenView.jsx").then(m => ({ default: m.AbwesenheitenView })));
+
+// Fallback für den kurzen Moment, in dem einer der obigen Lazy-Chunks noch
+// nachlädt — kein Layout-Sprung, einfach ein zentrierter Spinner an der
+// Stelle, an der gleich der Tab-Inhalt erscheint.
+function TabLadeFallback() {
+  return (
+    <div style={{ display:"flex", justifyContent:"center", padding:"40px 0" }}>
+      <Spinner size={22} />
+    </div>
+  );
+}
 
 export class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -623,6 +646,21 @@ export default function PolierApp() {
     setProjekte(prev => prev.map(p => p.id===id ? { ...p, ...changes } : p));
   }
 
+  // Aus dem Archiv heraus eine abgeschlossene Baustelle öffnen — die liegt
+  // (anders als aktive Baustellen) nicht schon im projekte-State, weil die
+  // Hauptabfrage oben bewusst nur archiviert=false lädt. Komplette Zeile
+  // einmalig nachladen und einhängen, statt einen zweiten, parallelen
+  // "aktives Projekt"-Mechanismus zu bauen.
+  async function archivProjektOeffnen(id) {
+    if (!projekte.find(p => p.id === id)) {
+      const client = sbClientMitToken(auth.session);
+      const { data } = await client.from("projekte").select("*").eq("id", id).single();
+      if (data) setProjekte(prev => [...prev, data]);
+    }
+    setAktivId(id);
+    setTab("abschluss");
+  }
+
 
   const felder    = aktProjektAufgaben;
   const berichte  = aktProjektBerichte;
@@ -861,7 +899,11 @@ export default function PolierApp() {
     // (andere Stellen wie der Stempeln-Tab verlassen sich auf projekte[0]
     // als Default-Auswahl). .sort() ist stabil, "zuletzt" behält also die
     // von Supabase gelieferte created_at.desc-Reihenfolge einfach bei.
-    const projekteSortiert = [...projekte].sort((a, b) => {
+    // Archivierte Baustellen (siehe archivProjektOeffnen) können in diesem
+    // selben projekte-Array landen, sobald man sie aus dem Archiv öffnet —
+    // hier trotzdem ausblenden, die gehören in den Archiv-Tab, nicht in
+    // "Meine Baustellen".
+    const projekteSortiert = [...projekte].filter(p => !p.archiviert).sort((a, b) => {
       if (projektSort === "name")   return (a.name||"").localeCompare(b.name||"", "de");
       if (projektSort === "nummer") return (a.projektnummer||"").localeCompare(b.projektnummer||"", "de", { numeric:true });
       return 0;
@@ -931,7 +973,7 @@ export default function PolierApp() {
                 App.jsx ("Der Supervisor soll Zugriff auf keine Unternehmen
                 haben, nur diese Fenster sehen"). */}
             <div style={{ display:"flex", gap:22, marginTop:18 }}>
-              {[["projekte","Baustellen"],["firmen","Unternehmen"]]
+              {[["projekte","Baustellen"],["firmen","Unternehmen"],["archiv","Archiv"]]
                 .map(([id,label]) => (
                 <button key={id} onClick={() => setHomeTab(id)}
                   style={{ background:"none", border:"none", cursor:"pointer",
@@ -1077,28 +1119,39 @@ export default function PolierApp() {
                   );
                 })}
 
-                {/* Neue Baustelle */}
-                <div onClick={() => setNeuProjekt(true)}
-                  style={{ border:"2px dashed var(--yellow)",
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                    padding:"12px", textAlign:"center", cursor:"pointer",
-                    background:"var(--ybg)", color:"var(--ydark)",
-                    fontWeight:700, fontSize:14 }}>
-                  <Plus size={18} />Neue Baustelle
-                </div>
+                {/* Neue Baustelle — nur wenn schon mindestens eine existiert:
+                    im Leerzustand übernimmt der große "Erste Baustelle
+                    anlegen"-Button oben dieselbe Aktion, zwei Buttons dafür
+                    wären doppelt. */}
+                {projekte.length > 0 && (
+                  <div onClick={() => setNeuProjekt(true)}
+                    style={{ border:"2px dashed var(--yellow)",
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                      padding:"12px", textAlign:"center", cursor:"pointer",
+                      background:"var(--ybg)", color:"var(--ydark)",
+                      fontWeight:700, fontSize:14 }}>
+                    <Plus size={18} />Neue Baustelle
+                  </div>
+                )}
               </>
             )}
 
+            {homeTab === "archiv" && (
+              <ArchivView firmaId={firma?.id} session={auth.session} onOeffnen={archivProjektOeffnen} />
+            )}
+
             {homeTab === "firmen" && (
-              <FirmenView
-                owneFirma={eigeneFirma}
-                setEigeneFirma={setEigeneFirma}
-                subs={subs}
-                setSubs={setSubs}
-                onOnboardingReset={() => setOnboardingDone(false)}
-                session={auth.session}
-                firmaId={firma?.id}
-              />
+              <React.Suspense fallback={<TabLadeFallback />}>
+                <FirmenView
+                  owneFirma={eigeneFirma}
+                  setEigeneFirma={setEigeneFirma}
+                  subs={subs}
+                  setSubs={setSubs}
+                  onOnboardingReset={() => setOnboardingDone(false)}
+                  session={auth.session}
+                  firmaId={firma?.id}
+                />
+              </React.Suspense>
             )}
           </div>
         </div>
@@ -1153,6 +1206,10 @@ export default function PolierApp() {
     { id:"ki_frage",      icon:"💬",  label:"KI fragen",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     { id:"simulation",    icon:"🧪",  label:"Simulation",  rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     { id:"angebot",       icon:"📄",  label:"Angebot",     rollen:["administrator","geschaeftsfuehrer"] },
+    // Ein Vorarbeiter führt eine Kolonne, keine ganze Baustelle (siehe
+    // Kommentar bei der vorarbeiter-Rolle weiter unten) — deshalb weder
+    // Abschluss-Button noch Lese-Zugriff auf die Abschlussakte für ihn.
+    { id:"abschluss",     icon:"🗂️",  label:"Abschluss",   rollen:["administrator","geschaeftsfuehrer","polier"] },
     { id:"admin_params",  icon:"⚙️",  label:"Parameter",   rollen:["administrator"] },
     { id:"nutzer",        icon:"👥",  label:"Nutzer",      rollen:["administrator"] },
     // Fehlte bisher komplett in dieser Liste, obwohl ROLLEN.administrator.tabs
@@ -1184,7 +1241,7 @@ export default function PolierApp() {
   const aktivInMehr = mehrTabs.some(t => t.id === tab);
   const TAB_ICONS = { dashboard:LayoutGrid, aufgaben:CircleCheckBig, tagebuch:NotebookPen,
     kolonnen:Users, stempeln:Clock, gantt:Calendar, kosten:Euro, wetter:CloudSun,
-    stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, firmen:Building2, profil:User, ki_frage:Sparkles, simulation:FlaskConical, abwesenheiten:Palmtree };
+    stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, firmen:Building2, profil:User, ki_frage:Sparkles, simulation:FlaskConical, abwesenheiten:Palmtree, abschluss:Archive };
 
   return (
     // position:fixed auf html/body war der Bug (siehe theme.css) — aber
@@ -1273,6 +1330,7 @@ export default function PolierApp() {
               else setAufgabenFilter("alle");
               setTab(tabId);
             }} />}
+        <React.Suspense fallback={<TabLadeFallback />}>
         {tab === "gantt"     && <GanttView felder={felder}
             onAufgabeKlick={id => { setAufgabenEditId(id); setAufgabenFilter("alle"); setTab("aufgaben"); }} />}
         {tab === "wetter"    && <WeatherView ort={projekt?.ort} plz={projekt?.plz} projektId={projekt?.id} />}
@@ -1323,6 +1381,7 @@ export default function PolierApp() {
             // "alle aus seiner Kolonne", nicht firmenweit.
             darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
+        {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
         {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
         {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} session={auth.session} />}
@@ -1331,6 +1390,7 @@ export default function PolierApp() {
             onOnboardingReset={() => setOnboardingDone(false)} session={auth.session} firmaId={firma?.id} firma={firma} projekte={projekte} />}
         {tab === "profil"       && <MeinProfilView profil={aktiveProfil} session={auth.session} onProfilAktualisiert={auth.profilAktualisieren} pinPflicht={!!firma?.pin_pflicht} />}
         {tab === "abwesenheiten" && <AbwesenheitenView session={auth.session} profil={aktiveProfil} />}
+        </React.Suspense>
       </div>
       </PlanGuard>
 

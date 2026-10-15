@@ -545,6 +545,65 @@ Antworte NUR mit einem JSON-Objekt ohne Markdown:
   }
 }
 
+// ── KI-Baustellenabschluss: Zusammenfassung + Entscheidungen aus der
+// kompletten Projekthistorie ─────────────────────────────────────────────
+// Läuft einmalig beim Klick auf "Baustelle abschließen". Chronologie und
+// offene Restpunkte lässt das NICHT von der KI erzeugen — die stehen schon
+// exakt in tagesberichte/aufgaben und werden dort direkt zusammengestellt
+// (siehe BaustellenAbschlussView.jsx). Die KI übernimmt nur, wofür sie
+// tatsächlich gebraucht wird: aus den (oft vielen, auch belanglosen)
+// Kommentaren die wirklich wichtigen Entscheidungen/Ereignisse herausfiltern,
+// plus eine knappe Gesamt-Zusammenfassung des Projektverlaufs.
+export async function kiBaustellenabschluss(projekt, tagesberichte, kommentare, session) {
+  const berichteText = [...(tagesberichte || [])]
+    .sort((a, b) => new Date(a.datum) - new Date(b.datum))
+    .map(b => {
+      const teile = [`Datum: ${new Date(b.datum).toLocaleDateString("de-DE")}`];
+      if (b.taetigkeit) teile.push(`Tätigkeit: ${b.taetigkeit}`);
+      if (b.besonderheiten) teile.push(`Besonderheiten: ${b.besonderheiten}`);
+      return `- ${teile.join(" · ")}`;
+    }).join("\n") || "keine Tagesberichte erfasst";
+
+  const kommentareText = [...(kommentare || [])]
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    .map(k => {
+      const titel = k.aufgaben?.titel || "unbekannte Aufgabe";
+      const autor = k.autor ? [k.autor.vorname, k.autor.nachname].filter(Boolean).join(" ") : "unbekannt";
+      const datum = new Date(k.created_at).toLocaleDateString("de-DE");
+      return `- [${titel}] ${autor} (${datum}): "${k.text}"`;
+    }).join("\n") || "keine Kommentare erfasst";
+
+  const prompt = `Du erstellst den inhaltlichen Teil einer digitalen Baustellenabschlussakte für ein abgeschlossenes Bauprojekt.
+
+Projekt: ${projekt?.name || ""}${projekt?.ort ? `, ${projekt.ort}` : ""}
+Projektnummer: ${projekt?.projektnummer || "—"}
+
+Alle Tagesberichte (chronologisch):
+${berichteText}
+
+Alle Kommentare zu Aufgaben (chronologisch):
+${kommentareText}
+
+Erfinde NICHTS, was sich nicht aus den Daten oben ableiten lässt. Antworte NUR mit einem JSON-Objekt ohne Markdown:
+{
+  "zusammenfassung": "Knappe Gesamt-Zusammenfassung des Projektverlaufs (4-6 Sätze, sachlich)",
+  "entscheidungen": ["Wichtige Entscheidung oder Ereignis 1 (mit Datum, wenn aus den Kommentaren ableitbar)", "..."]
+}
+"entscheidungen" enthält NUR tatsächlich wichtige Ereignisse/Entscheidungen (z.B. Planänderungen, Verzögerungsgründe, Verursacher-Klärungen) — keine Routine-Kommentare. Leeres Array, wenn keine erkennbar sind.`;
+
+  const data = await rufeClaudeAuf(prompt, 2000, session);
+  const text = data.content?.find(b => b.type === "text")?.text || "{}";
+  try {
+    const r = JSON.parse(text.replace(/```json|```/g, "").trim());
+    return {
+      zusammenfassung: r.zusammenfassung || "",
+      entscheidungen: Array.isArray(r.entscheidungen) ? r.entscheidungen.filter(Boolean) : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Läuft VOR jeder Firmenanlage — es gibt also noch keine firma_id und
 // keinen firmenspezifischen Anthropic-Key, deshalb ein eigener Endpunkt
 // (nicht ki-proxy): firma-recherche nutzt einen Plattform-Key, der laut

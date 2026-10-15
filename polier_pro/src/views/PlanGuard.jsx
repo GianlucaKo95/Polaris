@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Lock, Zap, TriangleAlert } from "lucide-react";
 import { PLAN_CONFIG } from "../config/konstanten.js";
-import { sbStripeCheckoutStarten } from "../lib/supabase.js";
+import { sbStripeCheckoutStarten, sbPlanConfigListe, planConfigAnzeige } from "../lib/supabase.js";
 import { Spinner } from "../components/Spinner.jsx";
 
 // Nur Administrator/Geschäftsführer können einen Plan wählen oder ein Abo
@@ -13,6 +13,18 @@ import { Spinner } from "../components/Spinner.jsx";
 export function PlanGuard({ firma, children, ressource, rolle, session }) {
   const [laedtPlan, setLaedtPlan] = useState(null); // welcher Plan-Key gerade lädt
   const [fehler,    setFehler]    = useState("");
+  // PLAN_CONFIG (Frontend-Konstante) nur als Startwert/Fallback, damit beim
+  // ersten Render sofort etwas Sinnvolles steht und ein Netzwerkfehler die
+  // Anzeige nicht leer lässt — sobald plan_config aus der DB geladen ist
+  // (einzige echte Quelle, siehe sbPlanConfigListe), überschreibt das
+  // diesen Startwert.
+  const [planConfig, setPlanConfig] = useState(PLAN_CONFIG);
+
+  useEffect(() => {
+    sbPlanConfigListe(session).then(rows => {
+      if (rows) setPlanConfig(Object.fromEntries(rows.map(r => [r.plan, planConfigAnzeige(r)])));
+    });
+  }, [session?.access_token]);
 
   if (!firma) return children;
 
@@ -75,11 +87,11 @@ export function PlanGuard({ firma, children, ressource, rolle, session }) {
       <div style={{ display:"flex", flexDirection:"column", gap:10,
         width:"100%", maxWidth:340 }}>
         {[
-          { key:"starter",    label:PLAN_CONFIG.starter.label,    preis:PLAN_CONFIG.starter.preis,
-            features:`${PLAN_CONFIG.starter.inklusiveBaustellen} Baustellen inklusive, je weitere ${PLAN_CONFIG.starter.preisJeWeitere}` },
-          { key:"pro",        label:PLAN_CONFIG.pro.label,        preis:PLAN_CONFIG.pro.preis,
-            features:`${PLAN_CONFIG.pro.inklusiveBaustellen} Baustellen inklusive, je weitere ${PLAN_CONFIG.pro.preisJeWeitere}, + KI-Features & Kundenportal` },
-          { key:"enterprise", label:PLAN_CONFIG.enterprise.label, preis:PLAN_CONFIG.enterprise.preis,
+          { key:"starter",    label:planConfig.starter.label,    preis:planConfig.starter.preis,
+            features:`${planConfig.starter.inklusiveBaustellen} Baustellen inklusive, je weitere ${planConfig.starter.preisJeWeitere}` },
+          { key:"pro",        label:planConfig.pro.label,        preis:planConfig.pro.preis,
+            features:`${planConfig.pro.inklusiveBaustellen} Baustellen inklusive, je weitere ${planConfig.pro.preisJeWeitere}, + KI-Features & Kundenportal` },
+          { key:"enterprise", label:planConfig.enterprise.label, preis:planConfig.enterprise.preis,
             features:"Unbegrenzte Baustellen, individuelle Vereinbarung" },
         ].map(p => (
           <div key={p.key} style={{ background:"var(--surface)", borderRadius:14,

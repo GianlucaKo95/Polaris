@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CircleX, ArrowRight, PartyPopper, Rocket, Check } from "lucide-react";
-import { supabase, sbClientMitToken } from "../lib/supabase.js";
+import { supabase, sbClientMitToken, sbPlanConfigListe, planConfigAnzeige } from "../lib/supabase.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { PLAN_CONFIG } from "../config/konstanten.js";
 
@@ -11,6 +11,17 @@ export function RegistrierungScreen({ auth, onZurueck }) {
   const [firmaName,   setFirmaName]   = useState("");
   const [laden,       setLaden]       = useState(false);
   const [fehler,      setFehler]      = useState("");
+  // PLAN_CONFIG nur als Startwert/Fallback — siehe PlanGuard.jsx für
+  // dieselbe Begründung. Läuft hier (noch) ohne Session — sbPlanConfigListe
+  // greift dafür auf den anon-Client zurück, plan_config ist dafür extra
+  // öffentlich lesbar (siehe Migration plan_config_oeffentlich_lesbar).
+  const [planConfig, setPlanConfig] = useState(PLAN_CONFIG);
+
+  useEffect(() => {
+    sbPlanConfigListe(null).then(rows => {
+      if (rows) setPlanConfig(Object.fromEntries(rows.map(r => [r.plan, planConfigAnzeige(r)])));
+    });
+  }, []);
   // Session aus kontoAnlegen(), falls signUp() sie direkt liefert (kein
   // "Confirm email" im Supabase-Projekt aktiv) — dann muss firmaAnlegen()
   // sich nicht separat einloggen, siehe dortiger Kommentar.
@@ -193,7 +204,7 @@ export function RegistrierungScreen({ auth, onZurueck }) {
             <Label>Plan (nach Testphase)</Label>
             <div style={{ display:"flex", flexDirection:"column", gap:8,
               marginTop:6, marginBottom:14 }}>
-              {Object.entries(PLAN_CONFIG).filter(([key]) => key !== "enterprise").map(([key, p]) => (
+              {Object.entries(planConfig).filter(([key]) => key !== "enterprise").map(([key, p]) => (
                 <div key={key} style={{ background:"var(--surface2)",
                   borderRadius:12, padding:"9px 16px",
                   border:`1.5px solid ${key === "starter" ? "var(--blue)" : "var(--border)"}`,

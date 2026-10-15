@@ -86,23 +86,47 @@ body {
   margin: 0;
   overscroll-behavior-y: contain;
   overflow-x: hidden;
-  /* var(--surface) statt var(--bg): drei gezielte Root-Cause-Fixes
-     (position:fixed von html/body entfernt, #root height:100dvh exakt
-     wie die Referenz-PWA nachgezogen, erzwungener Reload bei
-     controllerchange entschärft) haben den Leerbereich unter der
-     Bottom-Nav nach einem vollständigen Schließen+Neuöffnen der PWA
-     NICHT beseitigt — reproduziert sich sogar 1:1 bei der Referenz-PWA
-     selbst (dort nur scheinbar zufällig seltener). Das ist damit sehr
-     wahrscheinlich eine WebKit-Eigenheit beim App-Neustart-Zyklus, die
-     keine Web-App zuverlässig verhindern kann. body zeigt in diesem
-     Leerbereich durch — jetzt dieselbe Farbe wie die Bottom-Nav
-     (var(--surface)) statt des grauen App-Hintergrunds, damit der
-     Bereich unabhängig davon, wann WebKit sich verrechnet, nicht mehr
-     auffällt. */
-  background: var(--surface) !important;
+  /* Drei gezielte Root-Cause-Fixes (position:fixed von html/body entfernt,
+     #root height:100dvh exakt wie die Referenz-PWA nachgezogen, erzwungener
+     Reload bei controllerchange entschärft) haben den Leerbereich, den
+     WebKit nach einem vollständigen Schließen+Neuöffnen der installierten
+     PWA manchmal am oberen oder unteren Rand lässt, NICHT beseitigt —
+     reproduziert sich sogar 1:1 bei der Referenz-PWA selbst (dort nur
+     scheinbar zufällig seltener). Das ist damit sehr wahrscheinlich eine
+     WebKit-Eigenheit beim App-Neustart-Zyklus, die keine Web-App
+     zuverlässig verhindern kann.
+     Früher stand hier background:var(--surface), weil body in diesem
+     Leerbereich durchscheint und --surface wenigstens zur (hellen)
+     Bottom-Nav passte — das ließ dieselbe Lücke am OBEREN Rand aber als
+     weißen Balken vor dem dunklen --ink-Header aufblitzen. Statt einer
+     einzigen globalen Farbe übernehmen das jetzt zwei feste Overlays unten
+     (::before/::after), je nach Rand passend zu Header bzw. Bottom-Nav
+     eingefärbt — body selbst bekommt wieder die normale App-Hintergrundfarbe. */
+  background: var(--bg);
   color: var(--text) !important;
   font-family: var(--font-ui);
   transition: background 0.25s, color 0.25s;
+}
+/* Siehe Kommentar an body{} oben: großzügig bemessen (nicht exakt auf
+   env(safe-area-inset-*)), weil die WebKit-Fehlberechnung keine feste
+   Größe hat (beobachtet: ~59px, 852 vs. 793px effektive Höhe). Beide
+   liegen mit z-index:-1 hinter der eigentlichen UI und werden nur
+   sichtbar, wenn WebKit tatsächlich eine Lücke an dem jeweiligen Rand
+   lässt — im Normalfall deckt Header bzw. Bottom-Nav sie vollständig ab. */
+body::before, body::after {
+  content: "";
+  position: fixed;
+  left: 0; right: 0;
+  height: max(80px, env(safe-area-inset-top));
+  z-index: -1;
+  pointer-events: none;
+}
+body::before { top: 0; background: var(--ink); }
+body::after {
+  top: auto; bottom: 0;
+  height: max(80px, env(safe-area-inset-bottom));
+  background: var(--surface);
+  transition: background 0.25s;
 }
 /* Fehlte bisher — die Referenz-PWA setzt height:100dvh nicht nur auf ihre
    Vollbild-Screens, sondern zusätzlich auf #root selbst. Nachgezogen,
