@@ -63,7 +63,7 @@ export function SupervisorView({ session }) {
   function bearbeitenOeffnen(f) {
     setEditId(f.id);
     setEditForm({
-      plan: f.plan, planStatus: f.plan_status,
+      planStatus: f.plan_status,
       trialEndsAt: alsDatumInput(f.trial_ends_at), planEndsAt: alsDatumInput(f.plan_ends_at),
       gesperrt: f.gesperrt,
       // "" im Eingabefeld = unbegrenzt (wird beim Speichern zum -1-Sentinel
@@ -76,7 +76,9 @@ export function SupervisorView({ session }) {
     setSpeichert(true); setFirmenFehler("");
     const maxBaustellenEingabe = editForm.maxBaustellen.trim();
     const { ok, fehler: f } = await sbSupervisorFirmaAktualisieren(firmaId, {
-      plan: editForm.plan,
+      // plan bewusst nicht mitgeschickt — rein lesend, siehe Kommentar am
+      // Plan-Feld oben. sbSupervisorFirmaAktualisieren schickt dafür
+      // null (= "nicht ändern" per COALESCE in der RPC).
       planStatus: editForm.planStatus,
       trialEndsAt: editForm.trialEndsAt ? new Date(editForm.trialEndsAt).toISOString() : null,
       planEndsAt: editForm.planEndsAt ? new Date(editForm.planEndsAt).toISOString() : null,
@@ -209,19 +211,23 @@ export function SupervisorView({ session }) {
                 display:"flex", flexDirection:"column", gap:9 }}>
                 <div>
                   <Label>Plan</Label>
-                  <select value={editForm.plan} onChange={e => setEditForm(p => ({ ...p, plan: e.target.value }))}
-                    style={{ ...inputStyle(), padding:"8px 10px" }}>
-                    {!planConfig[editForm.plan] && <option value={editForm.plan}>{editForm.plan} (unbekannt)</option>}
-                    {Object.entries(planConfig).map(([k, p]) => (
-                      <option key={k} value={k}>{p.icon} {p.label} — {p.preis}</option>
-                    ))}
-                  </select>
+                  {/* Nur lesend: der Stripe-Webhook schreibt firmen.plan bei
+                      jeder Abo-Änderung direkt (siehe stripe-webhook/index.ts),
+                      ein manuelles Umstellen hier würde beim nächsten
+                      Webhook-Event stillschweigend wieder überschrieben —
+                      täuschte also nur eine Wirkung vor, die es nicht hatte.
+                      Trial-/Enterprise-Firmen ohne Stripe-Abo werden bei
+                      Bedarf direkt in der DB zugewiesen. */}
+                  <div style={{ ...inputStyle(), padding:"8px 10px", display:"flex",
+                    alignItems:"center", background:"var(--surface2)", color:"var(--muted)" }}>
+                    {planInfo ? `${planInfo.icon} ${planInfo.label} — ${planInfo.preis}` : f.plan} (nur lesend, wird von Stripe verwaltet)
+                  </div>
                 </div>
                 <div>
                   <Label>Max. Baustellen (leer = unbegrenzt)</Label>
                   <input type="number" min="0" value={editForm.maxBaustellen}
                     onChange={e => setEditForm(p => ({ ...p, maxBaustellen: e.target.value }))}
-                    placeholder={`z.B. ${planConfig[editForm.plan]?.inklusiveBaustellen ?? "—"} (laut Plan inklusive)`}
+                    placeholder={`z.B. ${planInfo?.inklusiveBaustellen ?? "—"} (laut Plan inklusive)`}
                     style={{ ...inputStyle(), padding:"8px 10px" }} />
                   <div style={{ color:"var(--muted)", fontSize:11, marginTop:4 }}>
                     Aktuell {f.aktive_baustellen} aktive Baustellen. Für bezahlte Zusatz-Baustellen
