@@ -255,8 +255,7 @@ ${fotos.length > 0 ? `<div class="section">
 
             {/* Revisions-Hash */}
             <div style={{ background:"#1a1a1a", borderRadius:10, padding:"7px 14px",
-              marginBottom:12, display:"flex", justifyContent:"space-between",
-              alignItems:"center" }}>
+              marginBottom:12, display:"flex", flexDirection:"column", gap:4 }}>
               <div>
                 <div style={{ color:"#F5C400", fontWeight:700, fontSize:12 }}>
                   Revisionssicheres Dokument
@@ -266,7 +265,7 @@ ${fotos.length > 0 ? `<div class="section">
                 </div>
               </div>
               <div style={{ color:"#F5C400", fontFamily:"monospace",
-                fontSize:14, fontWeight:800 }}>{hash ? `DOC-${hash}` : "…berechne…"}</div>
+                fontSize:14, fontWeight:800, wordBreak:"break-all" }}>{hash ? `DOC-${hash}` : "…berechne…"}</div>
             </div>
 
             <UnterschriftPad label="Unterschrift Polier" onSave={setSigPolier} />
@@ -303,8 +302,9 @@ ${fotos.length > 0 ? `<div class="section">
             {exportiert && (
               <div style={{ background:"var(--gbg)", borderRadius:10, padding:7,
                 marginTop:10, color:"var(--green)", fontSize:12, fontWeight:600,
-                textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-                <CircleCheckBig size={13} /> PDF erstellt · DOC-{hash} · {new Date().toLocaleString("de-DE")}
+                textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center",
+                gap:6, flexWrap:"wrap", wordBreak:"break-all" }}>
+                <CircleCheckBig size={13} style={{ flexShrink:0 }} /> PDF erstellt · DOC-{hash} · {new Date().toLocaleString("de-DE")}
                 {!hashGespeichert && " · Prüfreferenz konnte nicht gespeichert werden"}
               </div>
             )}

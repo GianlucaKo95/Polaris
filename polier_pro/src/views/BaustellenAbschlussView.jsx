@@ -183,10 +183,11 @@ export function BaustellenAbschlussView({ projekt, aufgaben = [], tagesberichte 
             <Archive size={16} color="var(--muted)" />
             <div style={{ color:"var(--text)", fontWeight:800, fontSize:15 }}>Baustelle abgeschlossen</div>
           </div>
-          <div style={{ color:"var(--muted)", fontSize:12.5, display:"flex", alignItems:"center", gap:5 }}>
+          <div style={{ color:"var(--muted)", fontSize:12.5, display:"flex", alignItems:"center",
+            gap:5, flexWrap:"wrap" }}>
             <Calendar size={12} />
             {projekt.abschluss_datum ? new Date(projekt.abschluss_datum).toLocaleDateString("de-DE") : "—"}
-            {hash && <span style={{ fontFamily:"monospace", marginLeft:6 }}>· DOC-{hash}</span>}
+            {hash && <span style={{ fontFamily:"monospace", marginLeft:6, wordBreak:"break-all" }}>· DOC-{hash}</span>}
           </div>
         </div>
 
@@ -324,7 +325,8 @@ export function BaustellenAbschlussView({ projekt, aufgaben = [], tagesberichte 
           <div style={{ color:"var(--text)", fontWeight:800, fontSize:15, marginBottom:4 }}>
             Baustelle abgeschlossen
           </div>
-          <div style={{ color:"var(--muted)", fontSize:12.5, marginBottom:16, fontFamily:"monospace" }}>
+          <div style={{ color:"var(--muted)", fontSize:12.5, marginBottom:16, fontFamily:"monospace",
+            wordBreak:"break-all", padding:"0 20px" }}>
             DOC-{hash}
           </div>
           <button onClick={() => exportPDF({ ...entwurf, offene_restpunkte: offeneRestpunkteAus(aufgaben) })}
