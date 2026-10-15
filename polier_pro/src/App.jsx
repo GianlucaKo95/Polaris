@@ -1397,7 +1397,14 @@ export default function PolierApp() {
       {/* ── BOTTOM NAV — Flex-Geschwister statt position:fixed, siehe Kommentar oben ──
           Der Home-Indicator-Sicherheitsabstand bleibt (Labels/Buttons sollen
           nicht unter der Wisch-Geste liegen), aber so knapp wie möglich —
-          14px weniger als der volle Sicherheitsabstand, nie unter 4px. */}
+          14px weniger als der volle Sicherheitsabstand, nie unter 4px.
+          Bei einer archivierten Baustelle (BaustellenAbschlussView, nur
+          lesend) komplett ausgeblendet: Dashboard/Aufgaben/Tagebuch/
+          Kolonnen & Co. sind Live-Bearbeitungs-Tabs einer aktiven Baustelle
+          — bei einer bereits abgeschlossenen Akte gäbe es darüber sonst
+          einen Weg, sie nachträglich doch noch zu bearbeiten, und die Tabs
+          passen inhaltlich schlicht nicht zu einer geschlossenen Baustelle. */}
+      {!projekt?.archiviert && (
       <div style={{ flexShrink:0,
         background:"var(--surface)", borderTop:"1px solid var(--border)",
         display:"flex", padding:"6px 6px",
@@ -1431,9 +1438,10 @@ export default function PolierApp() {
           </button>
         )}
       </div>
+      )}
 
       {/* ── MEHR-MENÜ (Bottom Sheet) ── */}
-      {zeigeMehr && (
+      {zeigeMehr && !projekt?.archiviert && (
         <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0,
           background:"rgba(11,17,32,0.55)", zIndex:60 }}
           onClick={() => setZeigeMehr(false)}>
