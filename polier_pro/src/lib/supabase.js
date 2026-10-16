@@ -401,9 +401,13 @@ export async function sbKundenportalDeaktivieren(id, session) {
 // Öffentlicher Abruf ohne Session — läuft über eine SECURITY DEFINER-RPC,
 // die gezielt nur die für den Kunden freigegebenen, kuratierten Felder
 // liefert (kein Zugriff auf echte Tabellen für anon, siehe Migration).
+// _v2 statt der alten kundenportal_daten: liefert zusätzlich eine Mängel-
+// Liste je Projekt (Statusverfolgung im Portal) — neue Funktion statt
+// DROP+CREATE, siehe einladung_pruefen_v2/v3 bzw. angebot_freigabe_*_v2 für
+// denselben, aus früheren Migrationen bekannten Workaround.
 export async function sbKundenportalDaten(token) {
   try {
-    const { data, error } = await supabase.rpc("kundenportal_daten", { p_token: token });
+    const { data, error } = await supabase.rpc("kundenportal_daten_v2", { p_token: token });
     if (error || !data?.length) return null;
     return data[0];
   } catch { return null; }

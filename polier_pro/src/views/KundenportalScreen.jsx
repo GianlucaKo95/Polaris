@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { MapPin, Users, Cloud, Camera, Building2, TriangleAlert } from "lucide-react";
 import { sbKundenportalDaten } from "../lib/supabase.js";
-import { PROJEKTTYPEN } from "../config/konstanten.js";
+import { PROJEKTTYPEN, AUFGABEN_STATUS } from "../config/konstanten.js";
 import { KundenMangelMelden } from "../components/KundenMangelMelden.jsx";
 
 // Öffentliche, read-only Seite für den Bauherrn — kein Login, kein Zugriff
@@ -57,6 +57,7 @@ export function KundenportalScreen({ token }) {
   // diese öffentliche, loginfreie Seite bei einem unerwarteten null
   // komplett leer abstürzen statt den "Noch keine Berichte"-Hinweis zu zeigen.
   const tagesberichte = daten.tagesberichte || [];
+  const maengel = daten.maengel || [];
 
   return (
     <div style={{ minHeight:"100dvh", background:"var(--bg)", color:"var(--text)", fontFamily:"inherit" }}>
@@ -116,6 +117,57 @@ export function KundenportalScreen({ token }) {
         </button>
         {zeigeMangelMelden && (
           <KundenMangelMelden token={token} onClose={() => setZeigeMangelMelden(false)} />
+        )}
+
+        {/* Mängel-Status — Nachverfolgung für bereits gemeldete (eigene wie
+            fremde) Mängel dieses Projekts, damit nach dem Melden nicht
+            einfach Stille herrscht. Reihenfolge wie von der RPC geliefert
+            (neueste zuerst). */}
+        {maengel.length > 0 && (
+          <div style={{ marginBottom:18 }}>
+            <div style={{ fontWeight:800, fontSize:13, marginBottom:10 }}>Mängel-Status</div>
+            {maengel.map(m => {
+              const statusInfo = AUFGABEN_STATUS[m.status] || AUFGABEN_STATUS.offen;
+              const behoben = m.status === "abgeschlossen";
+              return (
+                <div key={m.id} style={{ background:"var(--surface)", border:"1px solid var(--border)",
+                  padding:"12px 14px", marginBottom:9 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:4 }}>
+                    <div style={{ fontWeight:700, fontSize:13.5 }}>{m.titel}</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0,
+                      color:statusInfo.farbe, fontSize:11.5, fontWeight:700 }}>
+                      {statusInfo.icon} {statusInfo.label}
+                    </div>
+                  </div>
+                  {m.beschreibung && (
+                    <div style={{ fontSize:12.5, color:"var(--text2)", lineHeight:1.4, marginBottom:6 }}>
+                      {m.beschreibung}
+                    </div>
+                  )}
+                  <div style={{ fontSize:11, color:"var(--muted)" }}>
+                    Gemeldet am {new Date(m.erstellt_am).toLocaleDateString("de-DE")}
+                  </div>
+                  {m.fotos?.length > 0 && (
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:8 }}>
+                      {m.fotos.slice(0, 4).map((url, j) => (
+                        <img key={j} src={url} alt="" style={{ width:48, height:48, borderRadius:8, objectFit:"cover" }} />
+                      ))}
+                    </div>
+                  )}
+                  {behoben && m.behebung_fotos?.length > 0 && (
+                    <div style={{ marginTop:8 }}>
+                      <div style={{ fontSize:11, color:"var(--green)", fontWeight:700, marginBottom:5 }}>Nachweis Behebung</div>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                        {m.behebung_fotos.slice(0, 4).map((url, j) => (
+                          <img key={j} src={url} alt="" style={{ width:48, height:48, borderRadius:8, objectFit:"cover" }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
 
         {/* Tagesberichte */}
