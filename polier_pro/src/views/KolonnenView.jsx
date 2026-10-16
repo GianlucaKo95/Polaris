@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { RefreshCw, Info, CircleX, Plus, Phone, User, Building2 } from "lucide-react";
+import { RefreshCw, Info, CircleX, Plus, Phone, User, Building2, ChevronDown, Euro } from "lucide-react";
 import { ERFASST_PROXY, erfasstQuery } from "../lib/erfasst.js";
 import { sbFetch } from "../lib/supabase.js";
 import { taetigkeitAnzeige } from "../config/konstanten.js";
@@ -37,6 +37,7 @@ export function KolonnenView({ kolonnen, projekt, subs = [], setKolonnen, darfBe
   const [neueKolonne, setNeueKolonne] = useState(false);
   const [kName,       setKName]       = useState("");
   const [kVorarbeiter,setKVorarbeiter]= useState("");
+  const [subsOffen,   setSubsOffen]   = useState({}); // { [subId]: boolean }
 
   const konfiguriert  = !ERFASST_PROXY.includes("DEIN-PROJEKT");
   const erfasstLinked = konfiguriert && !!projekt?.erfasstIdent;
@@ -180,32 +181,64 @@ export function KolonnenView({ kolonnen, projekt, subs = [], setKolonnen, darfBe
             marginBottom:7, display:"flex", alignItems:"center", gap:6 }}>
             <Building2 size={14} /> Subunternehmer ({projektSubs.length})
           </div>
-          {projektSubs.map(s => (
-            <div key={s.id} style={{ background:"var(--surface)", borderRadius:11,
-              padding:"9px 15px", marginBottom:6,
-              border:`1.5px solid ${s.status==="aktiv" ? "var(--border)" : "var(--red)"}` }}>
-              <div style={{ color:"var(--text)", fontWeight:700, fontSize:13.5 }}>{s.name}</div>
-              {(s.kontakt || s.telefon) && (
-                <div style={{ color:"var(--muted)", fontSize:12, marginTop:3,
-                  display:"flex", alignItems:"center", gap:4, flexWrap:"wrap" }}>
-                  {s.kontakt && <><User size={11} /> {s.kontakt}</>}
-                  {s.kontakt && s.telefon && <>·</>}
-                  {s.telefon && <><Phone size={11} /> {s.telefon}</>}
-                </div>
-              )}
-              {(s.gewerke||[]).length > 0 && (
-                <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginTop:6 }}>
-                  {s.gewerke.map(k => {
-                    const g = ALLE_GEWERKE.find(x=>x.key===k);
-                    return g ? (
-                      <span key={k} style={{ background:"var(--surface2)", color:"var(--muted)",
-                        fontSize:10.5, padding:"2px 8px", borderRadius:20 }}>{g.icon} {g.label}</span>
-                    ) : null;
-                  })}
-                </div>
-              )}
-            </div>
-          ))}
+          {projektSubs.map(s => {
+            const offen = !!subsOffen[s.id];
+            return (
+              <div key={s.id} style={{ background:"var(--surface)", borderRadius:11,
+                marginBottom:6, overflow:"hidden",
+                border:`1.5px solid ${offen ? "var(--border2)" : "var(--border)"}` }}>
+                <button onClick={() => setSubsOffen(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
+                  aria-expanded={offen}
+                  style={{ all:"unset", cursor:"pointer", display:"flex", alignItems:"center",
+                    gap:10, padding:"9px 13px", width:"100%", boxSizing:"border-box" }}>
+                  <div style={{ width:30, height:30, borderRadius:8, background:"var(--surface2)",
+                    display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <Building2 size={15} color="var(--muted)" />
+                  </div>
+                  <div style={{ flex:1, minWidth:0, color:"var(--text)", fontWeight:700, fontSize:13.5,
+                    whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{s.name}</div>
+                  <div style={{ width:7, height:7, borderRadius:"50%", flexShrink:0,
+                    background: s.status==="aktiv" ? "var(--green)" : "var(--red)" }} />
+                  <ChevronDown size={15} color="var(--muted)" style={{ flexShrink:0,
+                    transform: offen ? "rotate(180deg)" : "none", transition:"transform 0.18s ease" }} />
+                </button>
+                {offen && (
+                  <div style={{ padding:"0 14px 12px 53px", display:"flex", flexDirection:"column", gap:7 }}>
+                    {(s.kontakt || s.telefon) && (
+                      <div style={{ display:"flex", alignItems:"center", gap:13, flexWrap:"wrap" }}>
+                        {s.kontakt && (
+                          <div style={{ display:"flex", alignItems:"center", gap:4, color:"var(--muted)", fontSize:12 }}>
+                            <User size={11} /> {s.kontakt}
+                          </div>
+                        )}
+                        {s.telefon && (
+                          <div style={{ display:"flex", alignItems:"center", gap:4, color:"var(--muted)", fontSize:12 }}>
+                            <Phone size={11} /> {s.telefon}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {(s.gewerke||[]).length > 0 && (
+                      <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+                        {s.gewerke.map(k => {
+                          const g = ALLE_GEWERKE.find(x=>x.key===k);
+                          return g ? (
+                            <span key={k} style={{ background:"var(--surface2)", color:"var(--muted)",
+                              fontSize:10.5, padding:"3px 9px", borderRadius:20 }}>{g.icon} {g.label}</span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                    {s.stundensatz > 0 && (
+                      <div style={{ display:"flex", alignItems:"center", gap:4, color:"var(--muted)", fontSize:11 }}>
+                        <Euro size={10} /> {s.stundensatz} €/Std.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
