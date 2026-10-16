@@ -9,6 +9,7 @@ import { Spinner } from "../components/Spinner.jsx";
 import { kiBaustelleAnlegen } from "../lib/ai.js";
 import { sbFetch } from "../lib/supabase.js";
 import { KundenportalFreigabe } from "../components/KundenportalFreigabe.jsx";
+import { ProjektDokumente } from "../components/ProjektDokumente.jsx";
 
 export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherFehler = "", session, istAdmin = false,
   firmaId, profil }) {
@@ -141,7 +142,10 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
             für die Freigabe-Zeile), RLS entscheidet serverseitig final über
             die Berechtigung, hier bewusst nicht zusätzlich nach Rolle verborgen. */}
         {initial?.id && session && firmaId && (
-          <KundenportalFreigabe projektId={initial.id} firmaId={firmaId} session={session} profil={profil} />
+          <>
+            <KundenportalFreigabe projektId={initial.id} firmaId={firmaId} session={session} profil={profil} />
+            <ProjektDokumente projektId={initial.id} firmaId={firmaId} session={session} profil={profil} />
+          </>
         )}
 
         {/* KI-Diktat — nur beim Neuanlegen, nur für Administrator. Füllt das

@@ -52,8 +52,9 @@ export function KundenportalFreigabe({ projektId, firmaId, session, profil }) {
       {!freigabe ? (
         <>
           <div style={{ color:"var(--muted)", fontSize:12, lineHeight:1.5, marginBottom:10 }}>
-            Erstellt einen Link, über den der Bauherr Baufortschritt und Baustellenberichte
-            ohne Login einsehen kann — ohne Kosten, Mängel oder interne Kommentare.
+            Erstellt einen Link, über den der Bauherr ohne Login Baufortschritt, Baustellenberichte,
+            Mängel-Status, Dokumente einsehen, Mängel melden und die Bauabnahme erklären kann —
+            ohne Kosten oder interne Kommentare.
           </div>
           <button onClick={erstellen}
             style={{ background:"var(--yellow)", color:"#1a1200", border:"none", borderRadius:8,

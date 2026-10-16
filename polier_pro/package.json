@@ -1,6 +1,6 @@
 {
   "name": "polier-pro",
-  "version": "1.48.29",
+  "version": "1.48.30",
   "private": true,
   "scripts": {
     "dev": "vite",

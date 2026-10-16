@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { CircleCheckBig, Ban, PenLine, X, Check } from "lucide-react";
+import { CircleCheckBig, Ban, PenLine, Paperclip, X, Check } from "lucide-react";
 import { UnterschriftPad } from "./UnterschriftPad.jsx";
 import { sbKundenportalAbnahmeEntscheiden } from "../lib/supabase.js";
+
+const MAX_PDF_BYTES = 8 * 1024 * 1024; // 8 MB — landet direkt als base64 in der DB-Zeile
 
 // Bauabnahme über den bestehenden Kundenportal-Token — gleiches Unterschrift-
 // /Nachweis-Muster wie bei der Angebots-Annahme (AngebotAkzeptierenScreen.jsx),
@@ -13,17 +15,35 @@ export function KundenAbnahme({ token, onClose, onEntschieden }) {
   const [name,       setName]       = useState("");
   const [grund,      setGrund]      = useState("");
   const [signatur,   setSignatur]   = useState(null);
+  const [dokument,   setDokument]   = useState(null);
+  const [dokumentName, setDokumentName] = useState("");
   const [bestaetigt, setBestaetigt] = useState(false);
   const [sendet,     setSendet]     = useState(false);
   const [fehler,     setFehler]     = useState("");
+  const pdfRef = useRef(null);
+
+  function handlePdf(e) {
+    const datei = e.target.files?.[0];
+    e.target.value = "";
+    if (!datei) return;
+    if (datei.type !== "application/pdf") { setFehler("Bitte nur eine PDF-Datei hochladen."); return; }
+    if (datei.size > MAX_PDF_BYTES) { setFehler("Datei zu groß (max. 8 MB)."); return; }
+    setFehler("");
+    const r = new FileReader();
+    r.onload = ev => { setDokument(ev.target.result); setDokumentName(datei.name); };
+    r.readAsDataURL(datei);
+  }
 
   async function absenden(entscheidung) {
     setFehler("");
     if (!name.trim()) { setFehler("Bitte einen Namen angeben."); return; }
-    if (entscheidung === "angenommen" && !signatur) { setFehler("Bitte zum Abnehmen unterschreiben."); return; }
+    if (entscheidung === "angenommen" && !signatur && !dokument) {
+      setFehler("Bitte zum Abnehmen unterschreiben oder ein unterschriebenes PDF hochladen.");
+      return;
+    }
     if (entscheidung === "angenommen" && !bestaetigt) { setFehler("Bitte die Abnahme bestätigen."); return; }
     setSendet(true);
-    const { ok, hash, fehler: err } = await sbKundenportalAbnahmeEntscheiden(token, { entscheidung, name, signatur, grund });
+    const { ok, hash, fehler: err } = await sbKundenportalAbnahmeEntscheiden(token, { entscheidung, name, signatur, grund, dokument });
     setSendet(false);
     if (!ok) { setFehler(err || "Senden fehlgeschlagen."); return; }
     onEntschieden({ entscheidung, name, grund, hash, entschieden_am: new Date().toISOString() });
@@ -100,6 +120,31 @@ export function KundenAbnahme({ token, onClose, onEntschieden }) {
             <UnterschriftPad label="Unterschrift" onSave={setSignatur} />
             {signatur && <div style={{ color:"var(--green)", fontSize:11.5, marginTop:-6, marginBottom:10,
               display:"flex", alignItems:"center", gap:5 }}><Check size={12} /> Unterschrift übernommen</div>}
+
+            <div style={{ color:"var(--muted)", fontSize:11, textAlign:"center", margin:"4px 0 10px" }}>— oder —</div>
+            <input ref={pdfRef} type="file" accept="application/pdf" style={{ display:"none" }} onChange={handlePdf} />
+            {!dokument ? (
+              <button onClick={() => pdfRef.current.click()}
+                style={{ width:"100%", background:"var(--surface2)", color:"var(--muted)",
+                  border:"1.5px dashed var(--border)", borderRadius:10,
+                  padding:"9px 16px", cursor:"pointer", fontSize:12.5, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:6, marginBottom:12 }}>
+                <Paperclip size={14} />Eigenes unterschriebenes PDF hochladen
+              </button>
+            ) : (
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+                background:"var(--gbg)", border:"1px solid var(--green)", borderRadius:10,
+                padding:"9px 12px", marginBottom:12 }}>
+                <span style={{ fontSize:12, color:"var(--green)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  ✓ {dokumentName}
+                </span>
+                <button onClick={() => { setDokument(null); setDokumentName(""); }}
+                  style={{ background:"none", border:"none", color:"var(--red)", cursor:"pointer", padding:0, display:"flex", flexShrink:0, marginLeft:8 }}>
+                  <X size={13} />
+                </button>
+              </div>
+            )}
+
             <label style={{ display:"flex", alignItems:"flex-start", gap:8, marginBottom:12, cursor:"pointer" }}>
               <input type="checkbox" checked={bestaetigt} onChange={e=>setBestaetigt(e.target.checked)}
                 style={{ marginTop:2, flexShrink:0 }} />

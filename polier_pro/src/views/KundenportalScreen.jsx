@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MapPin, Users, Cloud, Camera, Building2, TriangleAlert, CircleCheckBig, Ban, ClipboardCheck } from "lucide-react";
+import { MapPin, Users, Cloud, Camera, Building2, TriangleAlert, CircleCheckBig, Ban, ClipboardCheck, FileText, Download } from "lucide-react";
 import { sbKundenportalDaten } from "../lib/supabase.js";
 import { PROJEKTTYPEN, AUFGABEN_STATUS } from "../config/konstanten.js";
 import { KundenMangelMelden } from "../components/KundenMangelMelden.jsx";
@@ -61,6 +61,7 @@ export function KundenportalScreen({ token }) {
   // komplett leer abstürzen statt den "Noch keine Berichte"-Hinweis zu zeigen.
   const tagesberichte = daten.tagesberichte || [];
   const maengel = daten.maengel || [];
+  const dokumente = daten.dokumente || [];
   const abnahmeEntscheidung = abnahmeErgebnis?.entscheidung || daten.abnahme_entscheidung;
   const abnahmeName    = abnahmeErgebnis ? abnahmeErgebnis.name    : daten.abnahme_entschieden_name;
   const abnahmeDatum   = abnahmeErgebnis ? new Date(abnahmeErgebnis.entschieden_am) : (daten.abnahme_entschieden_am ? new Date(daten.abnahme_entschieden_am) : null);
@@ -201,6 +202,16 @@ export function KundenportalScreen({ token }) {
                       ))}
                     </div>
                   )}
+                  {m.dokumente?.length > 0 && (
+                    <div style={{ display:"flex", flexDirection:"column", gap:4, marginTop:8 }}>
+                      {m.dokumente.map((url, j) => (
+                        <a key={j} href={url} download={`Mangel-Anhang-${j + 1}.pdf`}
+                          style={{ color:"var(--blue)", fontSize:11.5, display:"flex", alignItems:"center", gap:5, textDecoration:"none" }}>
+                          <FileText size={12} />PDF-Anhang {j + 1}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                   {behoben && m.behebung_fotos?.length > 0 && (
                     <div style={{ marginTop:8 }}>
                       <div style={{ fontSize:11, color:"var(--green)", fontWeight:700, marginBottom:5 }}>Nachweis Behebung</div>
@@ -214,6 +225,24 @@ export function KundenportalScreen({ token }) {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Dokumente — von der Firma bereitgestellte PDFs (Abnahmeprotokoll,
+            Rechnung etc.), siehe ProjektDokumente.jsx (Upload-Seite). */}
+        {dokumente.length > 0 && (
+          <div style={{ marginBottom:18 }}>
+            <div style={{ fontWeight:800, fontSize:13, marginBottom:10 }}>Dokumente</div>
+            {dokumente.map(d => (
+              <a key={d.id} href={d.daten} download={d.dateiname}
+                style={{ display:"flex", alignItems:"center", gap:8, background:"var(--surface)",
+                  border:"1px solid var(--border)", borderRadius:10, padding:"10px 14px",
+                  marginBottom:6, color:"var(--text)", textDecoration:"none", fontSize:13 }}>
+                <FileText size={15} style={{ flexShrink:0, color:"var(--blue)" }} />
+                <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.dateiname}</span>
+                <Download size={14} style={{ flexShrink:0, color:"var(--muted)" }} />
+              </a>
+            ))}
           </div>
         )}
 
