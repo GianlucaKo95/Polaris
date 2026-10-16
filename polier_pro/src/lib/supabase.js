@@ -731,6 +731,24 @@ export async function sbAngebotFreigabeDeaktivieren(id, session) {
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
+// Authentifizierter Abruf des vollständigen Entscheidungs-Nachweises
+// (inkl. Unterschrift/Hash/IP) für GF/Admin — normale RLS-gelesene
+// Zeile (angebot_freigaben_lesen), kein RPC nötig. Mehrere Freigaben-
+// Zeilen pro Angebot sind möglich (Link deaktiviert+neu erstellt), daher
+// die zuletzt entschiedene nehmen.
+export async function sbAngebotFreigabeNachweisLaden(angebotId, session) {
+  if (!session?.access_token || !angebotId) return null;
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("angebot_freigaben")
+      .select("entscheidung, entschieden_am, entschieden_name, entschieden_signatur, entschieden_hash, entschieden_ip")
+      .eq("angebot_id", angebotId).not("entscheidung", "is", null)
+      .order("entschieden_am", { ascending: false }).limit(1);
+    if (error) return null;
+    return data?.[0] || null;
+  } catch { return null; }
+}
+
 // Öffentlicher, kuratierter Abruf ohne Session — über eine SECURITY
 // DEFINER-RPC, analog sbKundenportalDaten (kein anon-Zugriff auf die
 // echte angebote-Tabelle, siehe Migration).

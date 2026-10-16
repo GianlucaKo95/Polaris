@@ -11,6 +11,7 @@ import { kiAngebotErstellen } from "../lib/ai.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
+import { AngebotNachweis } from "../components/AngebotNachweis.jsx";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
 // seine Bedeutung hängt aber vom Aufgabentyp ab (siehe extraLabel in
@@ -686,6 +687,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 </div>
               )}
             </div>
+
+            <AngebotNachweis angebot={a} eigeneFirma={eigeneFirma} projekt={projekt} session={session} />
 
             {firmaId && <AngebotFreigabe angebotId={a.id} firmaId={firmaId} profil={profil} session={session} />}
 
