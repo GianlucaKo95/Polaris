@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Calendar, CalendarX, Users } from "lucide-react";
+import { Calendar, CalendarX, Users, Pencil } from "lucide-react";
 import { WeatherView } from "./WeatherView.jsx";
 import { terminprognose } from "../lib/terminkette.js";
 
-export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, projekt, wetter }) {
+export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, projekt, wetter, onEdit }) {
   const [wetterInfo, setWetterInfo] = useState(null);
   const offeneAufgaben = aufgaben.filter(a => a.status !== "abgeschlossen");
   const kritisch  = aufgaben.filter(a => a.prioritaet === "kritisch" && a.status !== "abgeschlossen").length;
@@ -60,6 +60,21 @@ export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, pro
 
   return (
     <div>
+      {/* Baustellen-Name + Bearbeiten direkt hier im Übersichts-Dashboard
+          sichtbar — vorher stand der Bearbeiten-Stift nur ganz klein/grau
+          oben in der dünnen ProjektInfoStrip, hier ist er prominenter. */}
+      {onEdit && (
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+          <div style={{ color:"var(--text)", fontWeight:800, fontSize:15 }}>{projekt?.name}</div>
+          <button onClick={onEdit}
+            style={{ background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)",
+              borderRadius:8, padding:"6px 12px", cursor:"pointer", fontSize:12, fontWeight:700,
+              fontFamily:"inherit", display:"flex", alignItems:"center", gap:5 }}>
+            <Pencil size={12} /> Bearbeiten
+          </button>
+        </div>
+      )}
+
       <WeatherView compact ort={projekt?.ort} plz={projekt?.plz} projektId={projekt?.id}
         onData={setWetterInfo} hatOffeneBetonage={hatOffeneBetonage} />
 

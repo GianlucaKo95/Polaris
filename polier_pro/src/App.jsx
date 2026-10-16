@@ -1337,6 +1337,7 @@ export default function PolierApp() {
           </div>
         )}
         {tab === "dashboard" && <DashboardView aufgaben={felder} kolonnen={kolonnen} sbConnected={sbConnected} projekt={projekt}
+            onEdit={rolleConfig?.kannBearbeiten !== false ? () => setEditProjekt(true) : undefined}
             onNavigate={(tabId, filter) => {
               if (filter) setAufgabenFilter(filter);
               else setAufgabenFilter("alle");
