@@ -10,6 +10,7 @@ import { Spinner } from "../components/Spinner.jsx";
 import { kiAngebotErstellen } from "../lib/ai.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
+import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
 // seine Bedeutung hängt aber vom Aufgabentyp ab (siehe extraLabel in
@@ -25,7 +26,7 @@ import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, firmaId, profil, session }) {
   const [a,         setA]         = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
@@ -677,7 +678,17 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   ["angenommen","✅ Angenommen"],["abgelehnt","❌ Abgelehnt"]
                 ].map(([k,l])=><option key={k} value={k}>{l}</option>)}
               </select>
+              {a.entschieden_am && (
+                <div style={{ color:"var(--muted)", fontSize:11.5, marginTop:6 }}>
+                  Online {a.status === "angenommen" ? "angenommen" : "abgelehnt"} am{" "}
+                  {new Date(a.entschieden_am).toLocaleDateString("de-DE")} von {a.entschieden_von} —
+                  ein manuelles Ändern hier überschreibt diesen Stand.
+                </div>
+              )}
             </div>
+
+            {firmaId && <AngebotFreigabe angebotId={a.id} firmaId={firmaId} profil={profil} session={session} />}
+
             <button onClick={speichernKlick} disabled={speichertLaedt}
               style={{ width:"100%", background:"var(--yellow)", color:"#1a1200",
                 border:"none", borderRadius:12, padding:14, fontWeight:800,

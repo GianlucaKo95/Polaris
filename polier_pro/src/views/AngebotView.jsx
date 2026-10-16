@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { FileText, Plus } from "lucide-react";
+import { FileText, Plus, Link2 } from "lucide-react";
 import { AngebotEditor } from "./AngebotEditor.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
 
-export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, eigeneFirma, angebote = [], onAngebotSpeichern, session }) {
+export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, session }) {
   const [aktAngebot,  setAktAngebot]  = useState(null);
   const [fehler,      setFehler]      = useState("");
   useBackButton(aktAngebot, () => setAktAngebot(null));
@@ -39,6 +39,8 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
       angebotVorlage={angebotVorlage}
       projekt={projekt}
       eigeneFirma={eigeneFirma}
+      firmaId={firmaId}
+      profil={profil}
       session={session}
     />;
   }
@@ -83,8 +85,13 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
       {angebote.map(a => {
         const netto   = a.positionen.reduce((s,p)=>s+(p.menge||0)*(p.ep||0),0);
         const gesamt  = netto * (1 - (a.rabatt||0)/100) * (1 + (a.mwst||19)/100);
-        const STATUS  = { entwurf:"📝 Entwurf", versendet:"📤 Versendet",
-          angenommen:"✅ Angenommen", abgelehnt:"❌ Abgelehnt" };
+        const STATUS  = {
+          entwurf:    { label:"📝 Entwurf",    farbe:"var(--muted)", bg:"var(--surface2)" },
+          versendet:  { label:"📤 Versendet",  farbe:"var(--blue)",  bg:"var(--bbg)" },
+          angenommen: { label:"✅ Angenommen", farbe:"var(--green)", bg:"var(--gbg)" },
+          abgelehnt:  { label:"❌ Abgelehnt",  farbe:"var(--red)",   bg:"var(--rbg)" },
+        };
+        const statusInfo = STATUS[a.status] || { label:a.status, farbe:"var(--muted)", bg:"var(--surface2)" };
         return (
           <div key={a.id} onClick={() => setAktAngebot(a)}
             style={{ background:"var(--surface)", borderRadius:14,
@@ -105,8 +112,9 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
                 <div style={{ color:"var(--yellow)", fontWeight:800, fontSize:16 }}>
                   {gesamt.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €
                 </div>
-                <div style={{ color:"var(--muted)", fontSize:11, marginTop:2 }}>
-                  {STATUS[a.status] || a.status}
+                <div style={{ display:"inline-block", background:statusInfo.bg, color:statusInfo.farbe,
+                  fontWeight:700, fontSize:11, borderRadius:20, padding:"3px 9px", marginTop:4 }}>
+                  {statusInfo.label}
                 </div>
               </div>
             </div>
@@ -114,6 +122,17 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
               {a.positionen.length} Position{a.positionen.length!==1?"en":""}
               · Gültig bis {new Date(a.gueltig_bis).toLocaleDateString("de-DE")}
             </div>
+            {/* entschieden_am wird nur von der angebot_freigabe_entscheiden-RPC
+                gesetzt (nie vom internen Status-Dropdown) — zeigt also
+                zuverlässig "Kunde hat online über den Link entschieden" an. */}
+            {a.entschieden_am && (
+              <div style={{ color:statusInfo.farbe, fontSize:11.5, marginTop:4,
+                display:"flex", alignItems:"center", gap:4 }}>
+                <Link2 size={11} />
+                Online {a.status === "angenommen" ? "angenommen" : "abgelehnt"} am{" "}
+                {new Date(a.entschieden_am).toLocaleDateString("de-DE")} von {a.entschieden_von}
+              </div>
+            )}
           </div>
         );
       })}

@@ -694,6 +694,73 @@ export async function sbSubLoeschen(id, session) {
   } catch { return false; }
 }
 
+// ── Angebot-Freigabe: Kunden-Link zum Online-Annehmen/Ablehnen ──
+export async function sbAngebotFreigabeLaden(angebotId, session) {
+  if (!session?.access_token || !angebotId) return null;
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("angebot_freigaben")
+      .select("id, token, aktiv").eq("angebot_id", angebotId).eq("aktiv", true)
+      .order("created_at", { ascending: false }).limit(1);
+    if (error) return null;
+    return data?.[0] || null;
+  } catch { return null; }
+}
+
+export async function sbAngebotFreigabeErstellen(angebotId, firmaId, profilId, session) {
+  if (!session?.access_token || !angebotId || !firmaId) return { daten: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("angebot_freigaben")
+      .insert({ angebot_id: angebotId, firma_id: firmaId, erstellt_von: profilId || null })
+      .select("id, token, aktiv");
+    const fehler = sbSchreibfehler(error, data, false);
+    if (fehler) return { daten: null, fehler };
+    return { daten: data?.[0] || null, fehler: null };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbAngebotFreigabeDeaktivieren(id, session) {
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("angebot_freigaben")
+      .update({ aktiv: false }).eq("id", id).select();
+    const fehler = sbSchreibfehler(error, data, true);
+    return { ok: !fehler, fehler };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// Öffentlicher, kuratierter Abruf ohne Session — über eine SECURITY
+// DEFINER-RPC, analog sbKundenportalDaten (kein anon-Zugriff auf die
+// echte angebote-Tabelle, siehe Migration).
+export async function sbAngebotFreigabeDaten(token) {
+  try {
+    const { data, error } = await supabase.rpc("angebot_freigabe_daten", { p_token: token });
+    if (error || !data?.length) return null;
+    return data[0];
+  } catch { return null; }
+}
+
+// Lässt den Kunden ohne Login über denselben Token das Angebot annehmen
+// oder ablehnen — SECURITY DEFINER-RPC prüft Token/Status/Gültigkeit
+// serverseitig und berechnet den DOC-Hash selbst (siehe Migration), damit
+// der Hash tatsächlich beweiskräftig bleibt statt vom Client übernommen
+// zu werden. error ist bei Ablehnung die RPC-eigene deutschsprachige
+// Fehlermeldung (ungültiger Link, bereits beantwortet, abgelaufen, …).
+export async function sbAngebotEntscheiden(token, { entscheidung, name, signatur }) {
+  try {
+    const { data, error } = await supabase.rpc("angebot_freigabe_entscheiden", {
+      p_token: token,
+      p_entscheidung: entscheidung,
+      p_name: name || "",
+      p_signatur: signatur || null,
+    });
+    if (error) return { ok: false, hash: null, fehler: error.message || "Senden fehlgeschlagen." };
+    return { ok: true, hash: data, fehler: null };
+  } catch { return { ok: false, hash: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
 export async function sbAngebotSpeichern(a, projektId, session, istNeu) {
   if (!session?.access_token || !projektId) return null;
   const payload = {
