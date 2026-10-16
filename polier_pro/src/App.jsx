@@ -805,6 +805,7 @@ export default function PolierApp() {
       auftraggeber:  p.auftraggeber || "",
       typ:           p.typ || "hochbau",
       farbe:         p.farbe || "#F5C400",
+      sub_ids:       p.sub_ids || [],
     };
 
     // Ohne Firma (z.B. Demo-Modus ohne echten Login, ODER weil die Firma
@@ -846,7 +847,7 @@ export default function PolierApp() {
           id: gespeichert.id, name: gespeichert.name, adresse: gespeichert.adresse,
           plz: gespeichert.plz, ort: gespeichert.ort, projektnummer: gespeichert.projektnummer,
           bauleiter: gespeichert.bauleiter, auftraggeber: gespeichert.auftraggeber,
-          typ: gespeichert.typ, farbe: gespeichert.farbe,
+          typ: gespeichert.typ, farbe: gespeichert.farbe, sub_ids: gespeichert.sub_ids || [],
         };
         if (istNeu) setProjekte(prev => [...prev, normalisiert]);
         else setProjekte(prev => prev.map(x => x.id===p.id ? normalisiert : x));
@@ -1347,7 +1348,7 @@ export default function PolierApp() {
         {tab === "gantt"     && <GanttView felder={felder}
             onAufgabeKlick={id => { setAufgabenEditId(id); setAufgabenFilter("alle"); setTab("aufgaben"); }} />}
         {tab === "wetter"    && <WeatherView ort={projekt?.ort} plz={projekt?.plz} projektId={projekt?.id} />}
-        {tab === "kolonnen"  && <KolonnenView kolonnen={kolonnen} projekt={projekt} setKolonnen={setKolonnen}
+        {tab === "kolonnen"  && <KolonnenView kolonnen={kolonnen} projekt={projekt} subs={subs} setKolonnen={setKolonnen}
             darfBearbeiten={rolleConfig?.kannBearbeiten !== false}
             kannKolonneLoeschen={rolleConfig?.kannKolonneLoeschen === true}
             profil={aktiveProfil} session={auth.session} />}

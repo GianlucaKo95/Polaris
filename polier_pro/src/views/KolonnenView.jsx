@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { RefreshCw, Info, CircleX, Plus } from "lucide-react";
+import { RefreshCw, Info, CircleX, Plus, Phone, User, Building2 } from "lucide-react";
 import { ERFASST_PROXY, erfasstQuery } from "../lib/erfasst.js";
 import { sbFetch } from "../lib/supabase.js";
 import { taetigkeitAnzeige } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { KolonneKarte } from "../components/KolonneKarte.jsx";
+import { ALLE_GEWERKE } from "../config/konstanten.js";
 
 // Wandelt eine native zeitbuchungen-Zeile in die gleiche Form um, die
 // KolonneKarte/MitarbeiterZeilen bisher nur von 123erfasst kannten — so
@@ -24,7 +25,7 @@ function alsZeitEintrag(b) {
   };
 }
 
-export function KolonnenView({ kolonnen, projekt, setKolonnen, darfBearbeiten = true, kannKolonneLoeschen = false, profil, session }) {
+export function KolonnenView({ kolonnen, projekt, subs = [], setKolonnen, darfBearbeiten = true, kannKolonneLoeschen = false, profil, session }) {
   const [zeitdaten,   setZeitdaten]   = useState([]);
   const [ladeStatus,  setLadeStatus]  = useState("idle"); // idle | loading | ok | error
   const [datenquelle, setDatenquelle] = useState(null);   // "eigen" | "123erfasst"
@@ -42,6 +43,12 @@ export function KolonnenView({ kolonnen, projekt, setKolonnen, darfBearbeiten = 
 
   const totalMann = kolonnen.reduce((s,k) => s + (k.mitarbeiter?.length || 0), 0);
   const totalStd  = zeitdaten.reduce((s,z) => s + (z.hours||0) + (z.minutes||0)/60, 0);
+
+  // Für diese Baustelle zugewiesene Subunternehmer — sub_ids liegt nur als
+  // ID-Liste auf dem Projekt, subs (alle Subs der Firma) kommt von App.jsx.
+  const projektSubs = (projekt?.sub_ids || [])
+    .map(id => subs.find(s => s.id === id))
+    .filter(Boolean);
 
   // Standard: eigene Zeiterfassung (Stempeluhr/zeitbuchungen). 123erfasst
   // ist nur noch Fallback für Projekte, die weiterhin darüber verknüpft
@@ -161,6 +168,44 @@ export function KolonnenView({ kolonnen, projekt, setKolonnen, darfBearbeiten = 
         <div style={{ background:"#2E1A1A", borderRadius:8, padding:"6px 12px", marginBottom:9, color: "var(--red)", fontSize:12,
           display:"flex", alignItems:"center", gap:6 }}>
           <CircleX size={13} /> Zeitdaten konnten nicht geladen werden.
+        </div>
+      )}
+
+      {/* Subunternehmer — zugewiesen über "Subunternehmer zuweisen" im
+          Baustellen-Formular (ProjektFormular.jsx). Nur Anzeige, keine
+          eigene Kolonne: Subs haben keinen Account/Zeiterfassung. */}
+      {projektSubs.length > 0 && (
+        <div style={{ marginBottom:14 }}>
+          <div style={{ color:"var(--text)", fontWeight:700, fontSize:14,
+            marginBottom:7, display:"flex", alignItems:"center", gap:6 }}>
+            <Building2 size={14} /> Subunternehmer ({projektSubs.length})
+          </div>
+          {projektSubs.map(s => (
+            <div key={s.id} style={{ background:"var(--surface)", borderRadius:11,
+              padding:"9px 15px", marginBottom:6,
+              border:`1.5px solid ${s.status==="aktiv" ? "var(--border)" : "var(--red)"}` }}>
+              <div style={{ color:"var(--text)", fontWeight:700, fontSize:13.5 }}>{s.name}</div>
+              {(s.kontakt || s.telefon) && (
+                <div style={{ color:"var(--muted)", fontSize:12, marginTop:3,
+                  display:"flex", alignItems:"center", gap:4, flexWrap:"wrap" }}>
+                  {s.kontakt && <><User size={11} /> {s.kontakt}</>}
+                  {s.kontakt && s.telefon && <>·</>}
+                  {s.telefon && <><Phone size={11} /> {s.telefon}</>}
+                </div>
+              )}
+              {(s.gewerke||[]).length > 0 && (
+                <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginTop:6 }}>
+                  {s.gewerke.map(k => {
+                    const g = ALLE_GEWERKE.find(x=>x.key===k);
+                    return g ? (
+                      <span key={k} style={{ background:"var(--surface2)", color:"var(--muted)",
+                        fontSize:10.5, padding:"2px 8px", borderRadius:20 }}>{g.icon} {g.label}</span>
+                    ) : null;
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
