@@ -42,6 +42,14 @@ export function RevisionssichererExport({ bericht, projekt, eigeneFirma, wetter,
     // "+N weitere" statt das Dokument beliebig in die Länge zu ziehen.
     const fotosSichtbar = fotos.length > 6 ? fotos.slice(0, 5) : fotos;
     const fotosRest = fotos.length > 6 ? fotos.length - 5 : 0;
+    // .filter(Boolean): eine leere eigeneFirma.strasse/.telefon ließ sonst
+    // ein verwaistes ", 12345 Musterstadt" bzw. " · " mit führendem
+    // Trenner stehen statt den fehlenden Teil einfach wegzulassen.
+    const firmaAdresszeile = [
+      eigeneFirma?.strasse,
+      [eigeneFirma?.plz, eigeneFirma?.ort].filter(Boolean).join(" "),
+    ].filter(Boolean).join(", ");
+    const firmaKontaktzeile = [eigeneFirma?.telefon, eigeneFirma?.email].filter(Boolean).join("  ·  ");
     const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -49,14 +57,15 @@ body { font-family:Arial,sans-serif; font-size:11pt; color:#1a1a1a; }
 .page { width:210mm; padding:14mm 18mm; }
 .header { display:flex; justify-content:space-between; align-items:flex-start;
   border-bottom:3px solid #F5C400; padding-bottom:10px; margin-bottom:14px; }
-.logo { font-size:22pt; font-weight:900; letter-spacing:-1px; }
+.logo { font-size:22pt; font-weight:900; letter-spacing:-1px; flex-shrink:0; }
 .logo span { color:#F5C400; }
 .firma { font-size:9pt; color:#666; margin-top:3px; }
-.doc-title { text-align:right; }
+.doc-title { text-align:right; max-width:55%; min-width:0; }
 .doc-title h1 { font-size:14pt; font-weight:bold; }
 .doc-title .meta { font-size:9pt; color:#666; margin-top:3px; }
 .hash-badge { background:#1a1a1a; color:#F5C400; padding:4px 10px;
-  border-radius:4px; font-size:9pt; font-family:monospace; margin-top:4px; display:inline-block; }
+  border-radius:4px; font-size:9pt; font-family:monospace; margin-top:4px; display:inline-block;
+  max-width:100%; word-break:break-all; }
 .kennzahlen { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
 .kz { background:#f8f8f8; border-radius:6px; padding:9px 10px 8px; position:relative; overflow:hidden; }
 .kz::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:#F5C400; }
@@ -93,13 +102,15 @@ body { font-family:Arial,sans-serif; font-size:11pt; color:#1a1a1a; }
 .sig-name { font-size:8pt; color:#888; margin-top:4px; text-align:center; }
 .footer { border-top:1px solid #ddd; margin-top:16px; padding-top:8px;
   font-size:7.5pt; color:#aaa; display:flex; justify-content:space-between; font-family:monospace; }
+.footer span { word-break:break-all; min-width:0; }
+.footer span:first-child { flex-shrink:2; margin-right:12px; }
 </style></head><body><div class="page">
 
 <div class="header">
   <div>
     <div class="logo"><span>★</span> POLARIS</div>
-    <div class="firma">${escapeHtml(eigeneFirma?.name)}  ·  ${escapeHtml(eigeneFirma?.strasse)}, ${escapeHtml(eigeneFirma?.plz)} ${escapeHtml(eigeneFirma?.ort)}</div>
-    <div class="firma">${escapeHtml(eigeneFirma?.telefon)}  ·  ${escapeHtml(eigeneFirma?.email)}</div>
+    <div class="firma">${escapeHtml(eigeneFirma?.name)}${firmaAdresszeile ? `  ·  ${escapeHtml(firmaAdresszeile)}` : ""}</div>
+    ${firmaKontaktzeile ? `<div class="firma">${escapeHtml(firmaKontaktzeile)}</div>` : ""}
   </div>
   <div class="doc-title">
     <h1>Tagesbericht</h1>
@@ -252,8 +263,7 @@ ${fotos.length > 0 ? `<div class="section">
 
             {/* Revisions-Hash */}
             <div style={{ background:"#1a1a1a", borderRadius:10, padding:"7px 14px",
-              marginBottom:12, display:"flex", justifyContent:"space-between",
-              alignItems:"center" }}>
+              marginBottom:12, display:"flex", flexDirection:"column", gap:4 }}>
               <div>
                 <div style={{ color:"#F5C400", fontWeight:700, fontSize:12 }}>
                   Revisionssicheres Dokument
@@ -263,7 +273,7 @@ ${fotos.length > 0 ? `<div class="section">
                 </div>
               </div>
               <div style={{ color:"#F5C400", fontFamily:"monospace",
-                fontSize:14, fontWeight:800 }}>{hash ? `DOC-${hash}` : "…berechne…"}</div>
+                fontSize:14, fontWeight:800, wordBreak:"break-all" }}>{hash ? `DOC-${hash}` : "…berechne…"}</div>
             </div>
 
             <UnterschriftPad label="Unterschrift Polier" onSave={setSigPolier} />
@@ -300,8 +310,9 @@ ${fotos.length > 0 ? `<div class="section">
             {exportiert && (
               <div style={{ background:"var(--gbg)", borderRadius:10, padding:7,
                 marginTop:10, color:"var(--green)", fontSize:12, fontWeight:600,
-                textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-                <CircleCheckBig size={13} /> PDF erstellt · DOC-{hash} · {new Date().toLocaleString("de-DE")}
+                textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center",
+                gap:6, flexWrap:"wrap", wordBreak:"break-all" }}>
+                <CircleCheckBig size={13} style={{ flexShrink:0 }} /> PDF erstellt · DOC-{hash} · {new Date().toLocaleString("de-DE")}
                 {!hashGespeichert && " · Prüfreferenz konnte nicht gespeichert werden"}
               </div>
             )}

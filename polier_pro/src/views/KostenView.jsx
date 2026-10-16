@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Euro, Check } from "lucide-react";
+import { Euro, Check, FileText } from "lucide-react";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { sbProjektKostenSpeichern } from "../lib/supabase.js";
 import { Spinner } from "../components/Spinner.jsx";
@@ -33,7 +33,29 @@ function positionNormalisieren(p) {
   return { ...p, menge, einheitspreis: 1, budget: menge };
 }
 
-export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, session, onKostenGespeichert }) {
+// Angebots-Positionen ({bez, einheit, menge, ep, rabatt}) in Budget-
+// Positionen ({bezeichnung, einheit, menge, einheitspreis, budget})
+// umrechnen. Der Positions-Rabatt UND der Gesamt-Rabatt des Angebots
+// fließen in den Einheitspreis ein, damit die Summe exakt dem
+// vereinbarten Netto-Preis entspricht (gleiche Rechnung wie gpOf() in
+// AngebotEditor.jsx, nur auf Einheitspreis-Ebene statt Zeilensumme).
+function ausAngebotUebernehmen(angebot) {
+  const gesamtRabatt = angebot.rabatt || 0;
+  return (angebot.positionen || []).map(p => {
+    const menge = p.menge || 0;
+    const einheitspreis = (p.ep || 0) * (1 - (p.rabatt || 0) / 100) * (1 - gesamtRabatt / 100);
+    return {
+      id: Date.now() + Math.random(),
+      bezeichnung: p.bez || "",
+      einheit: p.einheit || "Stk",
+      menge,
+      einheitspreis,
+      budget: menge * einheitspreis,
+    };
+  });
+}
+
+export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebote, session, onKostenGespeichert }) {
   const [budgetPos, setBudgetPos] = useState(
     (projekt?.budget_positionen?.length ? projekt.budget_positionen : STANDARD_POSITIONEN)
       .map(positionNormalisieren)
@@ -41,6 +63,11 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, session
   const [stundensatz, setStundensatz] = useState(projekt?.stundensatz ?? 55); // €/h Default
   const [speichern, setSpeichern] = useState(false);
   const [gespeichertOk, setGespeichertOk] = useState(false);
+
+  const angenommeneAngebote = (angebote || [])
+    .filter(a => a.status === "angenommen" && a.positionen?.length)
+    .sort((a,b) => (b.datum||"").localeCompare(a.datum||""));
+  const [angebotWahl, setAngebotWahl] = useState(angenommeneAngebote[0]?.id ?? "");
 
   async function jetztSpeichern() {
     if (!projekt?.id) return;
@@ -139,6 +166,39 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, session
           Basis für Ist-Kostenberechnung aus GPS-Zeiterfassung
         </div>
       </div>
+
+      {/* Vorschlag: Budget aus angenommenem Angebot übernehmen */}
+      {angenommeneAngebote.length > 0 && (
+        <div style={{ background:"var(--ybg)", borderRadius:12, padding:"10px 14px",
+          marginBottom:10, border:"1.5px solid var(--yellow)",
+          display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:7,
+            color:"var(--ydark)", fontWeight:700, fontSize:13 }}>
+            <FileText size={15} /> Angenommenes Angebot gefunden
+          </div>
+          {angenommeneAngebote.length > 1 && (
+            <select value={angebotWahl} onChange={e => setAngebotWahl(e.target.value)}
+              style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }}>
+              {angenommeneAngebote.map(a => (
+                <option key={a.id} value={a.id}>{a.titel || "Angebot"} ({a.datum})</option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={() => {
+              const gewaehlt = angenommeneAngebote.find(a => a.id === angebotWahl) || angenommeneAngebote[0];
+              if (gewaehlt) setBudgetPos(ausAngebotUebernehmen(gewaehlt));
+            }}
+            style={{ background:"var(--yellow)", color:"#1a1200", border:"none",
+              borderRadius:8, padding:"8px 12px", fontWeight:700, fontSize:12,
+              cursor:"pointer", fontFamily:"inherit" }}>
+            Positionen als Budget übernehmen
+          </button>
+          <div style={{ color:"var(--ydark)", fontSize:11, opacity:0.85 }}>
+            Ersetzt die Budget-Positionen unten (Stand nur lokal — erst mit „Speichern" verbindlich).
+          </div>
+        </div>
+      )}
 
       {/* Budget-Positionen */}
       <div style={{ color:"var(--text)", fontWeight:700, fontSize:14,

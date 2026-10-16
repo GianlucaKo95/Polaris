@@ -27,6 +27,13 @@ function offeneRestpunkteAus(aufgaben) {
 }
 
 function erstelleAbschlussHtml({ projekt, eigeneFirma, akte, chronologie, hash }) {
+  // .filter(Boolean): eine leere eigeneFirma.strasse (z.B. noch nicht
+  // hinterlegt) ließ sonst ein verwaistes ", 12345 Musterstadt" mit
+  // führendem Komma stehen statt den fehlenden Teil einfach wegzulassen.
+  const firmaAdresszeile = [
+    eigeneFirma?.strasse,
+    [eigeneFirma?.plz, eigeneFirma?.ort].filter(Boolean).join(" "),
+  ].filter(Boolean).join(", ");
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -34,14 +41,15 @@ body { font-family:Arial,sans-serif; font-size:11pt; color:#1a1a1a; }
 .page { width:210mm; padding:14mm 18mm; }
 .header { display:flex; justify-content:space-between; align-items:flex-start;
   border-bottom:3px solid #F5C400; padding-bottom:10px; margin-bottom:14px; }
-.logo { font-size:22pt; font-weight:900; letter-spacing:-1px; }
+.logo { font-size:22pt; font-weight:900; letter-spacing:-1px; flex-shrink:0; }
 .logo span { color:#F5C400; }
 .firma { font-size:9pt; color:#666; margin-top:3px; }
-.doc-title { text-align:right; }
+.doc-title { text-align:right; max-width:55%; min-width:0; }
 .doc-title h1 { font-size:14pt; font-weight:bold; }
 .doc-title .meta { font-size:9pt; color:#666; margin-top:3px; }
 .hash-badge { background:#1a1a1a; color:#F5C400; padding:4px 10px;
-  border-radius:4px; font-size:9pt; font-family:monospace; margin-top:4px; display:inline-block; }
+  border-radius:4px; font-size:9pt; font-family:monospace; margin-top:4px; display:inline-block;
+  max-width:100%; word-break:break-all; }
 .section { margin-bottom:14px; }
 .section-title { font-size:10pt; font-weight:bold; color:#F5C400;
   border-left:3px solid #F5C400; padding-left:8px; margin-bottom:8px;
@@ -55,12 +63,14 @@ body { font-family:Arial,sans-serif; font-size:11pt; color:#1a1a1a; }
   padding:6px 12px; margin-bottom:6px; border-radius:0 5px 5px 0; font-size:10.5pt; }
 .footer { border-top:1px solid #ddd; margin-top:16px; padding-top:8px;
   font-size:7.5pt; color:#aaa; display:flex; justify-content:space-between; font-family:monospace; }
+.footer span { word-break:break-all; min-width:0; }
+.footer span:first-child { flex-shrink:2; margin-right:12px; }
 </style></head><body><div class="page">
 
 <div class="header">
   <div>
     <div class="logo"><span>★</span> POLARIS</div>
-    <div class="firma">${escapeHtml(eigeneFirma?.name)}  ·  ${escapeHtml(eigeneFirma?.strasse)}, ${escapeHtml(eigeneFirma?.plz)} ${escapeHtml(eigeneFirma?.ort)}</div>
+    <div class="firma">${escapeHtml(eigeneFirma?.name)}${firmaAdresszeile ? `  ·  ${escapeHtml(firmaAdresszeile)}` : ""}</div>
   </div>
   <div class="doc-title">
     <h1>Baustellenabschlussakte</h1>
@@ -180,10 +190,11 @@ export function BaustellenAbschlussView({ projekt, aufgaben = [], tagesberichte 
             <Archive size={16} color="var(--muted)" />
             <div style={{ color:"var(--text)", fontWeight:800, fontSize:15 }}>Baustelle abgeschlossen</div>
           </div>
-          <div style={{ color:"var(--muted)", fontSize:12.5, display:"flex", alignItems:"center", gap:5 }}>
+          <div style={{ color:"var(--muted)", fontSize:12.5, display:"flex", alignItems:"center",
+            gap:5, flexWrap:"wrap" }}>
             <Calendar size={12} />
             {projekt.abschluss_datum ? new Date(projekt.abschluss_datum).toLocaleDateString("de-DE") : "—"}
-            {hash && <span style={{ fontFamily:"monospace", marginLeft:6 }}>· DOC-{hash}</span>}
+            {hash && <span style={{ fontFamily:"monospace", marginLeft:6, wordBreak:"break-all" }}>· DOC-{hash}</span>}
           </div>
         </div>
 
@@ -321,7 +332,8 @@ export function BaustellenAbschlussView({ projekt, aufgaben = [], tagesberichte 
           <div style={{ color:"var(--text)", fontWeight:800, fontSize:15, marginBottom:4 }}>
             Baustelle abgeschlossen
           </div>
-          <div style={{ color:"var(--muted)", fontSize:12.5, marginBottom:16, fontFamily:"monospace" }}>
+          <div style={{ color:"var(--muted)", fontSize:12.5, marginBottom:16, fontFamily:"monospace",
+            wordBreak:"break-all", padding:"0 20px" }}>
             DOC-{hash}
           </div>
           <button onClick={() => exportPDF({ ...entwurf, offene_restpunkte: offeneRestpunkteAus(aufgaben) })}

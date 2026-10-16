@@ -4,6 +4,14 @@ export function buildBerichtHTML(bericht, projekt, eigeneFirma, wetter) {
   const datum = escapeHtml(bericht.datum || new Date().toLocaleDateString("de-DE"));
   const fotos = bericht.bilder || [];
   const logo  = eigeneFirma?.logo || null;
+  // .filter(Boolean): eine leere eigeneFirma.strasse/.telefon ließ sonst
+  // ein verwaistes " · 12345 Musterstadt" bzw. " · " mit führendem
+  // Trenner stehen statt den fehlenden Teil einfach wegzulassen.
+  const firmaAdresszeile = [
+    eigeneFirma?.strasse,
+    [eigeneFirma?.plz, eigeneFirma?.ort].filter(Boolean).join(" "),
+  ].filter(Boolean).join(" · ");
+  const firmaKontaktzeile = [eigeneFirma?.telefon, eigeneFirma?.email].filter(Boolean).join(" · ");
 
   return `<!DOCTYPE html>
 <html lang="de">
@@ -53,8 +61,8 @@ export function buildBerichtHTML(bericht, projekt, eigeneFirma, wetter) {
         : `<div class="logo-placeholder">⚒</div>`}
       <div>
         <div class="firma-name">${escapeHtml(eigeneFirma?.name) || "Polaris"}</div>
-        <div class="firma-sub">${escapeHtml(eigeneFirma?.strasse)} · ${escapeHtml(eigeneFirma?.plz)} ${escapeHtml(eigeneFirma?.ort)}</div>
-        <div class="firma-sub">${escapeHtml(eigeneFirma?.telefon)} · ${escapeHtml(eigeneFirma?.email)}</div>
+        ${firmaAdresszeile ? `<div class="firma-sub">${escapeHtml(firmaAdresszeile)}</div>` : ""}
+        ${firmaKontaktzeile ? `<div class="firma-sub">${escapeHtml(firmaKontaktzeile)}</div>` : ""}
       </div>
     </div>
     <div class="doc-title">
@@ -173,6 +181,9 @@ export function buildBerichtHTML(bericht, projekt, eigeneFirma, wetter) {
 export function buildBetonprotokollHTML(feld, projekt, eigeneFirma, wetter) {
   const heute = escapeHtml(new Date().toLocaleDateString("de-DE"));
   const logo  = eigeneFirma?.logo || null;
+  // .filter(Boolean): eine leere eigeneFirma.strasse ließ sonst ein
+  // verwaistes " · Musterstadt" mit führendem Trenner stehen.
+  const firmaAdresszeile = [eigeneFirma?.strasse, eigeneFirma?.ort].filter(Boolean).join(" · ");
   return `<!DOCTYPE html>
 <html lang="de">
 <head>
@@ -212,7 +223,7 @@ export function buildBetonprotokollHTML(feld, projekt, eigeneFirma, wetter) {
       ${logo ? `<img class="logo" src="${logo}" alt="Logo"/>` : `<div class="logo-placeholder">⚒</div>`}
       <div>
         <div class="firma-name">${escapeHtml(eigeneFirma?.name) || "Polaris"}</div>
-        <div style="font-size:9pt;color:#666;">${escapeHtml(eigeneFirma?.strasse)} · ${escapeHtml(eigeneFirma?.ort)}</div>
+        ${firmaAdresszeile ? `<div style="font-size:9pt;color:#666;">${escapeHtml(firmaAdresszeile)}</div>` : ""}
       </div>
     </div>
     <div style="text-align:right;">
@@ -270,16 +281,29 @@ export function buildBetonprotokollHTML(feld, projekt, eigeneFirma, wetter) {
 }
 
 // Rendert den HTML-String in ein unsichtbares iframe (statt eines echten
-// window.open()-Popups) und exportiert ihn per jsPDF/html2canvas als echte,
-// herunterladbare PDF-Datei. Vorher öffnete druckePDF() nur den Browser-
-// Druckdialog — funktional, aber kein automatischer Download und abhängig
-// vom Popup-Blocker. Das iframe bleibt unsichtbar (kein Fenster, das der
-// Nutzer schließen müsste), und html2canvas rastert daraus Seite für Seite
-// dieselben HTML/CSS-Vorlagen, die vorher an window.print() gingen — die
-// Vorlagen selbst (buildBerichtHTML, RevisionssichererExport, AngebotEditor
-// etc.) mussten dafür nicht angepasst werden.
+// window.open()-Popups) und exportiert ihn als echte, herunterladbare
+// PDF-Datei. Vorher öffnete druckePDF() nur den Browser-Druckdialog —
+// funktional, aber kein automatischer Download und abhängig vom
+// Popup-Blocker. Das iframe bleibt unsichtbar (kein Fenster, das der
+// Nutzer schließen müsste).
+//
+// Screenshot + manuelle Seitenaufteilung statt jsPDF.html(): jsPDF.html()
+// rastert mit autoPaging:"text" NUR den reinen Text (fett/kursiv bleibt,
+// aber Farben, Hintergründe, text-transform, border-left — die ganze
+// optische Gliederung der Vorlagen — fallen komplett weg, ein ★-Zeichen
+// im Logo wurde sogar zu "&"). autoPaging:"slice"/"true" sollte laut
+// jsPDF-Doku stattdessen per html2canvas rastern, hat in der Praxis aber
+// nur kaputt herangezoomt (4 Seiten statt 1, trotzdem ohne Farben) — ein
+// bekanntermaßen unzuverlässiger Teil von jsPDF.html(). Zuverlässig ist
+// nur das manuelle Vorgehen: html2canvas rastert die komplette Vorlage
+// als ein hohes Bild, das wir selbst in exakt A4-hohe Streifen schneiden
+// und seitenweise einfügen — das behält jede CSS-Farbe/-Hervorhebung bei
+// und skaliert nichts kaputt. JPEG statt PNG: ein PNG-Streifen einer
+// Textseite wog unkomprimiert mehrere MB (PNG kommt mit den vielen
+// Schriftkanten schlecht klar), als JPEG (q=0.92) nur noch ein Bruchteil
+// davon, ohne sichtbaren Qualitätsverlust bei Lesegröße.
 export async function druckePDF(htmlContent, dateiname) {
-  const [{ default: jsPDF }] = await Promise.all([
+  const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
     import("jspdf"),
     import("html2canvas"),
   ]);
@@ -305,13 +329,34 @@ export async function druckePDF(htmlContent, dateiname) {
     });
 
     const quelle = idoc.querySelector(".page") || idoc.body;
+    const canvas = await html2canvas(quelle, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+
+    // canvas.width entspricht der festen Vorlagenbreite von 210mm (A4) —
+    // daraus ergibt sich der Umrechnungsfaktor Pixel->mm für die Höhe,
+    // und wie viele Pixel exakt eine A4-Seitenhöhe (297mm) ausmachen.
+    const SEITE_BREITE_MM = 210, SEITE_HOEHE_MM = 297;
+    const pxZuMm = SEITE_BREITE_MM / canvas.width;
+    const seitenHoehePx = Math.floor(SEITE_HOEHE_MM / pxZuMm);
+
     const doc = new jsPDF({ unit: "mm", format: "a4" });
-    await doc.html(quelle, {
-      x: 0, y: 0,
-      width: 210,
-      windowWidth: quelle.scrollWidth || 794,
-      autoPaging: "text",
-    });
+    let offsetPx = 0;
+    let seite = 0;
+    while (offsetPx < canvas.height) {
+      const streifenHoehePx = Math.min(seitenHoehePx, canvas.height - offsetPx);
+      const streifen = document.createElement("canvas");
+      streifen.width = canvas.width;
+      streifen.height = streifenHoehePx;
+      streifen.getContext("2d").drawImage(
+        canvas, 0, offsetPx, canvas.width, streifenHoehePx, 0, 0, canvas.width, streifenHoehePx
+      );
+      if (seite > 0) doc.addPage();
+      doc.addImage(
+        streifen.toDataURL("image/jpeg", 0.92), "JPEG",
+        0, 0, SEITE_BREITE_MM, streifenHoehePx * pxZuMm
+      );
+      offsetPx += streifenHoehePx;
+      seite++;
+    }
     doc.save(dateiname);
   } catch (e) {
     alert("PDF-Export fehlgeschlagen: " + (e?.message || e));

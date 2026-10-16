@@ -62,14 +62,15 @@ export function ArchivView({ firmaId, session, onOeffnen }) {
                 {[p.adresse, [p.plz, p.ort].filter(Boolean).join(" ")].filter(Boolean).join(", ")}
               </div>
             </div>
-            <div style={{ textAlign:"right", flexShrink:0 }}>
+            <div style={{ textAlign:"right", flexShrink:0, maxWidth:120 }}>
               <div style={{ color:"var(--muted)", fontSize:11 }}>
                 {p.abschluss_datum ? new Date(p.abschluss_datum).toLocaleDateString("de-DE") : "—"}
               </div>
               {p.abschluss_dokument_id && (
                 <div style={{ color:"var(--muted)", fontSize:10, fontFamily:"monospace",
-                  display:"flex", alignItems:"center", gap:3, justifyContent:"flex-end", marginTop:2 }}>
-                  <Hash size={9} />{p.abschluss_dokument_id}
+                  display:"flex", alignItems:"center", gap:3, justifyContent:"flex-end", marginTop:2,
+                  wordBreak:"break-all" }}>
+                  <Hash size={9} style={{ flexShrink:0 }} />{p.abschluss_dokument_id}
                 </div>
               )}
             </div>

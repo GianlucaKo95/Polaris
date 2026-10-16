@@ -136,6 +136,14 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   }
 
   function exportPDF() {
+    // .filter(Boolean): eine leere eigeneFirma.strasse/.telefon ließ sonst
+    // ein verwaistes " · 12345 Musterstadt" bzw. "Tel:  · email" mit
+    // führendem Trenner stehen statt den fehlenden Teil wegzulassen.
+    const firmaAdresszeile = [
+      eigeneFirma?.strasse,
+      [eigeneFirma?.plz, eigeneFirma?.ort].filter(Boolean).join(" "),
+    ].filter(Boolean).join(" · ");
+    const firmaKontaktzeile = [eigeneFirma?.telefon, eigeneFirma?.email].filter(Boolean).join(" · ");
     const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -188,8 +196,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
     <div>
       <div class="firma-name">${escapeHtml(eigeneFirma?.name)||"Polaris"}</div>
       <div class="firma-info">
-        ${escapeHtml(eigeneFirma?.strasse)} · ${escapeHtml(eigeneFirma?.plz)} ${escapeHtml(eigeneFirma?.ort)}<br>
-        Tel: ${escapeHtml(eigeneFirma?.telefon)} · ${escapeHtml(eigeneFirma?.email)}<br>
+        ${firmaAdresszeile ? `${escapeHtml(firmaAdresszeile)}<br>` : ""}
+        ${firmaKontaktzeile ? `Tel: ${escapeHtml(firmaKontaktzeile)}<br>` : ""}
         ${eigeneFirma?.steuernummer ? "St-Nr: "+escapeHtml(eigeneFirma.steuernummer) : ""}
       </div>
     </div>
