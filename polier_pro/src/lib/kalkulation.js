@@ -54,3 +54,30 @@ export function kalkulationEp(kalk, stammdaten, menge) {
   if (!menge) return 0;
   return kalkulationGesamtkosten(kalk, stammdaten) / menge;
 }
+
+// Soll-Übersicht (Vorkalkulation) über mehrere Angebote: summiert die
+// kalkulierten Kosten aller Positionen mit Kalkulationsschema (pos.kalk) je
+// Kostenart, für die Kalkulationsübersicht in KostenView.jsx. Positionen
+// ohne Kalkulationsschema (direkter EP) fließen hier bewusst nicht ein —
+// für sie gibt es keine Kostenarten-Aufschlüsselung, nur einen EP.
+//
+// Rechnet mit den AKTUELLEN Kalkulationspreisen (Stammdaten), nicht mit dem
+// Stand zum Zeitpunkt der Angebotserstellung — bei späteren Preisänderungen
+// weicht die Soll-Übersicht dadurch bewusst vom ursprünglich kalkulierten
+// Angebotspreis ab (zeigt den heutigen Kostenstand, nicht den historischen).
+export function kalkulationSollAufschluesselung(angebote, stammdaten) {
+  const summe = { lohn: 0, material: 0, geraet: 0, fremdleistung: 0, zuschlag: 0 };
+  for (const angebot of angebote || []) {
+    for (const pos of angebot.positionen || []) {
+      if (!pos.kalk) continue;
+      const a = kalkulationAufschluesselung(pos.kalk, stammdaten);
+      const gesamt = kalkulationGesamtkosten(pos.kalk, stammdaten);
+      summe.lohn += a.lohn;
+      summe.material += a.material;
+      summe.geraet += a.geraet;
+      summe.fremdleistung += a.fremdleistung;
+      summe.zuschlag += gesamt - (a.lohn + a.material + a.geraet + a.fremdleistung);
+    }
+  }
+  return summe;
+}

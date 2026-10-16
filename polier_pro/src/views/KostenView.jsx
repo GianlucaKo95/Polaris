@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Euro, Check, FileText } from "lucide-react";
+import { Euro, Check, FileText, Calculator } from "lucide-react";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { sbProjektKostenSpeichern } from "../lib/supabase.js";
 import { Spinner } from "../components/Spinner.jsx";
+import { kalkulationSollAufschluesselung } from "../lib/kalkulation.js";
 
 const STANDARD_POSITIONEN = [
   { id:1, bezeichnung:"Betonarbeiten",    menge:0, einheitspreis:0, budget:0, einheit:"m²" },
@@ -55,7 +56,7 @@ function ausAngebotUebernehmen(angebot) {
   });
 }
 
-export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebote, session, onKostenGespeichert }) {
+export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebote, kalkulationspreise = [], session, onKostenGespeichert }) {
   const [budgetPos, setBudgetPos] = useState(
     (projekt?.budget_positionen?.length ? projekt.budget_positionen : STANDARD_POSITIONEN)
       .map(positionNormalisieren)
@@ -92,6 +93,14 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
   const restBudget = budgetGesamt - istGesamt;
   const auslastung = budgetGesamt > 0
     ? Math.min(Math.round(istGesamt/budgetGesamt*100), 100) : 0;
+
+  // Kalkulations-Soll (Vorkalkulation) aus den kalkulierten Positionen der
+  // angenommenen Angebote, je Kostenart — siehe lib/kalkulation.js. Nur für
+  // Lohn gibt es bisher eine echte Ist-Erfassung (Zeitbuchungen), Material/
+  // Gerät/Fremdleistung zeigen daher bewusst nur den Soll-Wert statt eine
+  // erfundene Ist-Zahl.
+  const kalkSoll = kalkulationSollAufschluesselung(angenommeneAngebote, kalkulationspreise);
+  const kalkSollGesamt = kalkSoll.lohn + kalkSoll.material + kalkSoll.geraet + kalkSoll.fremdleistung + kalkSoll.zuschlag;
 
   function positionAendern(i, feld, wert) {
     setBudgetPos(prev => prev.map((p,j) => {
@@ -154,6 +163,44 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
           </div>
         </div>
       </div>
+
+      {/* Kalkulationsübersicht (Soll) — nur anzeigen, wenn es überhaupt
+          kalkulierte Positionen gibt, sonst unnötige Leerkarte für Nutzer,
+          die den EP noch direkt eingeben. */}
+      {kalkSollGesamt > 0 && (
+        <div style={{ background:"var(--surface)", borderRadius:16, padding:13,
+          marginBottom:12, border:"1.5px solid var(--border)" }}>
+          <div style={{ color:"var(--text)", fontWeight:700, fontSize:15,
+            marginBottom:10, display:"flex", alignItems:"center", gap:7 }}>
+            <Calculator size={16} /> Kalkulation (Soll)
+          </div>
+          {[
+            ["Lohn", kalkSoll.lohn, istArbeit],
+            ["Material", kalkSoll.material, null],
+            ["Gerät", kalkSoll.geraet, null],
+            ["Fremdleistung", kalkSoll.fremdleistung, null],
+            ["Zuschlag (Gemeinkosten/Wagnis/Gewinn)", kalkSoll.zuschlag, null],
+          ].filter(([,soll]) => soll > 0).map(([label, soll, ist]) => (
+            <div key={label} style={{ display:"flex", justifyContent:"space-between",
+              alignItems:"baseline", padding:"5px 0", borderBottom:"1px solid var(--border)",
+              fontSize:12.5 }}>
+              <span style={{ color:"var(--muted)" }}>{label}</span>
+              <span>
+                <span style={{ color:"var(--text)", fontWeight:700 }}>{euro(soll)}</span>
+                {ist != null
+                  ? <span style={{ color: ist > soll ? "var(--red)" : "var(--green)", marginLeft:8 }}>
+                      (Ist: {euro(ist)})
+                    </span>
+                  : <span style={{ color:"var(--muted)", marginLeft:8, fontSize:11 }}>(keine Ist-Erfassung)</span>}
+              </span>
+            </div>
+          ))}
+          <div style={{ display:"flex", justifyContent:"space-between", paddingTop:8, fontWeight:800, fontSize:13.5 }}>
+            <span>Summe Soll</span>
+            <span style={{ color:"var(--yellow)" }}>{euro(kalkSollGesamt)}</span>
+          </div>
+        </div>
+      )}
 
       {/* Stundensatz */}
       <div style={{ background:"var(--surface)", borderRadius:12, padding:10,

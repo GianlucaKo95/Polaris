@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {
   leereKalkulation, kalkulationAufschluesselung, kalkulationEinzelkosten,
   kalkulationZuschlagProzent, kalkulationGesamtkosten, kalkulationEp,
+  kalkulationSollAufschluesselung,
 } from "./kalkulation.js";
 
 const stammdaten = [
@@ -54,4 +55,22 @@ test("kalkulationEp liefert 0 statt Division durch 0 bei Menge 0", () => {
 test("ein unbekannter stammId wird als 0 € gewertet statt den Test abzubrechen", () => {
   const kalkMitUnbekannt = { ...leereKalkulation(), lohnposten: [{ stammId: 999, menge: 5 }] };
   assert.equal(kalkulationEinzelkosten(kalkMitUnbekannt, stammdaten), 0);
+});
+
+test("kalkulationSollAufschluesselung summiert über mehrere Angebote und Positionen, ignoriert Positionen ohne Kalkulationsschema", () => {
+  const angebote = [
+    { positionen: [
+      { kalk, menge: 10 },                                  // Gesamtkosten 840 (siehe oben)
+      { ep: 100, menge: 5 },                                  // kein kalk -> ignoriert
+    ] },
+    { positionen: [
+      { kalk: { ...leereKalkulation(), lohnposten: [{ stammId: 1, menge: 2 }] }, menge: 1 }, // 90 Lohn, kein Zuschlag
+    ] },
+  ];
+  const soll = kalkulationSollAufschluesselung(angebote, stammdaten);
+  assert.equal(soll.lohn, 450 + 90);
+  assert.equal(soll.material, 100);
+  assert.equal(soll.geraet, 120);
+  assert.equal(soll.fremdleistung, 30);
+  assert.equal(soll.zuschlag, 140); // 840 - 700, zweites Angebot hat 0% Zuschlag
 });
