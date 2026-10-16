@@ -5,8 +5,8 @@ import { UnterschriftPad } from "../components/UnterschriftPad.jsx";
 
 // Öffentliche, loginfreie Seite für den Kunden — erreicht über
 // ?angebot=<token> (siehe App.jsx), analog KundenportalScreen.jsx. Lädt
-// ausschließlich über die kuratierte angebot_freigabe_daten-RPC und schreibt
-// die Entscheidung über angebot_freigabe_entscheiden — beides ohne
+// ausschließlich über die kuratierte angebot_freigabe_daten_v2-RPC und
+// schreibt die Entscheidung über angebot_freigabe_entscheiden_v2 — beides ohne
 // Session, kein Zugriff auf interne App-Daten.
 export function AngebotAkzeptierenScreen({ token }) {
   const [daten,   setDaten]   = useState(null);
@@ -14,6 +14,7 @@ export function AngebotAkzeptierenScreen({ token }) {
   const [fehler,  setFehler]  = useState(false);
   const [formular,setFormular]= useState(null); // null | "annehmen" | "ablehnen"
   const [name,     setName]     = useState("");
+  const [grund,    setGrund]    = useState("");
   const [signatur, setSignatur] = useState(null);
   const [bestaetigt, setBestaetigt] = useState(false);
   const [sendet,   setSendet]   = useState(false);
@@ -66,7 +67,7 @@ export function AngebotAkzeptierenScreen({ token }) {
     if (entscheidung === "angenommen" && !signatur) { setSendeFehler("Bitte zum Annehmen unterschreiben."); return; }
     if (entscheidung === "angenommen" && !bestaetigt) { setSendeFehler("Bitte die verbindliche Annahme bestätigen."); return; }
     setSendet(true);
-    const { ok, hash, fehler: err } = await sbAngebotEntscheiden(token, { entscheidung, name, signatur });
+    const { ok, hash, fehler: err } = await sbAngebotEntscheiden(token, { entscheidung, name, signatur, grund });
     setSendet(false);
     if (!ok) { setSendeFehler(err || "Senden fehlgeschlagen."); return; }
     setErgebnis({ entscheidung, hash });
@@ -79,6 +80,7 @@ export function AngebotAkzeptierenScreen({ token }) {
     const label = angenommen ? "angenommen" : "abgelehnt";
     const anzeigeName = ergebnis?.hash ? name : daten.entschieden_name;
     const anzeigeDatum = ergebnis ? new Date() : (daten.entschieden_am ? new Date(daten.entschieden_am) : null);
+    const anzeigeGrund = ergebnis?.hash ? grund : daten.ablehnungsgrund;
     return (
       <div style={{ minHeight:"100dvh", background:"var(--bg)", color:"var(--text)", fontFamily:"inherit",
         display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:24, textAlign:"center" }}>
@@ -92,6 +94,15 @@ export function AngebotAkzeptierenScreen({ token }) {
           {anzeigeName && <>Bestätigt von <strong style={{ color:"var(--text)" }}>{anzeigeName}</strong><br /></>}
           {anzeigeDatum && anzeigeDatum.toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}
         </div>
+        {!angenommen && anzeigeGrund && (
+          <div style={{ marginTop:14, background:"var(--surface)", border:"1px solid var(--border)",
+            borderRadius:10, padding:"10px 16px", maxWidth:320, textAlign:"left" }}>
+            <div style={{ color:"var(--muted)", fontSize:10, textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>
+              Grund der Ablehnung
+            </div>
+            <div style={{ fontSize:13, color:"var(--text)", lineHeight:1.4 }}>{anzeigeGrund}</div>
+          </div>
+        )}
         {ergebnis?.hash && (
           <div style={{ marginTop:18, background:"var(--surface)", border:"1px solid var(--border)",
             borderRadius:10, padding:"10px 16px", maxWidth:320, wordBreak:"break-all" }}>
@@ -204,6 +215,12 @@ export function AngebotAkzeptierenScreen({ token }) {
             <input value={name} onChange={e=>setName(e.target.value)} placeholder="Vor- und Nachname"
               style={{ width:"100%", background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border2)",
                 borderRadius:8, padding:"11px 12px", fontSize:14, boxSizing:"border-box", marginBottom:12, fontFamily:"inherit" }} />
+            <div style={{ color:"var(--muted)", fontSize:11, fontWeight:600, marginBottom:6 }}>Grund der Ablehnung (optional)</div>
+            <textarea value={grund} onChange={e=>setGrund(e.target.value)} placeholder="z.B. Preis, Liefertermin, Leistungsumfang…"
+              rows={3}
+              style={{ width:"100%", background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border2)",
+                borderRadius:8, padding:"11px 12px", fontSize:13.5, boxSizing:"border-box", marginBottom:12,
+                fontFamily:"inherit", resize:"vertical" }} />
             {sendeFehler && <div style={{ color:"var(--red)", fontSize:12, marginBottom:10 }}>{sendeFehler}</div>}
             <button onClick={() => absenden("abgelehnt")} disabled={sendet}
               style={{ width:"100%", background:"var(--red)", color:"#fff", border:"none", borderRadius:10,

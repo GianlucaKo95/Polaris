@@ -741,7 +741,7 @@ export async function sbAngebotFreigabeNachweisLaden(angebotId, session) {
   try {
     const client = sbClientMitToken(session);
     const { data, error } = await client.from("angebot_freigaben")
-      .select("entscheidung, entschieden_am, entschieden_name, entschieden_signatur, entschieden_hash, entschieden_ip")
+      .select("entscheidung, entschieden_am, entschieden_name, entschieden_signatur, entschieden_hash, entschieden_ip, entschieden_inhalt, ablehnungsgrund")
       .eq("angebot_id", angebotId).not("entscheidung", "is", null)
       .order("entschieden_am", { ascending: false }).limit(1);
     if (error) return null;
@@ -754,7 +754,12 @@ export async function sbAngebotFreigabeNachweisLaden(angebotId, session) {
 // echte angebote-Tabelle, siehe Migration).
 export async function sbAngebotFreigabeDaten(token) {
   try {
-    const { data, error } = await supabase.rpc("angebot_freigabe_daten", { p_token: token });
+    // _v2: die ursprüngliche Funktion hatte kein ablehnungsgrund-Feld, und
+    // Postgres lässt eine RETURNS TABLE-Spaltenliste nicht per CREATE OR
+    // REPLACE ändern (bräuchte DROP FUNCTION zuerst) — neue, versionierte
+    // Funktion statt Ersetzen, nach demselben Muster wie bereits
+    // einladung_pruefen_v2/v3 in dieser Codebase.
+    const { data, error } = await supabase.rpc("angebot_freigabe_daten_v2", { p_token: token });
     if (error || !data?.length) return null;
     return data[0];
   } catch { return null; }
@@ -766,13 +771,17 @@ export async function sbAngebotFreigabeDaten(token) {
 // der Hash tatsächlich beweiskräftig bleibt statt vom Client übernommen
 // zu werden. error ist bei Ablehnung die RPC-eigene deutschsprachige
 // Fehlermeldung (ungültiger Link, bereits beantwortet, abgelaufen, …).
-export async function sbAngebotEntscheiden(token, { entscheidung, name, signatur }) {
+export async function sbAngebotEntscheiden(token, { entscheidung, name, signatur, grund }) {
   try {
-    const { data, error } = await supabase.rpc("angebot_freigabe_entscheiden", {
+    // _v2: neuer p_grund-Parameter (Ablehnungsgrund) + Inhalts-Snapshot +
+    // Sperren bei Annahme — aus demselben Grund wie oben eine neue
+    // Funktion statt eines In-Place-Ersetzens.
+    const { data, error } = await supabase.rpc("angebot_freigabe_entscheiden_v2", {
       p_token: token,
       p_entscheidung: entscheidung,
       p_name: name || "",
       p_signatur: signatur || null,
+      p_grund: grund || null,
     });
     if (error) return { ok: false, hash: null, fehler: error.message || "Senden fehlgeschlagen." };
     return { ok: true, hash: data, fehler: null };

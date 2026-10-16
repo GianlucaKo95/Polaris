@@ -29,6 +29,16 @@ export function AngebotNachweis({ angebot, nachweis }) {
         {nachweis.entschieden_ip && <> · IP {nachweis.entschieden_ip}</>}
       </div>
 
+      {!angenommen && nachweis.ablehnungsgrund && (
+        <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+          padding:"9px 12px", marginBottom:10, fontSize:12.5, color:"var(--text2)", lineHeight:1.4 }}>
+          <div style={{ color:"var(--muted)", fontSize:10, fontWeight:700, textTransform:"uppercase", marginBottom:3 }}>
+            Grund der Ablehnung
+          </div>
+          {nachweis.ablehnungsgrund}
+        </div>
+      )}
+
       {nachweis.entschieden_signatur && (
         <div style={{ background:"#fff", border:"1px solid var(--border)", borderRadius:8,
           padding:8, marginBottom:10, display:"inline-block" }}>

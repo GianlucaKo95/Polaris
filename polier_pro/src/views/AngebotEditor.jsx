@@ -29,7 +29,7 @@ import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
 export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, firmaId, profil, session }) {
-  const [a,         setA]         = useState(angebot);
+  const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
   const [vonAufgabe,setVonAufgabe]= useState(false);
@@ -63,6 +63,18 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const nettoNachRabatt = netto - rabattBetrag;
   const mwstBetrag = nettoNachRabatt * (a.mwst||19)/100;
   const bruttoGesamt = nettoNachRabatt + mwstBetrag;
+
+  // Nur bei ANNAHME gesperrt (angebot_freigabe_entscheiden_v2 setzt das) —
+  // bei Ablehnung soll das Angebot bewusst weiter änderbar bleiben, z.B.
+  // für eine Preisanpassung und erneutes Zusenden. Guards hier zusätzlich
+  // zur RLS-Sperre (angebote_aendern/angebote_loeschen), damit ein Klick
+  // nicht einfach still wirkungslos verpufft, sondern die UI es gar nicht
+  // erst zulässt.
+  const gesperrt = a.gesperrt === true;
+  // Einziger Schreibweg für den Angebotsinhalt — ein gesperrtes (bereits
+  // digital angenommenes) Angebot darf lokal gar nicht erst veränderbar
+  // sein, egal über welches Feld/welche Funktion der Versuch kommt.
+  const setA = updater => { if (!gesperrt) setARoh(updater); };
 
   function addPosition(pos) {
     setA(x => ({ ...x, positionen:[...x.positionen, { rabatt:0, ...pos, id:Date.now() }] }));
@@ -142,6 +154,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   }
 
   async function speichernKlick() {
+    if (gesperrt) return;
     setSpeichertLaedt(true);
     try {
       await onSave(a);
@@ -307,6 +320,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
     <div class="sig-banner ${nachweis?.entscheidung !== "abgelehnt" ? "ok" : "nok"}">
       <div class="big">${nachweis?.entscheidung === "abgelehnt" ? "❌ Digital abgelehnt" : "✅ Digital angenommen"}</div>
       <div class="sub">${escapeHtml(a.entschieden_von)} · ${new Date(a.entschieden_am).toLocaleString("de-DE")}</div>
+      ${nachweis?.ablehnungsgrund ? `<div class="meta-row" style="margin-top:8px;"><strong>Grund:</strong> ${escapeHtml(nachweis.ablehnungsgrund)}</div>` : ""}
       ${nachweis?.entschieden_signatur ? `<img class="sig-img" src="${nachweis.entschieden_signatur}" alt="Unterschrift"/>` : ""}
       ${nachweis?.entschieden_hash ? `<div class="hash-badge">DOC-${escapeHtml(nachweis.entschieden_hash)}</div>` : ""}
       ${nachweis?.entschieden_ip ? `<div class="meta-row">IP zum Zeitpunkt der Entscheidung: ${escapeHtml(nachweis.entschieden_ip)}</div>` : ""}
@@ -557,6 +571,14 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
           </div>
         </div>
 
+        {gesperrt && (
+          <div style={{ background:"var(--gbg)", border:"1.5px solid var(--green)", borderRadius:10,
+            padding:"9px 14px", marginBottom:10, color:"var(--green)", fontSize:12.5, fontWeight:600,
+            display:"flex", alignItems:"center", gap:7 }}>
+            🔒 Digital angenommen und gesperrt — keine Änderungen mehr möglich.
+          </div>
+        )}
+
         {/* Tab-Toggle */}
         <div style={{ display:"flex", gap:6, marginBottom:10 }}>
           {[["positionen",ClipboardList,"Positionen"],["einstellungen",Settings,"Einstellungen"]].map(([k,Icon,l]) => (
@@ -574,7 +596,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
         {ansicht === "positionen" && (
           <div>
             {/* Import-Buttons */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:9 }}>
+            {!gesperrt && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:9 }}>
               <button onClick={() => setVonKI(true)}
                 style={{ background:"var(--ybg)", color:"var(--ydark)",
                   border:"1.5px solid var(--yellow)", borderRadius:10, padding:"9px 0",
@@ -598,7 +620,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
                   cursor:"pointer", fontSize:12, fontFamily:"inherit",
                   display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}><Plus size={12} /> Manuell</button>
-            </div>
+            </div>}
 
             {/* Positionen */}
             {a.positionen.length === 0 && (
@@ -615,12 +637,14 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   alignItems:"center", marginBottom:6 }}>
                   <div style={{ color:"var(--muted)", fontSize:11,
                     fontWeight:700 }}>Pos. {i+1}</div>
-                  <button onClick={() => removePos(pos.id)}
-                    style={{ background:"var(--rbg)", color:"var(--red)",
-                      border:"none", borderRadius:6, padding:"2px 8px",
-                      cursor:"pointer", fontSize:11, fontFamily:"inherit", display:"flex" }}><X size={12} /></button>
+                  {!gesperrt && (
+                    <button onClick={() => removePos(pos.id)}
+                      style={{ background:"var(--rbg)", color:"var(--red)",
+                        border:"none", borderRadius:6, padding:"2px 8px",
+                        cursor:"pointer", fontSize:11, fontFamily:"inherit", display:"flex" }}><X size={12} /></button>
+                  )}
                 </div>
-                <input value={pos.bez}
+                <input value={pos.bez} disabled={gesperrt}
                   onChange={e=>updatePos(pos.id,"bez",e.target.value)}
                   placeholder="Bezeichnung"
                   style={{ ...inputStyle(), marginBottom:8, fontSize:13 }} />
@@ -628,13 +652,13 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   <div>
                     <div style={{ color:"var(--muted)", fontSize:10,
                       marginBottom:3 }}>Menge</div>
-                    <input type="number" value={pos.menge||""}
+                    <input type="number" value={pos.menge||""} disabled={gesperrt}
                       onChange={e=>updatePos(pos.id,"menge",e.target.value)}
                       style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
                   </div>
                   <div>
                     <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Einheit</div>
-                    <select value={pos.einheit}
+                    <select value={pos.einheit} disabled={gesperrt}
                       onChange={e=>updatePos(pos.id,"einheit",e.target.value)}
                       style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }}>
                       {["m²","m³","m","t","h","Stk","pau"].map(u=><option key={u}>{u}</option>)}
@@ -644,14 +668,14 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                     <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>
                       EP (€/{pos.einheit})
                     </div>
-                    <input type="number" value={pos.ep||""}
+                    <input type="number" value={pos.ep||""} disabled={gesperrt}
                       onChange={e=>updatePos(pos.id,"ep",e.target.value)}
                       style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
                   </div>
                 </div>
                 <div style={{ marginTop:6, width:"33%", minWidth:90 }}>
                   <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Rabatt (%)</div>
-                  <input type="number" value={pos.rabatt||""}
+                  <input type="number" value={pos.rabatt||""} disabled={gesperrt}
                     onChange={e=>updatePos(pos.id,"rabatt",e.target.value)}
                     placeholder="0" min="0" max="100"
                     style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
@@ -680,20 +704,21 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
             ].map(([l,k,ph]) => (
               <div key={k} style={{ marginBottom:9 }}>
                 <Label>{l}</Label>
-                <input value={a[k]||""} onChange={e=>setA(x=>({...x,[k]:e.target.value}))}
+                <input value={a[k]||""} disabled={gesperrt}
+                  onChange={e=>setA(x=>({...x,[k]:e.target.value}))}
                   placeholder={ph} style={inputStyle()} />
               </div>
             ))}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:9 }}>
               <div>
                 <Label>Angebotsdatum</Label>
-                <input type="date" value={a.datum}
+                <input type="date" value={a.datum} disabled={gesperrt}
                   onChange={e=>setA(x=>({...x,datum:e.target.value}))}
                   style={inputStyle()} />
               </div>
               <div>
                 <Label>Gültig bis</Label>
-                <input type="date" value={a.gueltig_bis}
+                <input type="date" value={a.gueltig_bis} disabled={gesperrt}
                   onChange={e=>setA(x=>({...x,gueltig_bis:e.target.value}))}
                   style={inputStyle()} />
               </div>
@@ -701,13 +726,13 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:9 }}>
               <div>
                 <Label>Rabatt (%)</Label>
-                <input type="number" value={a.rabatt||0}
+                <input type="number" value={a.rabatt||0} disabled={gesperrt}
                   onChange={e=>setA(x=>({...x,rabatt:Number(e.target.value)}))}
                   style={inputStyle()} min="0" max="100" />
               </div>
               <div>
                 <Label>MwSt (%)</Label>
-                <select value={a.mwst||19}
+                <select value={a.mwst||19} disabled={gesperrt}
                   onChange={e=>setA(x=>({...x,mwst:Number(e.target.value)}))}
                   style={{ ...inputStyle(), padding:"11px 12px" }}>
                   <option value={19}>19% (Standard)</option>
@@ -718,7 +743,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
             </div>
             <div style={{ marginBottom:9 }}>
               <Label>Status</Label>
-              <select value={a.status}
+              <select value={a.status} disabled={gesperrt}
                 onChange={e=>setA(x=>({...x,status:e.target.value}))}
                 style={{ ...inputStyle(), padding:"11px 12px" }}>
                 {[["entwurf","📝 Entwurf"],["versendet","📤 Versendet"],
@@ -728,8 +753,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               {a.entschieden_am && (
                 <div style={{ color:"var(--muted)", fontSize:11.5, marginTop:6 }}>
                   Online {a.status === "angenommen" ? "angenommen" : "abgelehnt"} am{" "}
-                  {new Date(a.entschieden_am).toLocaleDateString("de-DE")} von {a.entschieden_von} —
-                  ein manuelles Ändern hier überschreibt diesen Stand.
+                  {new Date(a.entschieden_am).toLocaleDateString("de-DE")} von {a.entschieden_von}
+                  {!gesperrt && " — bei einer Preisanpassung und erneutem Versand Status ggf. zurücksetzen."}
                 </div>
               )}
             </div>
@@ -738,12 +763,13 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 
             {firmaId && <AngebotFreigabe angebotId={a.id} firmaId={firmaId} profil={profil} session={session} />}
 
-            <button onClick={speichernKlick} disabled={speichertLaedt}
-              style={{ width:"100%", background:"var(--yellow)", color:"#1a1200",
+            <button onClick={speichernKlick} disabled={speichertLaedt || gesperrt}
+              style={{ width:"100%", background: gesperrt ? "var(--surface2)" : "var(--yellow)",
+                color: gesperrt ? "var(--muted)" : "#1a1200",
                 border:"none", borderRadius:12, padding:14, fontWeight:800,
-                cursor: speichertLaedt ? "default" : "pointer", fontSize:14, fontFamily:"inherit",
+                cursor: (speichertLaedt || gesperrt) ? "default" : "pointer", fontSize:14, fontFamily:"inherit",
                 display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-              {speichertLaedt ? <><Spinner size={14} /> Speichert…</> : "Angebot speichern"}
+              {gesperrt ? "Gesperrt" : speichertLaedt ? <><Spinner size={14} /> Speichert…</> : "Angebot speichern"}
             </button>
           </div>
         )}
