@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ClipboardList, X, CircleCheckBig, ChevronLeft, ChartColumn, FileText, Settings, Plus, Sparkles, TriangleAlert } from "lucide-react";
 import { AUFGABEN_TYPEN } from "../config/konstanten.js";
@@ -12,6 +12,7 @@ import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
 import { AngebotNachweis } from "../components/AngebotNachweis.jsx";
+import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
 // seine Bedeutung hängt aber vom Aufgabentyp ab (siehe extraLabel in
@@ -39,6 +40,18 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [speichertLaedt, setSpeichertLaedt] = useState(false);
   const [wordLaedt, setWordLaedt] = useState(false);
   const [wordBlob,  setWordBlob]  = useState(null);
+
+  // Entscheidungs-Nachweis (Name/Unterschrift/Hash/IP) einmal hier laden,
+  // statt in AngebotNachweis.jsx selbst — exportPDF() unten braucht die
+  // Unterschrift ebenfalls, um sie direkt ins Angebots-PDF einzubetten,
+  // ein zweiter, unabhängiger Abruf dafür wäre dieselbe Anfrage doppelt.
+  const [nachweis, setNachweis] = useState(null);
+  useEffect(() => {
+    let aktiv = true;
+    if (!a.entschieden_am) { setNachweis(null); return; }
+    sbAngebotFreigabeNachweisLaden(a.id, session).then(n => { if (aktiv) setNachweis(n); });
+    return () => { aktiv = false; };
+  }, [a.id, a.entschieden_am]);
 
   // Positions-Rabatt (pro Zeile) wirkt VOR dem Gesamt-Rabatt im
   // Einstellungen-Tab — beide sind unabhängig kombinierbar, ohne dass
@@ -186,6 +199,21 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 .summen-row.gesamt span:last-child { color:#F5C400; }
 .footer-text { background:#f8f8f8; border-radius:6px; padding:10px 14px;
   font-size:9pt; color:#666; margin-top:16px; line-height:1.6; }
+.sig-section { margin-top:18px; page-break-inside:avoid; }
+.sig-title { font-size:10pt; font-weight:bold; color:#F5C400; text-transform:uppercase;
+  letter-spacing:0.5px; border-left:3px solid #F5C400; padding-left:8px; margin-bottom:10px; }
+.sig-banner { border-radius:10px; padding:12px 16px; }
+.sig-banner.ok { background:#DCFCE7; color:#15803D; }
+.sig-banner.nok { background:#FEE2E2; color:#B91C1C; }
+.sig-banner .big { font-size:12pt; font-weight:900; }
+.sig-banner .sub { font-size:9.5pt; margin-top:3px; }
+.sig-img { max-width:240px; max-height:70px; margin-top:10px; display:block; }
+.hash-badge { font-family:monospace; font-size:9pt; background:rgba(0,0,0,0.06); border-radius:6px;
+  padding:5px 9px; display:inline-block; margin-top:8px; word-break:break-all; max-width:100%; }
+.meta-row { font-size:8.5pt; margin-top:5px; opacity:0.8; word-break:break-all; }
+.sig-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.sig-box { border:1.5px solid #ccc; border-radius:6px; height:60px; margin-top:4px; }
+.sig-sub { font-size:9pt; color:#666; }
 .footer { border-top:1px solid #ddd; margin-top:14px; padding-top:6px;
   font-size:7pt; color:#aaa; display:flex; justify-content:space-between; }
 </style></head><body><div class="page">
@@ -271,6 +299,24 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
   Dieses Angebot ist gültig bis ${new Date(a.gueltig_bis).toLocaleDateString("de-DE")}.
   Alle Preise verstehen sich zzgl. ${a.mwst}% MwSt.
   Zahlungsbedingungen: 14 Tage netto.
+</div>
+
+<div class="sig-section">
+  <div class="sig-title">Annahme des Angebots</div>
+  ${a.entschieden_am ? `
+    <div class="sig-banner ${nachweis?.entscheidung !== "abgelehnt" ? "ok" : "nok"}">
+      <div class="big">${nachweis?.entscheidung === "abgelehnt" ? "❌ Digital abgelehnt" : "✅ Digital angenommen"}</div>
+      <div class="sub">${escapeHtml(a.entschieden_von)} · ${new Date(a.entschieden_am).toLocaleString("de-DE")}</div>
+      ${nachweis?.entschieden_signatur ? `<img class="sig-img" src="${nachweis.entschieden_signatur}" alt="Unterschrift"/>` : ""}
+      ${nachweis?.entschieden_hash ? `<div class="hash-badge">DOC-${escapeHtml(nachweis.entschieden_hash)}</div>` : ""}
+      ${nachweis?.entschieden_ip ? `<div class="meta-row">IP zum Zeitpunkt der Entscheidung: ${escapeHtml(nachweis.entschieden_ip)}</div>` : ""}
+    </div>
+  ` : `
+    <div class="sig-grid">
+      <div><div class="sig-sub">Ort, Datum</div><div class="sig-box"></div></div>
+      <div><div class="sig-sub">Unterschrift Auftraggeber</div><div class="sig-box"></div></div>
+    </div>
+  `}
 </div>
 
 <div class="footer">
@@ -688,7 +734,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               )}
             </div>
 
-            <AngebotNachweis angebot={a} eigeneFirma={eigeneFirma} projekt={projekt} session={session} />
+            <AngebotNachweis angebot={a} nachweis={nachweis} />
 
             {firmaId && <AngebotFreigabe angebotId={a.id} firmaId={firmaId} profil={profil} session={session} />}
 
