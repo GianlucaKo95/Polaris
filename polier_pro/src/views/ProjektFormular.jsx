@@ -86,12 +86,17 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
     setWirdGespeichert(false);
   }
 
+  // sub_ids (nicht subIds): wie alle anderen Felder hier direkt der
+  // DB-Spaltenname, kein Camel-Case-Mapping — sonst bräuchte initial
+  // (die rohe projekte-Zeile aus Supabase) eine eigene Übersetzung beim
+  // Bearbeiten, und ein neu angelegtes Projekt würde die Auswahl unter
+  // einem anderen Namen speichern, als handleSaveProjekt() erwartet.
   function toggleSub(id) {
     setP(prev => ({
       ...prev,
-      subIds: (prev.subIds||[]).includes(id)
-        ? (prev.subIds||[]).filter(x=>x!==id)
-        : [...(prev.subIds||[]), id]
+      sub_ids: (prev.sub_ids||[]).includes(id)
+        ? (prev.sub_ids||[]).filter(x=>x!==id)
+        : [...(prev.sub_ids||[]), id]
     }));
   }
 
@@ -254,7 +259,7 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
             <Label>Subunternehmer zuweisen</Label>
             <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:8 }}>
               {subs.filter(s=>s.status==="aktiv").map(s => {
-                const aktiv = (p.subIds||[]).includes(s.id);
+                const aktiv = (p.sub_ids||[]).includes(s.id);
                 return (
                   <div key={s.id} onClick={() => toggleSub(s.id)}
                     style={{ display:"flex", justifyContent:"space-between",

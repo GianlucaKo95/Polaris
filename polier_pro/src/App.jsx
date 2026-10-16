@@ -15,6 +15,7 @@ import { PasswortSetzenScreen } from "./views/PasswortSetzenScreen.jsx";
 import { ErstePinAbfrageScreen } from "./views/ErstePinAbfrageScreen.jsx";
 import { EinladungScreen } from "./views/EinladungScreen.jsx";
 import { KundenportalScreen } from "./views/KundenportalScreen.jsx";
+import { AngebotAkzeptierenScreen } from "./views/AngebotAkzeptierenScreen.jsx";
 import { RegistrierungScreen } from "./views/RegistrierungScreen.jsx";
 import { LoginScreen } from "./views/LoginScreen.jsx";
 import { PinSperreScreen } from "./views/PinSperreScreen.jsx";
@@ -250,6 +251,12 @@ export default function PolierApp() {
     ? new URLSearchParams(window.location.search).get("kunde")
     : null;
 
+  // Angebot-Annahme-Token aus URL erkennen — komplett unabhängig von Login/
+  // Session, da der Kunde keinen Account hat (siehe Kundenportal-Token oben).
+  const angebotFreigabeToken = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("angebot")
+    : null;
+
   // Firma laden wenn eingeloggt — und lokalen eigeneFirma-State (der für
   // PDFs, Onboarding-Anzeige etc. verwendet wird) mit den echten Daten
   // aus der firmen-Tabelle synchronisieren. Ohne dieses Mapping blieb
@@ -481,6 +488,11 @@ export default function PolierApp() {
   // ── Kundenportal (öffentlich, ohne Login) ──
   if (kundenportalToken) {
     return <KundenportalScreen token={kundenportalToken} />;
+  }
+
+  // ── Angebot-Annahme (öffentlich, ohne Login) ──
+  if (angebotFreigabeToken) {
+    return <AngebotAkzeptierenScreen token={angebotFreigabeToken} />;
   }
 
   // ── Passwort-Setzen nach Einladung ──
@@ -793,6 +805,7 @@ export default function PolierApp() {
       auftraggeber:  p.auftraggeber || "",
       typ:           p.typ || "hochbau",
       farbe:         p.farbe || "#F5C400",
+      sub_ids:       p.sub_ids || [],
     };
 
     // Ohne Firma (z.B. Demo-Modus ohne echten Login, ODER weil die Firma
@@ -834,7 +847,7 @@ export default function PolierApp() {
           id: gespeichert.id, name: gespeichert.name, adresse: gespeichert.adresse,
           plz: gespeichert.plz, ort: gespeichert.ort, projektnummer: gespeichert.projektnummer,
           bauleiter: gespeichert.bauleiter, auftraggeber: gespeichert.auftraggeber,
-          typ: gespeichert.typ, farbe: gespeichert.farbe,
+          typ: gespeichert.typ, farbe: gespeichert.farbe, sub_ids: gespeichert.sub_ids || [],
         };
         if (istNeu) setProjekte(prev => [...prev, normalisiert]);
         else setProjekte(prev => prev.map(x => x.id===p.id ? normalisiert : x));
@@ -1325,6 +1338,7 @@ export default function PolierApp() {
           </div>
         )}
         {tab === "dashboard" && <DashboardView aufgaben={felder} kolonnen={kolonnen} sbConnected={sbConnected} projekt={projekt}
+            onEdit={rolleConfig?.kannBearbeiten !== false ? () => setEditProjekt(true) : undefined}
             onNavigate={(tabId, filter) => {
               if (filter) setAufgabenFilter(filter);
               else setAufgabenFilter("alle");
@@ -1334,7 +1348,7 @@ export default function PolierApp() {
         {tab === "gantt"     && <GanttView felder={felder}
             onAufgabeKlick={id => { setAufgabenEditId(id); setAufgabenFilter("alle"); setTab("aufgaben"); }} />}
         {tab === "wetter"    && <WeatherView ort={projekt?.ort} plz={projekt?.plz} projektId={projekt?.id} />}
-        {tab === "kolonnen"  && <KolonnenView kolonnen={kolonnen} projekt={projekt} setKolonnen={setKolonnen}
+        {tab === "kolonnen"  && <KolonnenView kolonnen={kolonnen} projekt={projekt} subs={subs} setKolonnen={setKolonnen}
             darfBearbeiten={rolleConfig?.kannBearbeiten !== false}
             kannKolonneLoeschen={rolleConfig?.kannKolonneLoeschen === true}
             profil={aktiveProfil} session={auth.session} />}
@@ -1383,7 +1397,7 @@ export default function PolierApp() {
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
         {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
-        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} session={auth.session} />}
+        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} session={auth.session} />}
         {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
         {tab === "firmen"       && <FirmenView owneFirma={eigeneFirma} setEigeneFirma={setEigeneFirma} subs={subs} setSubs={setSubs}

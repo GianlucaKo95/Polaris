@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ClipboardList, X, CircleCheckBig, ChevronLeft, ChartColumn, FileText, Settings, Plus, Sparkles, TriangleAlert } from "lucide-react";
 import { AUFGABEN_TYPEN } from "../config/konstanten.js";
@@ -10,6 +10,9 @@ import { Spinner } from "../components/Spinner.jsx";
 import { kiAngebotErstellen } from "../lib/ai.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
+import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
+import { AngebotNachweis } from "../components/AngebotNachweis.jsx";
+import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
 // seine Bedeutung hängt aber vom Aufgabentyp ab (siehe extraLabel in
@@ -25,8 +28,8 @@ import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, session }) {
-  const [a,         setA]         = useState(angebot);
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, firmaId, profil, session }) {
+  const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
   const [vonAufgabe,setVonAufgabe]= useState(false);
@@ -38,6 +41,18 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [wordLaedt, setWordLaedt] = useState(false);
   const [wordBlob,  setWordBlob]  = useState(null);
 
+  // Entscheidungs-Nachweis (Name/Unterschrift/Hash/IP) einmal hier laden,
+  // statt in AngebotNachweis.jsx selbst — exportPDF() unten braucht die
+  // Unterschrift ebenfalls, um sie direkt ins Angebots-PDF einzubetten,
+  // ein zweiter, unabhängiger Abruf dafür wäre dieselbe Anfrage doppelt.
+  const [nachweis, setNachweis] = useState(null);
+  useEffect(() => {
+    let aktiv = true;
+    if (!a.entschieden_am) { setNachweis(null); return; }
+    sbAngebotFreigabeNachweisLaden(a.id, session).then(n => { if (aktiv) setNachweis(n); });
+    return () => { aktiv = false; };
+  }, [a.id, a.entschieden_am]);
+
   // Positions-Rabatt (pro Zeile) wirkt VOR dem Gesamt-Rabatt im
   // Einstellungen-Tab — beide sind unabhängig kombinierbar, ohne dass
   // eine Zeile den Überblick verliert: gpOf() ist die einzige Stelle, die
@@ -48,6 +63,18 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const nettoNachRabatt = netto - rabattBetrag;
   const mwstBetrag = nettoNachRabatt * (a.mwst||19)/100;
   const bruttoGesamt = nettoNachRabatt + mwstBetrag;
+
+  // Nur bei ANNAHME gesperrt (angebot_freigabe_entscheiden_v2 setzt das) —
+  // bei Ablehnung soll das Angebot bewusst weiter änderbar bleiben, z.B.
+  // für eine Preisanpassung und erneutes Zusenden. Guards hier zusätzlich
+  // zur RLS-Sperre (angebote_aendern/angebote_loeschen), damit ein Klick
+  // nicht einfach still wirkungslos verpufft, sondern die UI es gar nicht
+  // erst zulässt.
+  const gesperrt = a.gesperrt === true;
+  // Einziger Schreibweg für den Angebotsinhalt — ein gesperrtes (bereits
+  // digital angenommenes) Angebot darf lokal gar nicht erst veränderbar
+  // sein, egal über welches Feld/welche Funktion der Versuch kommt.
+  const setA = updater => { if (!gesperrt) setARoh(updater); };
 
   function addPosition(pos) {
     setA(x => ({ ...x, positionen:[...x.positionen, { rabatt:0, ...pos, id:Date.now() }] }));
@@ -127,6 +154,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   }
 
   async function speichernKlick() {
+    if (gesperrt) return;
     setSpeichertLaedt(true);
     try {
       await onSave(a);
@@ -184,6 +212,21 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 .summen-row.gesamt span:last-child { color:#F5C400; }
 .footer-text { background:#f8f8f8; border-radius:6px; padding:10px 14px;
   font-size:9pt; color:#666; margin-top:16px; line-height:1.6; }
+.sig-section { margin-top:18px; page-break-inside:avoid; }
+.sig-title { font-size:10pt; font-weight:bold; color:#F5C400; text-transform:uppercase;
+  letter-spacing:0.5px; border-left:3px solid #F5C400; padding-left:8px; margin-bottom:10px; }
+.sig-banner { border-radius:10px; padding:12px 16px; }
+.sig-banner.ok { background:#DCFCE7; color:#15803D; }
+.sig-banner.nok { background:#FEE2E2; color:#B91C1C; }
+.sig-banner .big { font-size:12pt; font-weight:900; }
+.sig-banner .sub { font-size:9.5pt; margin-top:3px; }
+.sig-img { max-width:240px; max-height:70px; margin-top:10px; display:block; }
+.hash-badge { font-family:monospace; font-size:9pt; background:rgba(0,0,0,0.06); border-radius:6px;
+  padding:5px 9px; display:inline-block; margin-top:8px; word-break:break-all; max-width:100%; }
+.meta-row { font-size:8.5pt; margin-top:5px; opacity:0.8; word-break:break-all; }
+.sig-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.sig-box { border:1.5px solid #ccc; border-radius:6px; height:60px; margin-top:4px; }
+.sig-sub { font-size:9pt; color:#666; }
 .footer { border-top:1px solid #ddd; margin-top:14px; padding-top:6px;
   font-size:7pt; color:#aaa; display:flex; justify-content:space-between; }
 </style></head><body><div class="page">
@@ -269,6 +312,25 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
   Dieses Angebot ist gültig bis ${new Date(a.gueltig_bis).toLocaleDateString("de-DE")}.
   Alle Preise verstehen sich zzgl. ${a.mwst}% MwSt.
   Zahlungsbedingungen: 14 Tage netto.
+</div>
+
+<div class="sig-section">
+  <div class="sig-title">Annahme des Angebots</div>
+  ${a.entschieden_am ? `
+    <div class="sig-banner ${nachweis?.entscheidung !== "abgelehnt" ? "ok" : "nok"}">
+      <div class="big">${nachweis?.entscheidung === "abgelehnt" ? "❌ Digital abgelehnt" : "✅ Digital angenommen"}</div>
+      <div class="sub">${escapeHtml(a.entschieden_von)} · ${new Date(a.entschieden_am).toLocaleString("de-DE")}</div>
+      ${nachweis?.ablehnungsgrund ? `<div class="meta-row" style="margin-top:8px;"><strong>Grund:</strong> ${escapeHtml(nachweis.ablehnungsgrund)}</div>` : ""}
+      ${nachweis?.entschieden_signatur ? `<img class="sig-img" src="${nachweis.entschieden_signatur}" alt="Unterschrift"/>` : ""}
+      ${nachweis?.entschieden_hash ? `<div class="hash-badge">DOC-${escapeHtml(nachweis.entschieden_hash)}</div>` : ""}
+      ${nachweis?.entschieden_ip ? `<div class="meta-row">IP zum Zeitpunkt der Entscheidung: ${escapeHtml(nachweis.entschieden_ip)}</div>` : ""}
+    </div>
+  ` : `
+    <div class="sig-grid">
+      <div><div class="sig-sub">Ort, Datum</div><div class="sig-box"></div></div>
+      <div><div class="sig-sub">Unterschrift Auftraggeber</div><div class="sig-box"></div></div>
+    </div>
+  `}
 </div>
 
 <div class="footer">
@@ -509,6 +571,14 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
           </div>
         </div>
 
+        {gesperrt && (
+          <div style={{ background:"var(--gbg)", border:"1.5px solid var(--green)", borderRadius:10,
+            padding:"9px 14px", marginBottom:10, color:"var(--green)", fontSize:12.5, fontWeight:600,
+            display:"flex", alignItems:"center", gap:7 }}>
+            🔒 Digital angenommen und gesperrt — keine Änderungen mehr möglich.
+          </div>
+        )}
+
         {/* Tab-Toggle */}
         <div style={{ display:"flex", gap:6, marginBottom:10 }}>
           {[["positionen",ClipboardList,"Positionen"],["einstellungen",Settings,"Einstellungen"]].map(([k,Icon,l]) => (
@@ -526,7 +596,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
         {ansicht === "positionen" && (
           <div>
             {/* Import-Buttons */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:9 }}>
+            {!gesperrt && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:9 }}>
               <button onClick={() => setVonKI(true)}
                 style={{ background:"var(--ybg)", color:"var(--ydark)",
                   border:"1.5px solid var(--yellow)", borderRadius:10, padding:"9px 0",
@@ -550,7 +620,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
                   cursor:"pointer", fontSize:12, fontFamily:"inherit",
                   display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}><Plus size={12} /> Manuell</button>
-            </div>
+            </div>}
 
             {/* Positionen */}
             {a.positionen.length === 0 && (
@@ -567,12 +637,14 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   alignItems:"center", marginBottom:6 }}>
                   <div style={{ color:"var(--muted)", fontSize:11,
                     fontWeight:700 }}>Pos. {i+1}</div>
-                  <button onClick={() => removePos(pos.id)}
-                    style={{ background:"var(--rbg)", color:"var(--red)",
-                      border:"none", borderRadius:6, padding:"2px 8px",
-                      cursor:"pointer", fontSize:11, fontFamily:"inherit", display:"flex" }}><X size={12} /></button>
+                  {!gesperrt && (
+                    <button onClick={() => removePos(pos.id)}
+                      style={{ background:"var(--rbg)", color:"var(--red)",
+                        border:"none", borderRadius:6, padding:"2px 8px",
+                        cursor:"pointer", fontSize:11, fontFamily:"inherit", display:"flex" }}><X size={12} /></button>
+                  )}
                 </div>
-                <input value={pos.bez}
+                <input value={pos.bez} disabled={gesperrt}
                   onChange={e=>updatePos(pos.id,"bez",e.target.value)}
                   placeholder="Bezeichnung"
                   style={{ ...inputStyle(), marginBottom:8, fontSize:13 }} />
@@ -580,13 +652,13 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   <div>
                     <div style={{ color:"var(--muted)", fontSize:10,
                       marginBottom:3 }}>Menge</div>
-                    <input type="number" value={pos.menge||""}
+                    <input type="number" value={pos.menge||""} disabled={gesperrt}
                       onChange={e=>updatePos(pos.id,"menge",e.target.value)}
                       style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
                   </div>
                   <div>
                     <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Einheit</div>
-                    <select value={pos.einheit}
+                    <select value={pos.einheit} disabled={gesperrt}
                       onChange={e=>updatePos(pos.id,"einheit",e.target.value)}
                       style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }}>
                       {["m²","m³","m","t","h","Stk","pau"].map(u=><option key={u}>{u}</option>)}
@@ -596,14 +668,14 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                     <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>
                       EP (€/{pos.einheit})
                     </div>
-                    <input type="number" value={pos.ep||""}
+                    <input type="number" value={pos.ep||""} disabled={gesperrt}
                       onChange={e=>updatePos(pos.id,"ep",e.target.value)}
                       style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
                   </div>
                 </div>
                 <div style={{ marginTop:6, width:"33%", minWidth:90 }}>
                   <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Rabatt (%)</div>
-                  <input type="number" value={pos.rabatt||""}
+                  <input type="number" value={pos.rabatt||""} disabled={gesperrt}
                     onChange={e=>updatePos(pos.id,"rabatt",e.target.value)}
                     placeholder="0" min="0" max="100"
                     style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
@@ -632,20 +704,21 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
             ].map(([l,k,ph]) => (
               <div key={k} style={{ marginBottom:9 }}>
                 <Label>{l}</Label>
-                <input value={a[k]||""} onChange={e=>setA(x=>({...x,[k]:e.target.value}))}
+                <input value={a[k]||""} disabled={gesperrt}
+                  onChange={e=>setA(x=>({...x,[k]:e.target.value}))}
                   placeholder={ph} style={inputStyle()} />
               </div>
             ))}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:9 }}>
               <div>
                 <Label>Angebotsdatum</Label>
-                <input type="date" value={a.datum}
+                <input type="date" value={a.datum} disabled={gesperrt}
                   onChange={e=>setA(x=>({...x,datum:e.target.value}))}
                   style={inputStyle()} />
               </div>
               <div>
                 <Label>Gültig bis</Label>
-                <input type="date" value={a.gueltig_bis}
+                <input type="date" value={a.gueltig_bis} disabled={gesperrt}
                   onChange={e=>setA(x=>({...x,gueltig_bis:e.target.value}))}
                   style={inputStyle()} />
               </div>
@@ -653,13 +726,13 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:9 }}>
               <div>
                 <Label>Rabatt (%)</Label>
-                <input type="number" value={a.rabatt||0}
+                <input type="number" value={a.rabatt||0} disabled={gesperrt}
                   onChange={e=>setA(x=>({...x,rabatt:Number(e.target.value)}))}
                   style={inputStyle()} min="0" max="100" />
               </div>
               <div>
                 <Label>MwSt (%)</Label>
-                <select value={a.mwst||19}
+                <select value={a.mwst||19} disabled={gesperrt}
                   onChange={e=>setA(x=>({...x,mwst:Number(e.target.value)}))}
                   style={{ ...inputStyle(), padding:"11px 12px" }}>
                   <option value={19}>19% (Standard)</option>
@@ -670,20 +743,33 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
             </div>
             <div style={{ marginBottom:9 }}>
               <Label>Status</Label>
-              <select value={a.status}
+              <select value={a.status} disabled={gesperrt}
                 onChange={e=>setA(x=>({...x,status:e.target.value}))}
                 style={{ ...inputStyle(), padding:"11px 12px" }}>
                 {[["entwurf","📝 Entwurf"],["versendet","📤 Versendet"],
                   ["angenommen","✅ Angenommen"],["abgelehnt","❌ Abgelehnt"]
                 ].map(([k,l])=><option key={k} value={k}>{l}</option>)}
               </select>
+              {a.entschieden_am && (
+                <div style={{ color:"var(--muted)", fontSize:11.5, marginTop:6 }}>
+                  Online {a.status === "angenommen" ? "angenommen" : "abgelehnt"} am{" "}
+                  {new Date(a.entschieden_am).toLocaleDateString("de-DE")} von {a.entschieden_von}
+                  {!gesperrt && " — bei einer Preisanpassung und erneutem Versand Status ggf. zurücksetzen."}
+                </div>
+              )}
             </div>
-            <button onClick={speichernKlick} disabled={speichertLaedt}
-              style={{ width:"100%", background:"var(--yellow)", color:"#1a1200",
+
+            <AngebotNachweis angebot={a} nachweis={nachweis} />
+
+            {firmaId && <AngebotFreigabe angebotId={a.id} firmaId={firmaId} profil={profil} session={session} />}
+
+            <button onClick={speichernKlick} disabled={speichertLaedt || gesperrt}
+              style={{ width:"100%", background: gesperrt ? "var(--surface2)" : "var(--yellow)",
+                color: gesperrt ? "var(--muted)" : "#1a1200",
                 border:"none", borderRadius:12, padding:14, fontWeight:800,
-                cursor: speichertLaedt ? "default" : "pointer", fontSize:14, fontFamily:"inherit",
+                cursor: (speichertLaedt || gesperrt) ? "default" : "pointer", fontSize:14, fontFamily:"inherit",
                 display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-              {speichertLaedt ? <><Spinner size={14} /> Speichert…</> : "Angebot speichern"}
+              {gesperrt ? "Gesperrt" : speichertLaedt ? <><Spinner size={14} /> Speichert…</> : "Angebot speichern"}
             </button>
           </div>
         )}

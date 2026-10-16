@@ -322,7 +322,7 @@ export const ROLLEN = {
     icon: "💼",
     farbe: "#0F766E",
     tabs: ["dashboard","gantt","kosten","wetter","kolonnen","tagebuch","zeiten","angebot"],
-    kannBearbeiten: false,
+    kannBearbeiten: true,
     kannAufgabenBearbeiten: true,
     kannNutzerVerwalten: false,
     kannKolonneLoeschen: false,
