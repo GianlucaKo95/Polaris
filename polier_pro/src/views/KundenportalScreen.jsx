@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { MapPin, Users, Cloud, Camera, Building2, TriangleAlert } from "lucide-react";
+import { MapPin, Users, Cloud, Camera, Building2, TriangleAlert, CircleCheckBig, Ban, ClipboardCheck } from "lucide-react";
 import { sbKundenportalDaten } from "../lib/supabase.js";
 import { PROJEKTTYPEN, AUFGABEN_STATUS } from "../config/konstanten.js";
 import { KundenMangelMelden } from "../components/KundenMangelMelden.jsx";
+import { KundenAbnahme } from "../components/KundenAbnahme.jsx";
 
 // Öffentliche, read-only Seite für den Bauherrn — kein Login, kein Zugriff
 // auf den Rest der App. Erreicht über ?kunde=<token> (siehe App.jsx), lädt
@@ -13,6 +14,8 @@ export function KundenportalScreen({ token }) {
   const [laden,  setLaden]  = useState(true);
   const [fehler, setFehler] = useState(false);
   const [zeigeMangelMelden, setZeigeMangelMelden] = useState(false);
+  const [zeigeAbnahme, setZeigeAbnahme] = useState(false);
+  const [abnahmeErgebnis, setAbnahmeErgebnis] = useState(null);
 
   useEffect(() => {
     let aktiv = true;
@@ -58,6 +61,11 @@ export function KundenportalScreen({ token }) {
   // komplett leer abstürzen statt den "Noch keine Berichte"-Hinweis zu zeigen.
   const tagesberichte = daten.tagesberichte || [];
   const maengel = daten.maengel || [];
+  const abnahmeEntscheidung = abnahmeErgebnis?.entscheidung || daten.abnahme_entscheidung;
+  const abnahmeName    = abnahmeErgebnis ? abnahmeErgebnis.name    : daten.abnahme_entschieden_name;
+  const abnahmeDatum   = abnahmeErgebnis ? new Date(abnahmeErgebnis.entschieden_am) : (daten.abnahme_entschieden_am ? new Date(daten.abnahme_entschieden_am) : null);
+  const abnahmeGrund   = abnahmeErgebnis ? abnahmeErgebnis.grund   : daten.abnahme_ablehnungsgrund;
+  const abnahmeHash    = abnahmeErgebnis?.hash || daten.abnahme_hash;
 
   return (
     <div style={{ minHeight:"100dvh", background:"var(--bg)", color:"var(--text)", fontFamily:"inherit" }}>
@@ -105,6 +113,45 @@ export function KundenportalScreen({ token }) {
             {daten.aufgaben_fertig} von {daten.aufgaben_gesamt} Positionen abgeschlossen
           </div>
         </div>
+
+        {/* Bauabnahme — einmalige Entscheidung über denselben Portal-Token,
+            siehe kundenportal_abnahme_entscheiden-RPC. Vor der Entscheidung
+            ein Hinweis + Button, danach eine feste Status-Anzeige (Hash als
+            Beleg, analog zum Angebots-Nachweis). */}
+        <div style={{ marginBottom:18 }}>
+          {!abnahmeEntscheidung ? (
+            <button onClick={() => setZeigeAbnahme(true)}
+              style={{ width:"100%", background:"var(--ybg)", color:"var(--ydark)",
+                border:"1.5px solid var(--yellow)", borderRadius:10, padding:"11px 14px",
+                fontWeight:700, cursor:"pointer", fontSize:13, fontFamily:"inherit",
+                display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+              <ClipboardCheck size={15} />Bauabnahme
+            </button>
+          ) : (
+            <div style={{ background:"var(--surface)", border:`1.5px solid ${abnahmeEntscheidung === "angenommen" ? "var(--green)" : "var(--red)"}`,
+              borderRadius:10, padding:"12px 14px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:7, fontWeight:700, fontSize:13,
+                color: abnahmeEntscheidung === "angenommen" ? "var(--green)" : "var(--red)", marginBottom:4 }}>
+                {abnahmeEntscheidung === "angenommen" ? <CircleCheckBig size={15} /> : <Ban size={15} />}
+                Bauabnahme {abnahmeEntscheidung === "angenommen" ? "erklärt" : "verweigert"}
+              </div>
+              <div style={{ color:"var(--muted)", fontSize:12 }}>
+                {abnahmeName && <>von {abnahmeName}</>}
+                {abnahmeDatum && <> · {abnahmeDatum.toLocaleDateString("de-DE")}</>}
+              </div>
+              {abnahmeEntscheidung === "abgelehnt" && abnahmeGrund && (
+                <div style={{ marginTop:6, fontSize:12.5, color:"var(--text2)" }}>{abnahmeGrund}</div>
+              )}
+              {abnahmeHash && (
+                <div style={{ marginTop:6, fontFamily:"monospace", fontSize:10.5, color:"var(--muted)" }}>DOC-{abnahmeHash}</div>
+              )}
+            </div>
+          )}
+        </div>
+        {zeigeAbnahme && (
+          <KundenAbnahme token={token} onClose={() => setZeigeAbnahme(false)}
+            onEntschieden={erg => { setAbnahmeErgebnis(erg); setZeigeAbnahme(false); }} />
+        )}
 
         {/* Mangel melden — läuft über eine eigene, token-geprüfte RPC
             (kundenportal_mangel_melden), kein Login nötig. */}

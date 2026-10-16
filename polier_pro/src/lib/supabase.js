@@ -401,16 +401,36 @@ export async function sbKundenportalDeaktivieren(id, session) {
 // Öffentlicher Abruf ohne Session — läuft über eine SECURITY DEFINER-RPC,
 // die gezielt nur die für den Kunden freigegebenen, kuratierten Felder
 // liefert (kein Zugriff auf echte Tabellen für anon, siehe Migration).
-// _v2 statt der alten kundenportal_daten: liefert zusätzlich eine Mängel-
-// Liste je Projekt (Statusverfolgung im Portal) — neue Funktion statt
-// DROP+CREATE, siehe einladung_pruefen_v2/v3 bzw. angebot_freigabe_*_v2 für
-// denselben, aus früheren Migrationen bekannten Workaround.
+// _v3 statt der alten kundenportal_daten/_v2: liefert zusätzlich eine
+// Mängel-Liste je Projekt (Statusverfolgung im Portal) und den aktuellen
+// Abnahme-Status (Kundenabnahme) — neue Funktion statt DROP+CREATE, siehe
+// einladung_pruefen_v2/v3 bzw. angebot_freigabe_*_v2 für denselben, aus
+// früheren Migrationen bekannten Workaround.
 export async function sbKundenportalDaten(token) {
   try {
-    const { data, error } = await supabase.rpc("kundenportal_daten_v2", { p_token: token });
+    const { data, error } = await supabase.rpc("kundenportal_daten_v3", { p_token: token });
     if (error || !data?.length) return null;
     return data[0];
   } catch { return null; }
+}
+
+// Lässt den Kunden ohne Login über denselben Kundenportal-Token die
+// Bauabnahme erklären oder verweigern — analog sbAngebotEntscheiden, nur
+// ohne eigene Freigabe-Tabelle (Projekt kommt aus kundenportal_freigaben).
+// Einmalig: ein zweiter Aufruf für dasselbe Projekt schlägt mit der
+// RPC-eigenen Fehlermeldung fehl ("bereits abgenommen").
+export async function sbKundenportalAbnahmeEntscheiden(token, { entscheidung, name, signatur, grund }) {
+  try {
+    const { data, error } = await supabase.rpc("kundenportal_abnahme_entscheiden", {
+      p_token: token,
+      p_entscheidung: entscheidung,
+      p_name: name || "",
+      p_signatur: signatur || null,
+      p_grund: grund || null,
+    });
+    if (error) return { ok: false, hash: null, fehler: error.message || "Senden fehlgeschlagen." };
+    return { ok: true, hash: data, fehler: null };
+  } catch { return { ok: false, hash: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
 // Lässt den Bauherrn ohne Login über denselben Token selbst einen Mangel
