@@ -210,6 +210,106 @@ export function gaeb90ZuPositionen({ positionen }) {
   return ergebnis;
 }
 
+// ── Export ──────────────────────────────────────────────────────────────────
+// Schreibt die aktuelle Positionenliste eines Angebots (Format wie
+// gaeb90ZuPositionen() es liefert: {bez,einheit,menge,ep,rabatt}, inkl. der
+// "── <Titel> ──"-Gruppenkopfzeilen und "↳ "-Unterpositionen-Präfixe) als
+// GAEB90-Datei zurück — die Umkehrung von parseGaeb90()/gaeb90ZuPositionen().
+//
+// Die Satzart-Konventionen (Spaltenlayout 01/11/12/21/24/25/26) sind gegen
+// die echte D83-Beispieldatei abgeglichen; ein Rückimport über parseGaeb90()
+// liefert dieselbe Struktur (Titel, OZ, Menge, Einheit, Text) zurück — das
+// ist geprüft. NICHT geprüft ist Kompatibilität mit echter GAEB-Fremdsoftware
+// (Kopfsatzarten 00/02/03/063/08 wie Kennsatz-Flags oder die Unterpositions-
+// Verweisblöcke in Satzart 21/24 sind aus der Beispieldatei nicht vollständig
+// rekonstruierbar und werden daher ausgelassen statt geraten). Bepreister
+// Export (D84/D86 mit Einheitspreisen) bleibt wie der Import blockiert.
+
+function gaeb90Zeile(satzart, inhalt, satznr) {
+  const inhaltGepolstert = (inhalt ?? "").slice(0, 72).padEnd(72, " ");
+  return satzart + inhaltGepolstert + String(satznr).padStart(6, "0");
+}
+
+// Kehrfunktion zu mengeAusZiffern: Dezimalzahl -> 11-stellige Ziffernfolge
+// (8 Vorkomma- + 3 Nachkommastellen).
+function ziffernAusMenge(menge) {
+  const n = Math.max(0, Math.round((Number(menge) || 0) * 1000));
+  return String(n).padStart(11, "0").slice(-11);
+}
+
+// Zeilenumbruch an Wortgrenzen statt harter 72-Zeichen-Schnitte: der
+// Reimport über parseGaeb90() fügt zwischen Kurztext (25) und jeder
+// Langtext-Zeile (26) ein Leerzeichen wieder ein — ein harter Schnitt
+// mitten im Wort würde dabei ein falsches Leerzeichen einfügen (oder das
+// echte Leerzeichen am Zeilenende verschlucken) und den Text verfälschen.
+function inZeilenUmbrechen(text, breite) {
+  const woerter = text.split(" ");
+  const zeilen = [];
+  let aktuell = "";
+  for (const wort of woerter) {
+    const kandidat = aktuell ? `${aktuell} ${wort}` : wort;
+    if (kandidat.length > breite) {
+      if (aktuell) zeilen.push(aktuell);
+      // Einzelnes Wort länger als die Zeilenbreite: hart schneiden (seltener Rand­fall).
+      let rest = wort;
+      while (rest.length > breite) { zeilen.push(rest.slice(0, breite)); rest = rest.slice(breite); }
+      aktuell = rest;
+    } else {
+      aktuell = kandidat;
+    }
+  }
+  if (aktuell) zeilen.push(aktuell);
+  return zeilen.length ? zeilen : [""];
+}
+
+export function gaeb90Schreiben(positionen, { projektTitel = "Angebot" } = {}) {
+  let satznr = 1;
+  const zeilen = [];
+  const add = (satzart, inhalt) => {
+    zeilen.push(gaeb90Zeile(satzart, inhalt, satznr));
+    satznr++;
+  };
+
+  add("01", projektTitel);
+
+  let titelNr = 0;
+  let posNr = 0;
+
+  for (const roh of positionen) {
+    const bez = roh.bez || "";
+    const titelMatch = bez.match(/^──\s*(.+?)\s*──$/);
+    if (titelMatch) {
+      titelNr++;
+      posNr = 0;
+      add("11", String(titelNr).padStart(2, "0"));
+      add("12", titelMatch[1]);
+      continue;
+    }
+
+    if (titelNr === 0) { titelNr = 1; add("11", "01"); } // Positionen ohne Gruppenkopf -> impliziter erster Titel
+
+    const istUnterposition = bez.startsWith("↳ ");
+    const text = istUnterposition ? bez.slice(2) : bez;
+    const einheit = (roh.einheit || "").trim().slice(0, 3);
+    const mengeZiffern = ziffernAusMenge(roh.menge);
+
+    if (istUnterposition) {
+      add("24", `${String(posNr).padStart(2, "0")}    ${mengeZiffern}${einheit}`);
+    } else {
+      posNr++;
+      const oz = `${String(titelNr).padStart(2, "0")}01`;
+      add("21", `${oz}  ${String(posNr).padStart(2, "0")} NNN    ${mengeZiffern}${einheit}`);
+    }
+
+    const stuecke = inZeilenUmbrechen(text, 72);
+    add("25", stuecke[0]);
+    for (const teil of stuecke.slice(1)) add("26", teil);
+  }
+
+  add("99", "");
+  return zeilen.join("\r\n") + "\r\n";
+}
+
 // Liest eine hochgeladene GAEB90-Datei korrekt ein — die Dateien sind
 // nicht UTF-8, sondern ANSI/Windows-1252 (deutsche Sonderzeichen würden
 // sonst zu Mojibake wie "MÃ¶rtel" statt "Mörtel"). Bewusst ohne
@@ -219,4 +319,18 @@ export function gaeb90ZuPositionen({ positionen }) {
 export async function gaeb90DateiLesen(file) {
   const buffer = await file.arrayBuffer();
   return new TextDecoder("windows-1252").decode(buffer);
+}
+
+// Gegenstück zu gaeb90DateiLesen() für den Export: kodiert Text zurück nach
+// Windows-1252 (TextEncoder kann nur UTF-8). Deutsche Umlaute/ß liegen alle
+// in 0xA0–0xFF, wo Windows-1252 mit dem Unicode-Codepoint übereinstimmt —
+// für diesen Bereich reicht die direkte Byte-Abbildung. Zeichen oberhalb von
+// 0xFF (nicht abbildbar) werden durch "?" ersetzt statt falsch kodiert.
+export function gaeb90AlsWindows1252(text) {
+  const bytes = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    bytes[i] = code <= 0xff ? code : 0x3f;
+  }
+  return bytes;
 }

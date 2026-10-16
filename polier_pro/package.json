@@ -1,10 +1,11 @@
 {
   "name": "polier-pro",
-  "version": "1.48.24",
+  "version": "1.48.25",
   "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test src/lib/*.test.mjs",
     "cap:sync": "vite build && npx cap sync",
     "android:open": "npm run cap:sync && npx cap open android",
     "ios:open": "npm run cap:sync && npx cap open ios"

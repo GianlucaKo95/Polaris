@@ -13,7 +13,7 @@ import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
 import { AngebotNachweis } from "../components/AngebotNachweis.jsx";
 import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
-import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen } from "../lib/gaeb90.js";
+import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, gaeb90Schreiben, gaeb90AlsWindows1252 } from "../lib/gaeb90.js";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
 // seine Bedeutung hängt aber vom Aufgabentyp ab (siehe extraLabel in
@@ -151,6 +151,20 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
     } finally {
       e.target.value = "";
     }
+  }
+
+  // GAEB90-Export der unbepreisten Struktur (D81/D83-artig) — Umkehrung
+  // von gaebImportieren(): nützlich um ein importiertes/bearbeitetes LV
+  // wieder herauszugeben oder an einen Nachunternehmer weiterzureichen.
+  // Bepreister Export (D84/D86 mit Einheitspreisen) ist nicht abgedeckt,
+  // siehe lib/gaeb90.js.
+  function gaebExportieren() {
+    const text = gaeb90Schreiben(a.positionen, { projektTitel: a.titel });
+    const blob = new Blob([gaeb90AlsWindows1252(text)], { type: "application/octet-stream" });
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = ("Angebot_" + a.titel.replace(/ /g, "_") + ".d83");
+    link.click(); URL.revokeObjectURL(url);
   }
 
   async function kiPositionenUebernehmen() {
@@ -660,6 +674,15 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               <input ref={gaebInputRef} type="file" onChange={gaebImportieren}
                 accept=".d81,.d83,.d85,.d86,.D81,.D83,.D85,.D86,.p81,.p83,.p85,.p86"
                 style={{ display:"none" }} />
+              {a.positionen.length > 0 && (
+                <button onClick={gaebExportieren}
+                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <ChartColumn size={12} /> GAEB-LV exportieren (unbepreist)
+                </button>
+              )}
             </div>}
             {gaebFehler && (
               <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
