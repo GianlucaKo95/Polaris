@@ -14,6 +14,8 @@ import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
 import { AngebotNachweis } from "../components/AngebotNachweis.jsx";
 import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, gaeb90Schreiben, gaeb90AlsWindows1252 } from "../lib/gaeb90.js";
+import { leereKalkulation, kalkulationEp } from "../lib/kalkulation.js";
+import { PositionKalkulation } from "../components/PositionKalkulation.jsx";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
 // seine Bedeutung hängt aber vom Aufgabentyp ab (siehe extraLabel in
@@ -29,7 +31,7 @@ import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, gaeb90Schreiben, gae
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, firmaId, profil, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], projekt, eigeneFirma, firmaId, profil, session }) {
   const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
@@ -85,12 +87,36 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   }
 
   function updatePos(id, key, val) {
-    setA(x => ({ ...x, positionen:x.positionen.map(p =>
-      p.id===id ? { ...p, [key]:key==="menge"||key==="ep"||key==="rabatt" ? Number(val) : val } : p) }));
+    setA(x => ({ ...x, positionen:x.positionen.map(p => {
+      if (p.id !== id) return p;
+      const aktualisiert = { ...p, [key]:key==="menge"||key==="ep"||key==="rabatt" ? Number(val) : val };
+      // Bei kalkulierten Positionen hängt der EP von der Menge ab (Gesamt-
+      // kosten der Kalkulation / Menge) — bei Mengenänderung neu berechnen,
+      // statt den alten EP stehen zu lassen.
+      if (key === "menge" && p.kalk) aktualisiert.ep = kalkulationEp(p.kalk, kalkulationspreise, aktualisiert.menge);
+      return aktualisiert;
+    }) }));
   }
 
   function removePos(id) {
     setA(x => ({ ...x, positionen:x.positionen.filter(p=>p.id!==id) }));
+  }
+
+  // Umschalten zwischen direktem EP und EP-Kalkulation (Lohn/Material/Gerät/
+  // Fremdleistung + Zuschläge, siehe lib/kalkulation.js + PositionKalkulation.jsx).
+  function kalkUmschalten(id) {
+    setA(x => ({ ...x, positionen: x.positionen.map(p => {
+      if (p.id !== id) return p;
+      if (p.kalk) { const { kalk, ...rest } = p; return rest; }
+      const kalk = leereKalkulation();
+      return { ...p, kalk, ep: kalkulationEp(kalk, kalkulationspreise, p.menge) };
+    }) }));
+  }
+
+  function kalkAendern(id, neueKalk) {
+    setA(x => ({ ...x, positionen: x.positionen.map(p =>
+      p.id===id ? { ...p, kalk: neueKalk, ep: kalkulationEp(neueKalk, kalkulationspreise, p.menge) } : p
+    ) }));
   }
 
   function vorlageLaden(vorlage) {
@@ -744,20 +770,37 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   </div>
                   <div>
                     <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>
-                      EP (€/{pos.einheit})
+                      EP (€/{pos.einheit}){pos.kalk && " · kalkuliert"}
                     </div>
-                    <input type="number" value={pos.ep||""} disabled={gesperrt}
+                    <input type="number" value={pos.ep||""} disabled={gesperrt || !!pos.kalk}
                       onChange={e=>updatePos(pos.id,"ep",e.target.value)}
                       style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
                   </div>
                 </div>
-                <div style={{ marginTop:6, width:"33%", minWidth:90 }}>
-                  <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Rabatt (%)</div>
-                  <input type="number" value={pos.rabatt||""} disabled={gesperrt}
-                    onChange={e=>updatePos(pos.id,"rabatt",e.target.value)}
-                    placeholder="0" min="0" max="100"
-                    style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
+                <div style={{ display:"flex", gap:10, alignItems:"flex-end", marginTop:6 }}>
+                  <div style={{ width:"33%", minWidth:90 }}>
+                    <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Rabatt (%)</div>
+                    <input type="number" value={pos.rabatt||""} disabled={gesperrt}
+                      onChange={e=>updatePos(pos.id,"rabatt",e.target.value)}
+                      placeholder="0" min="0" max="100"
+                      style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
+                  </div>
+                  {!gesperrt && (
+                    <button onClick={() => kalkUmschalten(pos.id)}
+                      style={{ background: pos.kalk ? "var(--ybg)" : "var(--surface2)",
+                        color: pos.kalk ? "var(--ydark)" : "var(--muted)",
+                        border:`1px solid ${pos.kalk ? "var(--yellow)" : "var(--border)"}`,
+                        borderRadius:8, padding:"8px 10px", cursor:"pointer",
+                        fontSize:11.5, fontWeight:700, fontFamily:"inherit" }}>
+                      {pos.kalk ? "Kalkulation aus" : "Kalkulieren"}
+                    </button>
+                  )}
                 </div>
+                {pos.kalk && (
+                  <PositionKalkulation kalk={pos.kalk} stammdaten={kalkulationspreise}
+                    menge={pos.menge} gesperrt={gesperrt}
+                    onChange={neueKalk => kalkAendern(pos.id, neueKalk)} />
+                )}
                 <div style={{ textAlign:"right", marginTop:6,
                   color:"var(--yellow)", fontWeight:800, fontSize:14 }}>
                   {pos.rabatt > 0 && (

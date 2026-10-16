@@ -828,12 +828,17 @@ export async function sbProjektKostenSpeichern(projektId, budgetPositionen, stun
 
 // Einheitspreise + LV-Vorlagen sind Firmen-weite Konfiguration (nicht
 // projektgebunden), deshalb auf der firmen-Zeile statt einer eigenen Tabelle.
-export async function sbFirmaParameterSpeichern(firmaId, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, session) {
+// kalkulationspreise: Lohn-/Material-/Geräte-/Fremdleistungs-Stammdaten für
+// die EP-Kalkulation (anders als einheitspreise, das fertige Verkaufs-EP
+// pro Gewerk sind) — gleiche Ablage, gleiches Muster.
+export async function sbFirmaParameterSpeichern(firmaId, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, session, kalkulationspreise) {
   if (!session?.access_token || !firmaId) return false;
   try {
     const client = sbClientMitToken(session);
+    const payload = { einheitspreise, lv_vorlagen: lvVorlagen, angebot_vorlage: angebotVorlage, tagebuch_vorlage: tagebuchVorlage };
+    if (kalkulationspreise !== undefined) payload.kalkulationspreise = kalkulationspreise;
     const { error } = await client.from("firmen")
-      .update({ einheitspreise, lv_vorlagen: lvVorlagen, angebot_vorlage: angebotVorlage, tagebuch_vorlage: tagebuchVorlage })
+      .update(payload)
       .eq("id", firmaId);
     return !error;
   } catch { return false; }
