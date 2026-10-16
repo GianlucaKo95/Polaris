@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { ClipboardList, X, CircleCheckBig, ChevronLeft, ChartColumn, FileText, Settings, Plus, Sparkles, TriangleAlert } from "lucide-react";
+import { ClipboardList, X, CircleCheckBig, ChevronLeft, ChartColumn, FileText, Settings, Plus, Sparkles, TriangleAlert, Upload } from "lucide-react";
 import { AUFGABEN_TYPEN } from "../config/konstanten.js";
 import { inputStyle, Label } from "../components/Label.jsx";
 import { escapeHtml } from "../lib/utils.js";
@@ -13,6 +13,7 @@ import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
 import { AngebotNachweis } from "../components/AngebotNachweis.jsx";
 import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
+import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen } from "../lib/gaeb90.js";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
 // seine Bedeutung hängt aber vom Aufgabentyp ab (siehe extraLabel in
@@ -37,6 +38,9 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [kiDiktat,  setKiDiktat]  = useState("");
   const [kiLaedt,   setKiLaedt]   = useState(false);
   const [kiFehler,  setKiFehler]  = useState("");
+  const [gaebFehler, setGaebFehler] = useState("");
+  const [gaebInfo,   setGaebInfo]   = useState(null); // { anzahl, warnungen }
+  const gaebInputRef = useRef(null);
   const [speichertLaedt, setSpeichertLaedt] = useState(false);
   const [wordLaedt, setWordLaedt] = useState(false);
   const [wordBlob,  setWordBlob]  = useState(null);
@@ -121,6 +125,32 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       ep:       ep?.preis || 0,
     });
     setVonAufgabe(false);
+  }
+
+  // GAEB90-LV (D81/D83/D85/D86) importieren — siehe lib/gaeb90.js. Läuft
+  // komplett im Browser (kein Server-Roundtrip), fügt die erkannten
+  // Positionen inkl. Titel-Gruppenkopfzeilen an die bestehende Liste an,
+  // statt sie zu ersetzen (mehrere LV-Teile nacheinander importierbar).
+  async function gaebImportieren(e) {
+    const datei = e.target.files?.[0];
+    if (!datei) return;
+    setGaebFehler("");
+    setGaebInfo(null);
+    try {
+      const text = await gaeb90DateiLesen(datei);
+      const geparst = parseGaeb90(text);
+      const neuePos = gaeb90ZuPositionen(geparst);
+      if (neuePos.length === 0) {
+        setGaebFehler("Keine Positionen erkannt — ist das eine GAEB90-Datei (.d81/.d83/.d85/.d86)?");
+        return;
+      }
+      setA(x => ({ ...x, positionen: [...x.positionen, ...neuePos] }));
+      setGaebInfo({ anzahl: neuePos.length, warnungen: geparst.warnungen });
+    } catch (err) {
+      setGaebFehler("Import fehlgeschlagen: " + (err?.message || err));
+    } finally {
+      e.target.value = "";
+    }
   }
 
   async function kiPositionenUebernehmen() {
@@ -620,7 +650,32 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
                   cursor:"pointer", fontSize:12, fontFamily:"inherit",
                   display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}><Plus size={12} /> Manuell</button>
+              <button onClick={() => gaebInputRef.current?.click()}
+                style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                  border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                  cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                <Upload size={12} /> GAEB-LV importieren (D81/D83/D85/D86)
+              </button>
+              <input ref={gaebInputRef} type="file" onChange={gaebImportieren}
+                accept=".d81,.d83,.d85,.d86,.D81,.D83,.D85,.D86,.p81,.p83,.p85,.p86"
+                style={{ display:"none" }} />
             </div>}
+            {gaebFehler && (
+              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>{gaebFehler}</div>
+            )}
+            {gaebInfo && (
+              <div style={{ background:"var(--gbg)", color:"var(--green)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
+                ✓ {gaebInfo.anzahl} Positionen aus GAEB-Datei importiert — Preise und ggf. Gruppenkopfzeilen bitte prüfen.
+                {gaebInfo.warnungen.length > 0 && (
+                  <div style={{ marginTop:4, color:"var(--muted)" }}>
+                    {gaebInfo.warnungen.length} Zeile(n) nicht erkannt, als Rohtext übernommen.
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Positionen */}
             {a.positionen.length === 0 && (
