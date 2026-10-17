@@ -3,7 +3,7 @@ import { FileText, Plus, Link2 } from "lucide-react";
 import { AngebotEditor } from "./AngebotEditor.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
 
-export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, session }) {
+export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, session }) {
   const [aktAngebot,  setAktAngebot]  = useState(null);
   const [fehler,      setFehler]      = useState("");
   useBackButton(aktAngebot, () => setAktAngebot(null));
@@ -37,6 +37,7 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
       einheitspreise={einheitspreise}
       lvVorlagen={lvVorlagen}
       angebotVorlage={angebotVorlage}
+      kalkulationspreise={kalkulationspreise}
       projekt={projekt}
       eigeneFirma={eigeneFirma}
       firmaId={firmaId}

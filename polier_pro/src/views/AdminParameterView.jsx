@@ -1,19 +1,23 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen } from "lucide-react";
+import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator } from "lucide-react";
 import { PreisFormular } from "./PreisFormular.jsx";
+import { KalkulationspreisFormular, KALKULATIONSPREIS_KATEGORIEN } from "./KalkulationspreisFormular.jsx";
 import { VorlageFormular } from "./VorlageFormular.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
 import { VorlagenUploadPanel } from "../components/VorlagenUploadPanel.jsx";
 import { kiAngebotVorlageAnalysieren, kiTagebuchVorlageAnalysieren } from "../lib/ai.js";
 
-export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, session }) {
-  const [aktiv,    setAktiv]    = useState("preise"); // preise | vorlagen | angebotsvorlage | tagebuchvorlage
+export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, kalkulationspreise, setKalkulationspreise, session }) {
+  const [aktiv,    setAktiv]    = useState("preise"); // preise | kalkpreise | vorlagen | angebotsvorlage | tagebuchvorlage
   const [neuPreis, setNeuPreis] = useState(null);
   const [neuVorlage,setNeuVorlage] = useState(null);
   const [editPreis, setEditPreis] = useState(null);
+  const [neuKalkPreis, setNeuKalkPreis] = useState(null);
+  const [editKalkPreis, setEditKalkPreis] = useState(null);
   useBackButton(neuPreis || editPreis, () => { setNeuPreis(null); setEditPreis(null); });
   useBackButton(neuVorlage, () => setNeuVorlage(null));
+  useBackButton(neuKalkPreis || editKalkPreis, () => { setNeuKalkPreis(null); setEditKalkPreis(null); });
 
   function preisLoeschen(id) {
     setEinheitspreise(prev => prev.filter(p => p.id !== id));
@@ -28,6 +32,19 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
     setNeuPreis(null); setEditPreis(null);
   }
 
+  function kalkPreisLoeschen(id) {
+    setKalkulationspreise(prev => prev.filter(p => p.id !== id));
+  }
+
+  function kalkPreisSpeichern(p) {
+    if (p.id && kalkulationspreise.find(x=>x.id===p.id)) {
+      setKalkulationspreise(prev => prev.map(x => x.id===p.id ? p : x));
+    } else {
+      setKalkulationspreise(prev => [...prev, { ...p, id:Date.now() }]);
+    }
+    setNeuKalkPreis(null); setEditKalkPreis(null);
+  }
+
   return (
     <div>
       <div style={{ color:"var(--text)", fontWeight:700, fontSize:15, marginBottom:10,
@@ -35,11 +52,11 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
         <Settings size={16} /> Angebots-Parameter
       </div>
 
-      {/* Tab-Toggle — 2x2-Grid statt einer Reihe: bei 4 Tabs lief eine
+      {/* Tab-Toggle — 3er-Grid statt einer Reihe: bei mehreren Tabs lief eine
           gemeinsame flex:1-Reihe auf schmalen Bildschirmen aus dem
           sichtbaren Bereich heraus (der letzte Tab war nicht mehr erreichbar). */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:12 }}>
-        {[["preise",Euro,"Einheitspreise"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:12 }}>
+        {[["preise",Euro,"Einheitspreise"],["kalkpreise",Calculator,"Kalkulationspreise"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
           <button key={k} onClick={() => setAktiv(k)}
             style={{ background: aktiv===k ? "var(--yellow)" : "var(--surface2)",
               color: aktiv===k ? "#1a1200" : "var(--muted)",
@@ -95,6 +112,73 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* KALKULATIONSPREISE — Lohn-/Material-/Geräte-/Fremdleistungs-
+          Stammdaten für die EP-Kalkulation (anders als Einheitspreise oben,
+          das fertige Verkaufspreise pro Gewerk sind). Nach Kategorie
+          gruppiert statt einer flachen Liste, damit die Zuordnung beim
+          Zusammenstellen einer Kalkulation in AngebotEditor klar bleibt. */}
+      {aktiv === "kalkpreise" && (
+        <div>
+          <div style={{ display:"flex", justifyContent:"space-between",
+            alignItems:"center", marginBottom:7 }}>
+            <div style={{ color:"var(--muted)", fontSize:12 }}>
+              {kalkulationspreise.length} Preise
+            </div>
+            <button onClick={() => setNeuKalkPreis({ kategorie:"lohn", bezeichnung:"", einheit:"h", preis:0 })}
+              style={{ background:"var(--yellow)", color:"#1a1200", border:"none",
+                borderRadius:10, padding:"7px 14px", fontWeight:700,
+                cursor:"pointer", fontSize:12, fontFamily:"inherit",
+                display:"flex", alignItems:"center", gap:5 }}>
+              <Plus size={13} /> Preis
+            </button>
+          </div>
+
+          {kalkulationspreise.length === 0 && (
+            <div style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"20px 0" }}>
+              Noch keine Kalkulationspreise angelegt.
+            </div>
+          )}
+
+          {KALKULATIONSPREIS_KATEGORIEN.map(([kKey, kLabel]) => {
+            const gruppe = kalkulationspreise.filter(p => p.kategorie === kKey);
+            if (gruppe.length === 0) return null;
+            return (
+              <div key={kKey} style={{ marginBottom:14 }}>
+                <div style={{ color:"var(--muted)", fontSize:11.5, fontWeight:700,
+                  textTransform:"uppercase", letterSpacing:0.3, marginBottom:6 }}>{kLabel}</div>
+                {gruppe.map(p => (
+                  <div key={p.id} style={{ background:"var(--surface)", borderRadius:12,
+                    padding:"9px 14px", marginBottom:6,
+                    border:"1.5px solid var(--border)" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between",
+                      alignItems:"flex-start" }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ color:"var(--text)", fontWeight:700, fontSize:13 }}>
+                          {p.bezeichnung}
+                        </div>
+                        <div style={{ color:"var(--muted)", fontSize:12, marginTop:2 }}>
+                          {p.preis.toLocaleString("de-DE")} €/{p.einheit}
+                        </div>
+                      </div>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button onClick={() => setEditKalkPreis(p)}
+                          style={{ background:"var(--surface2)", border:"1px solid var(--border)",
+                            color:"var(--muted)", borderRadius:8, padding:"4px 10px",
+                            cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><Pencil size={13} /></button>
+                        <button onClick={() => kalkPreisLoeschen(p.id)}
+                          style={{ background:"var(--rbg)", border:"1px solid var(--red)",
+                            color:"var(--red)", borderRadius:8, padding:"4px 10px",
+                            cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><X size={13} /></button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -194,6 +278,22 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
               initial={editPreis || neuPreis}
               onSave={preisSpeichern}
               onClose={() => { setNeuPreis(null); setEditPreis(null); }}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Kalkulationspreis-Formular */}
+      {(neuKalkPreis || editKalkPreis) && createPortal(
+        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:600, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
+          <div style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
+            padding:16,
+            width:"100%", maxWidth:480 }}>
+            <KalkulationspreisFormular
+              initial={editKalkPreis || neuKalkPreis}
+              onSave={kalkPreisSpeichern}
+              onClose={() => { setNeuKalkPreis(null); setEditKalkPreis(null); }}
             />
           </div>
         </div>,

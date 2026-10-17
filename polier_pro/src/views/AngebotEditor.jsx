@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { ClipboardList, X, CircleCheckBig, ChevronLeft, ChartColumn, FileText, Settings, Plus, Sparkles, TriangleAlert } from "lucide-react";
+import { ClipboardList, X, CircleCheckBig, ChevronLeft, ChartColumn, FileText, Settings, Plus, Sparkles, TriangleAlert, Upload } from "lucide-react";
 import { AUFGABEN_TYPEN } from "../config/konstanten.js";
 import { inputStyle, Label } from "../components/Label.jsx";
 import { escapeHtml } from "../lib/utils.js";
@@ -13,6 +13,9 @@ import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
 import { AngebotNachweis } from "../components/AngebotNachweis.jsx";
 import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
+import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, gaeb90Schreiben, gaeb90AlsWindows1252 } from "../lib/gaeb90.js";
+import { leereKalkulation, kalkulationEp } from "../lib/kalkulation.js";
+import { PositionKalkulation } from "../components/PositionKalkulation.jsx";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
 // seine Bedeutung hängt aber vom Aufgabentyp ab (siehe extraLabel in
@@ -28,7 +31,7 @@ import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, projekt, eigeneFirma, firmaId, profil, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], projekt, eigeneFirma, firmaId, profil, session }) {
   const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
@@ -37,6 +40,9 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [kiDiktat,  setKiDiktat]  = useState("");
   const [kiLaedt,   setKiLaedt]   = useState(false);
   const [kiFehler,  setKiFehler]  = useState("");
+  const [gaebFehler, setGaebFehler] = useState("");
+  const [gaebInfo,   setGaebInfo]   = useState(null); // { anzahl, warnungen }
+  const gaebInputRef = useRef(null);
   const [speichertLaedt, setSpeichertLaedt] = useState(false);
   const [wordLaedt, setWordLaedt] = useState(false);
   const [wordBlob,  setWordBlob]  = useState(null);
@@ -81,12 +87,36 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   }
 
   function updatePos(id, key, val) {
-    setA(x => ({ ...x, positionen:x.positionen.map(p =>
-      p.id===id ? { ...p, [key]:key==="menge"||key==="ep"||key==="rabatt" ? Number(val) : val } : p) }));
+    setA(x => ({ ...x, positionen:x.positionen.map(p => {
+      if (p.id !== id) return p;
+      const aktualisiert = { ...p, [key]:key==="menge"||key==="ep"||key==="rabatt" ? Number(val) : val };
+      // Bei kalkulierten Positionen hängt der EP von der Menge ab (Gesamt-
+      // kosten der Kalkulation / Menge) — bei Mengenänderung neu berechnen,
+      // statt den alten EP stehen zu lassen.
+      if (key === "menge" && p.kalk) aktualisiert.ep = kalkulationEp(p.kalk, kalkulationspreise, aktualisiert.menge);
+      return aktualisiert;
+    }) }));
   }
 
   function removePos(id) {
     setA(x => ({ ...x, positionen:x.positionen.filter(p=>p.id!==id) }));
+  }
+
+  // Umschalten zwischen direktem EP und EP-Kalkulation (Lohn/Material/Gerät/
+  // Fremdleistung + Zuschläge, siehe lib/kalkulation.js + PositionKalkulation.jsx).
+  function kalkUmschalten(id) {
+    setA(x => ({ ...x, positionen: x.positionen.map(p => {
+      if (p.id !== id) return p;
+      if (p.kalk) { const { kalk, ...rest } = p; return rest; }
+      const kalk = leereKalkulation();
+      return { ...p, kalk, ep: kalkulationEp(kalk, kalkulationspreise, p.menge) };
+    }) }));
+  }
+
+  function kalkAendern(id, neueKalk) {
+    setA(x => ({ ...x, positionen: x.positionen.map(p =>
+      p.id===id ? { ...p, kalk: neueKalk, ep: kalkulationEp(neueKalk, kalkulationspreise, p.menge) } : p
+    ) }));
   }
 
   function vorlageLaden(vorlage) {
@@ -121,6 +151,46 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       ep:       ep?.preis || 0,
     });
     setVonAufgabe(false);
+  }
+
+  // GAEB90-LV (D81/D83/D85/D86) importieren — siehe lib/gaeb90.js. Läuft
+  // komplett im Browser (kein Server-Roundtrip), fügt die erkannten
+  // Positionen inkl. Titel-Gruppenkopfzeilen an die bestehende Liste an,
+  // statt sie zu ersetzen (mehrere LV-Teile nacheinander importierbar).
+  async function gaebImportieren(e) {
+    const datei = e.target.files?.[0];
+    if (!datei) return;
+    setGaebFehler("");
+    setGaebInfo(null);
+    try {
+      const text = await gaeb90DateiLesen(datei);
+      const geparst = parseGaeb90(text);
+      const neuePos = gaeb90ZuPositionen(geparst);
+      if (neuePos.length === 0) {
+        setGaebFehler("Keine Positionen erkannt — ist das eine GAEB90-Datei (.d81/.d83/.d85/.d86)?");
+        return;
+      }
+      setA(x => ({ ...x, positionen: [...x.positionen, ...neuePos] }));
+      setGaebInfo({ anzahl: neuePos.length, warnungen: geparst.warnungen });
+    } catch (err) {
+      setGaebFehler("Import fehlgeschlagen: " + (err?.message || err));
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  // GAEB90-Export der unbepreisten Struktur (D81/D83-artig) — Umkehrung
+  // von gaebImportieren(): nützlich um ein importiertes/bearbeitetes LV
+  // wieder herauszugeben oder an einen Nachunternehmer weiterzureichen.
+  // Bepreister Export (D84/D86 mit Einheitspreisen) ist nicht abgedeckt,
+  // siehe lib/gaeb90.js.
+  function gaebExportieren() {
+    const text = gaeb90Schreiben(a.positionen, { projektTitel: a.titel });
+    const blob = new Blob([gaeb90AlsWindows1252(text)], { type: "application/octet-stream" });
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = ("Angebot_" + a.titel.replace(/ /g, "_") + ".d83");
+    link.click(); URL.revokeObjectURL(url);
   }
 
   async function kiPositionenUebernehmen() {
@@ -620,7 +690,41 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
                   cursor:"pointer", fontSize:12, fontFamily:"inherit",
                   display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}><Plus size={12} /> Manuell</button>
+              <button onClick={() => gaebInputRef.current?.click()}
+                style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                  border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                  cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                <Upload size={12} /> GAEB-LV importieren (D81/D83/D85/D86)
+              </button>
+              <input ref={gaebInputRef} type="file" onChange={gaebImportieren}
+                accept=".d81,.d83,.d85,.d86,.D81,.D83,.D85,.D86,.p81,.p83,.p85,.p86"
+                style={{ display:"none" }} />
+              {a.positionen.length > 0 && (
+                <button onClick={gaebExportieren}
+                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <ChartColumn size={12} /> GAEB-LV exportieren (unbepreist)
+                </button>
+              )}
             </div>}
+            {gaebFehler && (
+              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>{gaebFehler}</div>
+            )}
+            {gaebInfo && (
+              <div style={{ background:"var(--gbg)", color:"var(--green)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
+                ✓ {gaebInfo.anzahl} Positionen aus GAEB-Datei importiert — Preise und ggf. Gruppenkopfzeilen bitte prüfen.
+                {gaebInfo.warnungen.length > 0 && (
+                  <div style={{ marginTop:4, color:"var(--muted)" }}>
+                    {gaebInfo.warnungen.length} Zeile(n) nicht erkannt, als Rohtext übernommen.
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Positionen */}
             {a.positionen.length === 0 && (
@@ -666,20 +770,37 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   </div>
                   <div>
                     <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>
-                      EP (€/{pos.einheit})
+                      EP (€/{pos.einheit}){pos.kalk && " · kalkuliert"}
                     </div>
-                    <input type="number" value={pos.ep||""} disabled={gesperrt}
+                    <input type="number" value={pos.ep||""} disabled={gesperrt || !!pos.kalk}
                       onChange={e=>updatePos(pos.id,"ep",e.target.value)}
                       style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
                   </div>
                 </div>
-                <div style={{ marginTop:6, width:"33%", minWidth:90 }}>
-                  <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Rabatt (%)</div>
-                  <input type="number" value={pos.rabatt||""} disabled={gesperrt}
-                    onChange={e=>updatePos(pos.id,"rabatt",e.target.value)}
-                    placeholder="0" min="0" max="100"
-                    style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
+                <div style={{ display:"flex", gap:10, alignItems:"flex-end", marginTop:6 }}>
+                  <div style={{ width:"33%", minWidth:90 }}>
+                    <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Rabatt (%)</div>
+                    <input type="number" value={pos.rabatt||""} disabled={gesperrt}
+                      onChange={e=>updatePos(pos.id,"rabatt",e.target.value)}
+                      placeholder="0" min="0" max="100"
+                      style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
+                  </div>
+                  {!gesperrt && (
+                    <button onClick={() => kalkUmschalten(pos.id)}
+                      style={{ background: pos.kalk ? "var(--ybg)" : "var(--surface2)",
+                        color: pos.kalk ? "var(--ydark)" : "var(--muted)",
+                        border:`1px solid ${pos.kalk ? "var(--yellow)" : "var(--border)"}`,
+                        borderRadius:8, padding:"8px 10px", cursor:"pointer",
+                        fontSize:11.5, fontWeight:700, fontFamily:"inherit" }}>
+                      {pos.kalk ? "Kalkulation aus" : "Kalkulieren"}
+                    </button>
+                  )}
                 </div>
+                {pos.kalk && (
+                  <PositionKalkulation kalk={pos.kalk} stammdaten={kalkulationspreise}
+                    menge={pos.menge} gesperrt={gesperrt}
+                    onChange={neueKalk => kalkAendern(pos.id, neueKalk)} />
+                )}
                 <div style={{ textAlign:"right", marginTop:6,
                   color:"var(--yellow)", fontWeight:800, fontSize:14 }}>
                   {pos.rabatt > 0 && (

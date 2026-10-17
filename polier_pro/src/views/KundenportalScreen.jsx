@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { MapPin, Users, Cloud, Camera, Building2, TriangleAlert } from "lucide-react";
+import { MapPin, Users, Cloud, Camera, Building2, TriangleAlert, CircleCheckBig, Ban, ClipboardCheck, FileText, Download } from "lucide-react";
 import { sbKundenportalDaten } from "../lib/supabase.js";
-import { PROJEKTTYPEN } from "../config/konstanten.js";
+import { PROJEKTTYPEN, AUFGABEN_STATUS } from "../config/konstanten.js";
 import { KundenMangelMelden } from "../components/KundenMangelMelden.jsx";
+import { KundenAbnahme } from "../components/KundenAbnahme.jsx";
 
 // Öffentliche, read-only Seite für den Bauherrn — kein Login, kein Zugriff
 // auf den Rest der App. Erreicht über ?kunde=<token> (siehe App.jsx), lädt
@@ -13,6 +14,8 @@ export function KundenportalScreen({ token }) {
   const [laden,  setLaden]  = useState(true);
   const [fehler, setFehler] = useState(false);
   const [zeigeMangelMelden, setZeigeMangelMelden] = useState(false);
+  const [zeigeAbnahme, setZeigeAbnahme] = useState(false);
+  const [abnahmeErgebnis, setAbnahmeErgebnis] = useState(null);
 
   useEffect(() => {
     let aktiv = true;
@@ -57,6 +60,13 @@ export function KundenportalScreen({ token }) {
   // diese öffentliche, loginfreie Seite bei einem unerwarteten null
   // komplett leer abstürzen statt den "Noch keine Berichte"-Hinweis zu zeigen.
   const tagesberichte = daten.tagesberichte || [];
+  const maengel = daten.maengel || [];
+  const dokumente = daten.dokumente || [];
+  const abnahmeEntscheidung = abnahmeErgebnis?.entscheidung || daten.abnahme_entscheidung;
+  const abnahmeName    = abnahmeErgebnis ? abnahmeErgebnis.name    : daten.abnahme_entschieden_name;
+  const abnahmeDatum   = abnahmeErgebnis ? new Date(abnahmeErgebnis.entschieden_am) : (daten.abnahme_entschieden_am ? new Date(daten.abnahme_entschieden_am) : null);
+  const abnahmeGrund   = abnahmeErgebnis ? abnahmeErgebnis.grund   : daten.abnahme_ablehnungsgrund;
+  const abnahmeHash    = abnahmeErgebnis?.hash || daten.abnahme_hash;
 
   return (
     <div style={{ minHeight:"100dvh", background:"var(--bg)", color:"var(--text)", fontFamily:"inherit" }}>
@@ -105,6 +115,45 @@ export function KundenportalScreen({ token }) {
           </div>
         </div>
 
+        {/* Bauabnahme — einmalige Entscheidung über denselben Portal-Token,
+            siehe kundenportal_abnahme_entscheiden-RPC. Vor der Entscheidung
+            ein Hinweis + Button, danach eine feste Status-Anzeige (Hash als
+            Beleg, analog zum Angebots-Nachweis). */}
+        <div style={{ marginBottom:18 }}>
+          {!abnahmeEntscheidung ? (
+            <button onClick={() => setZeigeAbnahme(true)}
+              style={{ width:"100%", background:"var(--ybg)", color:"var(--ydark)",
+                border:"1.5px solid var(--yellow)", borderRadius:10, padding:"11px 14px",
+                fontWeight:700, cursor:"pointer", fontSize:13, fontFamily:"inherit",
+                display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+              <ClipboardCheck size={15} />Bauabnahme
+            </button>
+          ) : (
+            <div style={{ background:"var(--surface)", border:`1.5px solid ${abnahmeEntscheidung === "angenommen" ? "var(--green)" : "var(--red)"}`,
+              borderRadius:10, padding:"12px 14px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:7, fontWeight:700, fontSize:13,
+                color: abnahmeEntscheidung === "angenommen" ? "var(--green)" : "var(--red)", marginBottom:4 }}>
+                {abnahmeEntscheidung === "angenommen" ? <CircleCheckBig size={15} /> : <Ban size={15} />}
+                Bauabnahme {abnahmeEntscheidung === "angenommen" ? "erklärt" : "verweigert"}
+              </div>
+              <div style={{ color:"var(--muted)", fontSize:12 }}>
+                {abnahmeName && <>von {abnahmeName}</>}
+                {abnahmeDatum && <> · {abnahmeDatum.toLocaleDateString("de-DE")}</>}
+              </div>
+              {abnahmeEntscheidung === "abgelehnt" && abnahmeGrund && (
+                <div style={{ marginTop:6, fontSize:12.5, color:"var(--text2)" }}>{abnahmeGrund}</div>
+              )}
+              {abnahmeHash && (
+                <div style={{ marginTop:6, fontFamily:"monospace", fontSize:10.5, color:"var(--muted)" }}>DOC-{abnahmeHash}</div>
+              )}
+            </div>
+          )}
+        </div>
+        {zeigeAbnahme && (
+          <KundenAbnahme token={token} onClose={() => setZeigeAbnahme(false)}
+            onEntschieden={erg => { setAbnahmeErgebnis(erg); setZeigeAbnahme(false); }} />
+        )}
+
         {/* Mangel melden — läuft über eine eigene, token-geprüfte RPC
             (kundenportal_mangel_melden), kein Login nötig. */}
         <button onClick={() => setZeigeMangelMelden(true)}
@@ -116,6 +165,85 @@ export function KundenportalScreen({ token }) {
         </button>
         {zeigeMangelMelden && (
           <KundenMangelMelden token={token} onClose={() => setZeigeMangelMelden(false)} />
+        )}
+
+        {/* Mängel-Status — Nachverfolgung für bereits gemeldete (eigene wie
+            fremde) Mängel dieses Projekts, damit nach dem Melden nicht
+            einfach Stille herrscht. Reihenfolge wie von der RPC geliefert
+            (neueste zuerst). */}
+        {maengel.length > 0 && (
+          <div style={{ marginBottom:18 }}>
+            <div style={{ fontWeight:800, fontSize:13, marginBottom:10 }}>Mängel-Status</div>
+            {maengel.map(m => {
+              const statusInfo = AUFGABEN_STATUS[m.status] || AUFGABEN_STATUS.offen;
+              const behoben = m.status === "abgeschlossen";
+              return (
+                <div key={m.id} style={{ background:"var(--surface)", border:"1px solid var(--border)",
+                  padding:"12px 14px", marginBottom:9 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:4 }}>
+                    <div style={{ fontWeight:700, fontSize:13.5 }}>{m.titel}</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0,
+                      color:statusInfo.farbe, fontSize:11.5, fontWeight:700 }}>
+                      {statusInfo.icon} {statusInfo.label}
+                    </div>
+                  </div>
+                  {m.beschreibung && (
+                    <div style={{ fontSize:12.5, color:"var(--text2)", lineHeight:1.4, marginBottom:6 }}>
+                      {m.beschreibung}
+                    </div>
+                  )}
+                  <div style={{ fontSize:11, color:"var(--muted)" }}>
+                    Gemeldet am {new Date(m.erstellt_am).toLocaleDateString("de-DE")}
+                  </div>
+                  {m.fotos?.length > 0 && (
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:8 }}>
+                      {m.fotos.slice(0, 4).map((url, j) => (
+                        <img key={j} src={url} alt="" style={{ width:48, height:48, borderRadius:8, objectFit:"cover" }} />
+                      ))}
+                    </div>
+                  )}
+                  {m.dokumente?.length > 0 && (
+                    <div style={{ display:"flex", flexDirection:"column", gap:4, marginTop:8 }}>
+                      {m.dokumente.map((url, j) => (
+                        <a key={j} href={url} download={`Mangel-Anhang-${j + 1}.pdf`}
+                          style={{ color:"var(--blue)", fontSize:11.5, display:"flex", alignItems:"center", gap:5, textDecoration:"none" }}>
+                          <FileText size={12} />PDF-Anhang {j + 1}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  {behoben && m.behebung_fotos?.length > 0 && (
+                    <div style={{ marginTop:8 }}>
+                      <div style={{ fontSize:11, color:"var(--green)", fontWeight:700, marginBottom:5 }}>Nachweis Behebung</div>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                        {m.behebung_fotos.slice(0, 4).map((url, j) => (
+                          <img key={j} src={url} alt="" style={{ width:48, height:48, borderRadius:8, objectFit:"cover" }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Dokumente — von der Firma bereitgestellte PDFs (Abnahmeprotokoll,
+            Rechnung etc.), siehe ProjektDokumente.jsx (Upload-Seite). */}
+        {dokumente.length > 0 && (
+          <div style={{ marginBottom:18 }}>
+            <div style={{ fontWeight:800, fontSize:13, marginBottom:10 }}>Dokumente</div>
+            {dokumente.map(d => (
+              <a key={d.id} href={d.daten} download={d.dateiname}
+                style={{ display:"flex", alignItems:"center", gap:8, background:"var(--surface)",
+                  border:"1px solid var(--border)", borderRadius:10, padding:"10px 14px",
+                  marginBottom:6, color:"var(--text)", textDecoration:"none", fontSize:13 }}>
+                <FileText size={15} style={{ flexShrink:0, color:"var(--blue)" }} />
+                <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.dateiname}</span>
+                <Download size={14} style={{ flexShrink:0, color:"var(--muted)" }} />
+              </a>
+            ))}
+          </div>
         )}
 
         {/* Tagesberichte */}

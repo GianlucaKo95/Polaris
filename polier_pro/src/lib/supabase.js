@@ -401,12 +401,76 @@ export async function sbKundenportalDeaktivieren(id, session) {
 // Öffentlicher Abruf ohne Session — läuft über eine SECURITY DEFINER-RPC,
 // die gezielt nur die für den Kunden freigegebenen, kuratierten Felder
 // liefert (kein Zugriff auf echte Tabellen für anon, siehe Migration).
+// _v4 statt der alten kundenportal_daten/_v2/_v3: liefert zusätzlich eine
+// Mängel-Liste je Projekt (Statusverfolgung im Portal), den aktuellen
+// Abnahme-Status (Kundenabnahme) und die von der Firma hochgeladenen
+// Dokumente (PDF-Downloads im Portal) — neue Funktion statt DROP+CREATE,
+// siehe einladung_pruefen_v2/v3 bzw. angebot_freigabe_*_v2 für denselben,
+// aus früheren Migrationen bekannten Workaround.
 export async function sbKundenportalDaten(token) {
   try {
-    const { data, error } = await supabase.rpc("kundenportal_daten", { p_token: token });
+    const { data, error } = await supabase.rpc("kundenportal_daten_v4", { p_token: token });
     if (error || !data?.length) return null;
     return data[0];
   } catch { return null; }
+}
+
+// Lässt den Kunden ohne Login über denselben Kundenportal-Token die
+// Bauabnahme erklären oder verweigern — analog sbAngebotEntscheiden, nur
+// ohne eigene Freigabe-Tabelle (Projekt kommt aus kundenportal_freigaben).
+// Einmalig: ein zweiter Aufruf für dasselbe Projekt schlägt mit der
+// RPC-eigenen Fehlermeldung fehl ("bereits abgenommen").
+export async function sbKundenportalAbnahmeEntscheiden(token, { entscheidung, name, signatur, grund, dokument }) {
+  try {
+    const { data, error } = await supabase.rpc("kundenportal_abnahme_entscheiden", {
+      p_token: token,
+      p_entscheidung: entscheidung,
+      p_name: name || "",
+      p_signatur: signatur || null,
+      p_grund: grund || null,
+      p_dokument: dokument || null,
+    });
+    if (error) return { ok: false, hash: null, fehler: error.message || "Senden fehlgeschlagen." };
+    return { ok: true, hash: data, fehler: null };
+  } catch { return { ok: false, hash: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// ── Projekt-Dokumente (Firma -> Kunde, PDF-Downloads im Kundenportal) ──────
+// Normale, session-gebundene Tabellenzugriffe (RLS statt RPC) — der Upload
+// passiert durch eingeloggtes Personal, kein anon-Zugriff nötig.
+export async function sbProjektDokumenteLaden(projektId, session) {
+  if (!session?.access_token || !projektId) return [];
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("projekt_dokumente")
+      .select("id, dateiname, hochgeladen_am").eq("projekt_id", projektId)
+      .order("hochgeladen_am", { ascending: false });
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
+}
+
+export async function sbProjektDokumentHochladen(projektId, firmaId, profilId, dateiname, daten, session) {
+  if (!session?.access_token || !projektId || !firmaId) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("projekt_dokumente")
+      .insert({ projekt_id: projektId, firma_id: firmaId, dateiname, daten, hochgeladen_von: profilId || null })
+      .select("id, dateiname, hochgeladen_am");
+    const fehler = sbSchreibfehler(error, data, false);
+    if (fehler) return { ok: false, fehler };
+    return { ok: true, daten: data?.[0] || null, fehler: null };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbProjektDokumentLoeschen(id, session) {
+  if (!session?.access_token) return { ok: false, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("projekt_dokumente").delete().eq("id", id).select();
+    const fehler = sbSchreibfehler(error, data, true);
+    return { ok: !fehler, fehler };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
 // Lässt den Bauherrn ohne Login über denselben Token selbst einen Mangel
@@ -415,7 +479,7 @@ export async function sbKundenportalDaten(token) {
 // (10 Meldungen/Projekt/Stunde) durchsetzt, siehe Migration. error ist bei
 // Ablehnung (ungültiger Link, leerer Titel, Rate-Limit) die RPC-eigene
 // deutschsprachige Fehlermeldung aus der Postgres-Exception.
-export async function sbKundenportalMangelMelden(token, { titel, beschreibung, kontakt, fotos }) {
+export async function sbKundenportalMangelMelden(token, { titel, beschreibung, kontakt, fotos, dokumente }) {
   try {
     const { error } = await supabase.rpc("kundenportal_mangel_melden", {
       p_token: token,
@@ -423,6 +487,7 @@ export async function sbKundenportalMangelMelden(token, { titel, beschreibung, k
       p_beschreibung: beschreibung || "",
       p_kontakt: kontakt || null,
       p_fotos: fotos || [],
+      p_dokumente: dokumente || [],
     });
     if (error) return { ok: false, fehler: error.message || "Melden fehlgeschlagen." };
     // Bewusst nicht awaited und ohne Fehlerbehandlung nach außen — die
@@ -828,12 +893,17 @@ export async function sbProjektKostenSpeichern(projektId, budgetPositionen, stun
 
 // Einheitspreise + LV-Vorlagen sind Firmen-weite Konfiguration (nicht
 // projektgebunden), deshalb auf der firmen-Zeile statt einer eigenen Tabelle.
-export async function sbFirmaParameterSpeichern(firmaId, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, session) {
+// kalkulationspreise: Lohn-/Material-/Geräte-/Fremdleistungs-Stammdaten für
+// die EP-Kalkulation (anders als einheitspreise, das fertige Verkaufs-EP
+// pro Gewerk sind) — gleiche Ablage, gleiches Muster.
+export async function sbFirmaParameterSpeichern(firmaId, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, session, kalkulationspreise) {
   if (!session?.access_token || !firmaId) return false;
   try {
     const client = sbClientMitToken(session);
+    const payload = { einheitspreise, lv_vorlagen: lvVorlagen, angebot_vorlage: angebotVorlage, tagebuch_vorlage: tagebuchVorlage };
+    if (kalkulationspreise !== undefined) payload.kalkulationspreise = kalkulationspreise;
     const { error } = await client.from("firmen")
-      .update({ einheitspreise, lv_vorlagen: lvVorlagen, angebot_vorlage: angebotVorlage, tagebuch_vorlage: tagebuchVorlage })
+      .update(payload)
       .eq("id", firmaId);
     return !error;
   } catch { return false; }

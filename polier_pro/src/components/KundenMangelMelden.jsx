@@ -1,8 +1,10 @@
 import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Camera, X, TriangleAlert } from "lucide-react";
+import { Camera, Paperclip, X, TriangleAlert } from "lucide-react";
 import { Spinner } from "./Spinner.jsx";
 import { sbKundenportalMangelMelden } from "../lib/supabase.js";
+
+const MAX_PDF_BYTES = 8 * 1024 * 1024; // 8 MB — landet direkt als base64 in der DB-Zeile
 
 // Gleiches Bottom-Sheet-Muster wie MangelBehebenDialog.jsx, aber öffentlich
 // erreichbar (kein Login, nur der Kundenportal-Token) — Absenden läuft über
@@ -15,10 +17,12 @@ export function KundenMangelMelden({ token, onClose }) {
   const [beschreibung, setBeschreibung] = useState("");
   const [kontakt,      setKontakt]      = useState("");
   const [fotos,        setFotos]        = useState([]);
+  const [dokumente,    setDokumente]    = useState([]);
   const [laedt,        setLaedt]        = useState(false);
   const [fehler,       setFehler]       = useState("");
   const [gesendet,     setGesendet]     = useState(false);
   const fileRef = useRef(null);
+  const pdfRef = useRef(null);
 
   function handleBild(e) {
     Array.from(e.target.files).forEach(file => {
@@ -28,12 +32,24 @@ export function KundenMangelMelden({ token, onClose }) {
     });
   }
 
+  function handlePdf(e) {
+    const datei = e.target.files?.[0];
+    e.target.value = "";
+    if (!datei) return;
+    if (datei.type !== "application/pdf") { setFehler("Bitte nur PDF-Dateien anhängen."); return; }
+    if (datei.size > MAX_PDF_BYTES) { setFehler("Datei zu groß (max. 8 MB)."); return; }
+    setFehler("");
+    const r = new FileReader();
+    r.onload = ev => setDokumente(p => [...p, ev.target.result]);
+    r.readAsDataURL(datei);
+  }
+
   async function absenden() {
     if (!titel.trim() || laedt) return;
     setLaedt(true);
     setFehler("");
     const { ok, fehler: f } = await sbKundenportalMangelMelden(token, {
-      titel: titel.trim(), beschreibung: beschreibung.trim(), kontakt: kontakt.trim(), fotos,
+      titel: titel.trim(), beschreibung: beschreibung.trim(), kontakt: kontakt.trim(), fotos, dokumente,
     });
     setLaedt(false);
     if (!ok) { setFehler(f); return; }
@@ -110,13 +126,24 @@ export function KundenMangelMelden({ token, onClose }) {
 
             <input ref={fileRef} type="file" accept="image/*" multiple
               style={{ display:"none" }} onChange={handleBild} />
-            <button onClick={() => fileRef.current.click()}
-              style={{ background:"var(--surface2)", color:"var(--muted)",
-                border:"1.5px dashed var(--border)", borderRadius:10,
-                padding:"8px 16px", cursor:"pointer", fontSize:12,
-                fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
-              <Camera size={14} />Foto hinzufügen
-            </button>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={() => fileRef.current.click()}
+                style={{ background:"var(--surface2)", color:"var(--muted)",
+                  border:"1.5px dashed var(--border)", borderRadius:10,
+                  padding:"8px 16px", cursor:"pointer", fontSize:12,
+                  fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
+                <Camera size={14} />Foto hinzufügen
+              </button>
+              <input ref={pdfRef} type="file" accept="application/pdf"
+                style={{ display:"none" }} onChange={handlePdf} />
+              <button onClick={() => pdfRef.current.click()}
+                style={{ background:"var(--surface2)", color:"var(--muted)",
+                  border:"1.5px dashed var(--border)", borderRadius:10,
+                  padding:"8px 16px", cursor:"pointer", fontSize:12,
+                  fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
+                <Paperclip size={14} />PDF anhängen
+              </button>
+            </div>
 
             {fotos.length > 0 && (
               <div style={{ display:"flex", gap:6, marginTop:10, flexWrap:"wrap" }}>
@@ -126,6 +153,21 @@ export function KundenMangelMelden({ token, onClose }) {
                     <button onClick={() => setFotos(p => p.filter((_, j) => j !== i))}
                       style={{ position:"absolute", top:-4, right:-4, width:18, height:18, borderRadius:9,
                         background:"var(--red)", color:"#fff", border:"none", cursor:"pointer", fontSize:10, padding:0 }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {dokumente.length > 0 && (
+              <div style={{ marginTop:10 }}>
+                {dokumente.map((_, i) => (
+                  <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+                    background:"var(--surface2)", borderRadius:8, padding:"6px 10px", marginBottom:5 }}>
+                    <span style={{ fontSize:12, color:"var(--text)" }}>PDF-Dokument {i + 1}</span>
+                    <button onClick={() => setDokumente(p => p.filter((_, j) => j !== i))}
+                      style={{ background:"none", border:"none", color:"var(--red)", cursor:"pointer", padding:0, display:"flex" }}>
+                      <X size={13} />
+                    </button>
                   </div>
                 ))}
               </div>

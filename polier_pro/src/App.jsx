@@ -212,6 +212,7 @@ export default function PolierApp() {
   const [lvVorlagen,    setLvVorlagen]    = useState(DEFAULT_LV_VORLAGEN);
   const [angebotVorlage,setAngebotVorlage]= useState(null);
   const [tagebuchVorlage,setTagebuchVorlage]= useState(null);
+  const [kalkulationspreise, setKalkulationspreise] = useState([]);
   // Verhindert, dass der initiale Ladevorgang der Parameter aus Supabase
   // (setzt dieselben Werte, die gerade erst von dort kamen) sie sofort
   // wieder zurückschreibt, bevor der Nutzer überhaupt etwas geändert hat.
@@ -285,7 +286,7 @@ export default function PolierApp() {
       // also nie erfüllbar — eine abgelaufene Testphase (z.B. Musterbau
       // GmbH (Demo), trial_ends_at 24.09.) sperrte dadurch nie tatsächlich,
       // unabhängig vom echten Datenbankstand.
-      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage, pin_pflicht, gesperrt, plan, plan_status, trial_ends_at, plan_ends_at, plan_naechste_abrechnung, max_baustellen, stripe_customer_id, stripe_subscription_id")
+      client.from("firmen").select("id, name, adresse, plz, ort, telefon, email, steuernummer, logo_url, geschaeftsfuehrer, gewerke, einheitspreise, lv_vorlagen, angebot_vorlage, tagebuch_vorlage, kalkulationspreise, pin_pflicht, gesperrt, plan, plan_status, trial_ends_at, plan_ends_at, plan_naechste_abrechnung, max_baustellen, stripe_customer_id, stripe_subscription_id")
         .eq("id", auth.profil.firma_id)
         .then(({ data: d, error, status }) => {
           if (error) {
@@ -314,6 +315,7 @@ export default function PolierApp() {
             setLvVorlagen(d[0].lv_vorlagen?.length ? d[0].lv_vorlagen : DEFAULT_LV_VORLAGEN);
             setAngebotVorlage(d[0].angebot_vorlage || null);
             setTagebuchVorlage(d[0].tagebuch_vorlage || null);
+            setKalkulationspreise(d[0].kalkulationspreise || []);
             setParameterGeladen(true);
           } else {
             setFirmaLadeFehler(`Keine Firma mit ID ${auth.profil.firma_id} gefunden — profile.firma_id zeigt ins Leere.`);
@@ -337,8 +339,8 @@ export default function PolierApp() {
   // Einheitspreise/LV-Vorlagen nach jeder Änderung in der Firma persistieren.
   useEffect(() => {
     if (!parameterGeladen || !firma?.id || !auth.session?.access_token) return;
-    sbFirmaParameterSpeichern(firma.id, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, auth.session);
-  }, [einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage]);
+    sbFirmaParameterSpeichern(firma.id, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, auth.session, kalkulationspreise);
+  }, [einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, kalkulationspreise]);
 
   // Projekte aus Supabase laden, sobald die Firma bekannt ist.
   // Ohne dies existierten Baustellen nur im Browser-Speicher — Neuladen,
@@ -1379,7 +1381,7 @@ export default function PolierApp() {
             Tab-Wechsel weg von "kosten") der Stand der vorherigen Baustelle
             stehen, "Speichern" hätte dann sogar das falsche Projekt
             überschrieben. Der key erzwingt einen frischen Mount pro Baustelle. */}
-        {tab === "kosten"        && <KostenView key={projekt?.id} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} angebote={angebote} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
+        {tab === "kosten"        && <KostenView key={projekt?.id} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} angebote={angebote} kalkulationspreise={kalkulationspreise} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "stempeln"      && <StempeluhrView profil={aktiveProfil}
             projekte={aktiveProfil?.kolonne_id
               ? projekte.filter(p => (p.kolonnen||[]).some(k => k.id === aktiveProfil.kolonne_id)).length > 0
@@ -1397,8 +1399,8 @@ export default function PolierApp() {
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
         {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
-        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} session={auth.session} />}
-        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} session={auth.session} />}
+        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} session={auth.session} />}
+        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
         {tab === "firmen"       && <FirmenView owneFirma={eigeneFirma} setEigeneFirma={setEigeneFirma} subs={subs} setSubs={setSubs}
             onOnboardingReset={() => setOnboardingDone(false)} session={auth.session} firmaId={firma?.id} firma={firma} projekte={projekte} />}

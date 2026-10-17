@@ -1,0 +1,138 @@
+T0                                                                        000001
+T1          V E R T R A G L I C H E   R E G E L U N G E N                 000002
+T1                                                                        000003
+T1                 vor der Angebotsaufforderung                           000004
+T1                       Stand: 24.08.93                                  000005
+T9                                                                        000088
+00        83L0123456789     01234567001                       1122PPPPI90 000089
+01ROHBAUARBEITEN                          27.05.9927.07.9910:0030.07.99   000090
+02Musterprojekt                                                           000091
+02                                                                        000092
+03T&T Datentechnik GmbH                                                   000093
+063              Material      Lohn          Sonstiges                    000094
+08DM    Deutsche Mark                                                     000095
+1101       N                                                              000154
+12MAUERARBEITEN                                                           000155
+110101     N                                                              000156
+12WAENDE                                                                   000157
+12MAUERARBEITEN                                                           000158
+210101  10 NNN    X    00000048000                                        000159
+25Abdichtung in Wand, G 200 DD, d= 36,5 cm                                000160
+26   Waagrechte Abdichtung gegen Bodenfeuchtigkeit in Waenden              000161
+26   mit Bitumendachdichtungsbahn G 200 DD, lose im                       000162
+26   Moertelbett verlegt; Stossueberlappung 20 cm. Breite: bis            000163
+26   36,5 cm                                                              000164
+210101  20 NNN    X    00000048000                                        000165
+25Abdichtung in Wand, G 200 DD, d= 24,0 cm                                000166
+26   Waagrechte Abdichtung gegen Bodenfeuchtigkeit in Waenden              000167
+26   mit Bitumendachdichtungsbahn G 200 DD, lose im                       000168
+26   Moertelbett verlegt; Stossueberlappung 20 cm. Breite: bis            000169
+26   36,5 cm                                                              000170
+20                                                                        000096
+26   Hinweistext                                                          000097
+26                                                                        000098
+26   alle Texte sind lediglich als Muster zu betrachten und               000100
+26   und haben keine inhaltliche Relevanz                                 000101
+210101  30 NNN         00000104000m3                                      000171
+25Hlz 12/1,4 - MG II, d= 36,5 cm                                          000172
+26   Hochlochziegel HLz 12/1,4, Moertelgruppe II, fuer                    000173
+26   Aussenmauerwerk.Wanddicke: 36,5 cm                                   000174
+210101  40 GNN010      00000048000m3                                      000175
+25Hlz 20/1,8 - MG II, d= 24,0 cm                                          000176
+26   Hochlochziegel HLz 20/1,8, Moertelgruppe II, fuer                    000177
+26   Aussenmauerwerk.                                                     000178
+26   Wanddicke: 24 cm                                                     000179
+210101  50 ANN0101     00000048000m2                                      000180
+25Aussenw.LB-Vbl 2-0.6-16DF, d=24.0cm, LM 21                              000181
+26   Mauerwerk der Aussenwand,                                            000182
+26                                                                        000183
+26   Vollbloecke aus Leichtbeton DIN 18152 -                              000184
+26   Vbl 2 - 0,6 - 495 x 240 x 238,                                       000185
+26   Moertel als Leichtmauermoertel LM 21,                                000186
+26   Waermeleitfaehigkeit 0,18,                                           000187
+26   Mauerwerksdicke 24 cm.                                               000188
+210101  60 NNL         00000048000m2     X 19201204001112041              000189
+25Mauerwerk 1053/1 Aussenwand '43,5'                                      000190
+26   Mauerwerk DIN 1053 Teil 1,                                           000191
+26   der Aussenwand,                                                      000192
+26   einseitig als Sichtmauerwerk,                                        000193
+26   Fugenglattstrich/Ausfugen wird gesondert verguetet.                  000194
+2641AMauerwerksdicke '43,5                                                000195
+2641A',                                                                   000196
+26   Hoehe bis 3,5 m,                                                     000197
+26   bestehend aus:                                                       000198
+26                                                                        000199
+2401            ----  19201208011110302                                   000200
+25Kalksandst.106/1 KS 12 - 1,2                                            000201
+26   Kalksandstein DIN 106 Teil 1                                         000202
+26   KS                                                                   000203
+26   mit vermoertelter Stossfuge,                                         000204
+26   12 -                                                                 000205
+26   1,2 -                                                                000206
+26   2 DF (240 x 115 x 113),                                              000207
+26   MG II a.                                                             000208
+26                                                                        000209
+2402            ----  19201208021121402                                   000210
+25Kalksandst.106/1 KSL 12 - 1,4                                           000211
+26   Kalksandstein DIN 106 Teil 1                                         000212
+26   KSL                                                                  000213
+26   mit vermoertelter Stossfuge,                                         000214
+26   12 -                                                                 000215
+26   1,4 -                                                                000216
+26   16 DF (498 x 240 x 238),                                             000217
+26   MG II a.                                                             000218
+26                                                                        000219
+2403 00000120000m2    19201293310000501                                   000220
+25Waermedaemmschicht Schaumkunststoff 60 mm                               000221
+26   Waermedaemmschicht                                                   000222
+26   zwischen zwei Bauteilen                                              000223
+26   aus Schaumkunststoffplatten DIN 18 164 Teil 1,                       000224
+26   Typ W nicht druckbelastbar,                                          000225
+26   Nenndicke 60 mm.                                                     000226
+26                                                                        000227
+210101  70 NNN         00000090000m2                                      000228
+25Abdichtung Kellerziegelmauerwerk, aussen                                000229
+26   Abdichtung von vollfugigem Ziegel-                                   000230
+26   Kellermauerwerk wie folgt herstellen:                                000231
+210101  80 NEN         00000070000m                                       000245
+25Hohlkehle an aufgeh. Kellermauerwerk                                    000246
+26   Hohlkehle an aufgehendem                                             000247
+26   Kellerwandmauerwerk wie folgt einbauen:                              000248
+310101                                                                    000257
+3101                                                                      000258
+1102       N                                                              000259
+12STAHLBETONARBEITEN                                                      000260
+110201     N                                                              000261
+12FUNDAMENTE                                                              000262
+210201  10 NNN         00000270000                                        000263
+25Sauberkeitsschicht aus Beton B 10                                       000264
+26   Sauberkeitsschicht aus Beton B 10 unter                              000265
+26   Gruendungsbauteilen aller Art                                        000266
+210201  20 NNN         00000270000m2      X                               000270
+25Ortbeton, Schutzschicht, LB15, d=15cm                                   000271
+26   Ortbeton der Schutzschicht auf                                       000272
+210201  30 NEN         00000048000                                        000280
+25Streifenfundament, StB B 25, o. Schalung                                000281
+26   Stahlbeton B 25, fuer Streifenfundamente, auf                        000282
+310201                                                                    000285
+110202     N                                                              000286
+12DECKEN                                                                  000287
+210202  10 GNN020      00000060000m3                                      000288
+25Stahlbetondecken B 25, d=bis 20 cm, o.Sch.                              000289
+26   Stahlbetondecken aus Beton B 25, Oberflaeche eben                    000290
+210202  20 ANN0201     00000060000                                        000296
+25Dachdeck., Spannbeton-Hohlpl., d=20cm                                   000297
+26   Dachdecke aus vorgefertigten, bewehrten                              000298
+310202                                                                    000309
+110203     N                                                              000310
+12STUERZE                                                                  000311
+210203  10 NNN      B  00000006060m                                       000312
+25Stahlbetonsturz, d = 36,5 cm, LW <= 1,01m                               000313
+26   Stahlbetonfertigteilsturz zur Ueberdeckung von Oeffnungen            000314
+210203  20 NNN      W  00000006060m                                       000318
+28Stahlbetonfertigteilsturz zur Ueberdeckung von          0203  10        000319
+25Stahlbetonsturz, d = 24 cm, LW <= 1,01m                                 000320
+26   Wanddicke d=24 cm                                                    000321
+310203                                                                    000323
+3102                                                                      000324
+99                                                                   00015000325
