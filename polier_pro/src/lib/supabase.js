@@ -877,6 +877,89 @@ export async function sbAngebotSpeichern(a, projektId, session, istNeu) {
   } catch { return null; }
 }
 
+// Baufortschritt (Leistungsstand % je Position eines angenommenen Angebots)
+// liegt bewusst NICHT in angebote.positionen, sondern in einer eigenen
+// Tabelle — ein angenommenes Angebot wird gesperrt (angebote.gesperrt), der
+// Leistungsstand muss aber während der ganzen Bauzeit änderbar bleiben
+// (siehe lib/rechnung.js). upsert über den unique-Index (angebot_id,
+// position_id): neu erfasste Positionen legen die Zeile an, eine Änderung
+// am bestehenden Prozentsatz überschreibt sie.
+export async function sbBaufortschrittSpeichern(angebotId, projektId, positionId, prozent, profilId, session) {
+  if (!session?.access_token || !angebotId || !projektId) return { daten: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("baufortschritt")
+      .upsert({
+        angebot_id: angebotId, projekt_id: projektId, position_id: positionId,
+        prozent: Math.max(0, Math.min(100, Number(prozent) || 0)),
+        aktualisiert_von: profilId || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "angebot_id,position_id" })
+      .select();
+    const fehler = sbSchreibfehler(error, data, false);
+    return { daten: fehler ? null : (data?.[0] || null), fehler };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbBaufortschrittLaden(angebotId, session) {
+  if (!session?.access_token || !angebotId) return [];
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("baufortschritt").select("*").eq("angebot_id", angebotId);
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
+}
+
+// Rechnungen (Abschlags-/Schlussrechnungen nach Baufortschritt, siehe
+// lib/rechnung.js) — Snapshot-Zeilen, daher kein Payload-Mapping auf
+// Einzelfelder wie bei sbAngebotSpeichern: r trägt bereits exakt die
+// Spalten der Tabelle.
+export async function sbRechnungSpeichern(r, projektId, session, istNeu) {
+  if (!session?.access_token || !projektId) return { daten: null, fehler: "Keine gültige Sitzung." };
+  const payload = {
+    projekt_id: projektId,
+    angebot_id: r.angebot_id,
+    typ: r.typ || "abschlag",
+    nummer: r.nummer || "",
+    datum: r.datum || new Date().toISOString().slice(0,10),
+    status: r.status || "entwurf",
+    positionen_snapshot: r.positionen_snapshot || [],
+    netto_betrag: r.netto_betrag || 0,
+    sicherheitseinbehalt_prozent: r.sicherheitseinbehalt_prozent || 0,
+    mwst: r.mwst ?? 19,
+  };
+  try {
+    const client = sbClientMitToken(session);
+    const query = istNeu
+      ? client.from("rechnungen").insert({ ...payload, erstellt_von: r.erstellt_von || null }).select()
+      : client.from("rechnungen").update(payload).eq("id", r.id).select();
+    const { data, error } = await query;
+    const fehler = sbSchreibfehler(error, data, !istNeu);
+    return { daten: fehler ? null : (data?.[0] || null), fehler };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbRechnungenLaden(angebotId, session) {
+  if (!session?.access_token || !angebotId) return [];
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("rechnungen").select("*")
+      .eq("angebot_id", angebotId).order("created_at", { ascending: true });
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
+}
+
+export async function sbRechnungLoeschen(id, session) {
+  if (!session?.access_token || !id) return false;
+  try {
+    const client = sbClientMitToken(session);
+    const { error } = await client.from("rechnungen").delete().eq("id", id);
+    return !error;
+  } catch { return false; }
+}
+
 // Budget-Positionen + Stundensatz liegen (anders als Aufgaben/Kolonnen/
 // Angebote) direkt als Spalten auf der projekte-Zeile, da es pro Baustelle
 // nur je eine Liste bzw. einen Wert gibt — keine eigene Tabelle nötig.

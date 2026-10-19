@@ -10,7 +10,7 @@ import { DEFAULT_EINHEITSPREISE, DEFAULT_LV_VORLAGEN, ONBOARDING_KEY, ROLLEN, PR
 import { usePWA } from "./hooks/usePWA.js";
 import { usePushNotifications } from "./hooks/usePushNotifications.js";
 import { useOfflineSync } from "./hooks/useOfflineSync.js";
-import { sbClientMitToken, SUPABASE_URL, sbAufgabeSpeichern, sbAufgabeLoeschen, sbAufgabeVorschlagen, sbAufgabeVorschlagEntscheiden, sbBerichtSpeichern, sbKolonneSpeichern, sbKolonneLoeschen, sbFirmaParameterSpeichern, sbAngebotSpeichern } from "./lib/supabase.js";
+import { sbClientMitToken, SUPABASE_URL, sbAufgabeSpeichern, sbAufgabeLoeschen, sbAufgabeVorschlagen, sbAufgabeVorschlagEntscheiden, sbBerichtSpeichern, sbKolonneSpeichern, sbKolonneLoeschen, sbFirmaParameterSpeichern, sbAngebotSpeichern, sbBaufortschrittSpeichern, sbRechnungSpeichern, sbRechnungLoeschen } from "./lib/supabase.js";
 import { PasswortSetzenScreen } from "./views/PasswortSetzenScreen.jsx";
 import { ErstePinAbfrageScreen } from "./views/ErstePinAbfrageScreen.jsx";
 import { EinladungScreen } from "./views/EinladungScreen.jsx";
@@ -56,6 +56,7 @@ const SimulationView         = React.lazy(() => import("./views/SimulationView.j
 const KostenView             = React.lazy(() => import("./views/KostenView.jsx").then(m => ({ default: m.KostenView })));
 const StundenExportView      = React.lazy(() => import("./views/StundenExportView.jsx").then(m => ({ default: m.StundenExportView })));
 const AngebotView            = React.lazy(() => import("./views/AngebotView.jsx").then(m => ({ default: m.AngebotView })));
+const RechnungenView         = React.lazy(() => import("./views/RechnungenView.jsx").then(m => ({ default: m.RechnungenView })));
 const AdminParameterView     = React.lazy(() => import("./views/AdminParameterView.jsx").then(m => ({ default: m.AdminParameterView })));
 const NutzerVerwaltungView   = React.lazy(() => import("./views/NutzerVerwaltungView.jsx").then(m => ({ default: m.NutzerVerwaltungView })));
 const MeinProfilView         = React.lazy(() => import("./views/MeinProfilView.jsx").then(m => ({ default: m.MeinProfilView })));
@@ -387,6 +388,12 @@ export default function PolierApp() {
   const [aktProjektBerichte,  setAktProjektBerichte]  = useState([]);
   const [aktProjektKommentare, setAktProjektKommentare] = useState([]);
   const [aktProjektAngebote,  setAktProjektAngebote]  = useState([]);
+  // Baufortschritt/Rechnungen: siehe lib/rechnung.js — eigene Tabellen statt
+  // Felder in angebote.positionen, da ein angenommenes Angebot gesperrt
+  // wird (angebote.gesperrt), der Leistungsstand aber die ganze Bauzeit über
+  // änderbar bleiben muss.
+  const [aktProjektBaufortschritt, setAktProjektBaufortschritt] = useState([]);
+  const [aktProjektRechnungen,     setAktProjektRechnungen]     = useState([]);
   const [projektDatenLaden,   setProjektDatenLaden]   = useState(false);
   const [projektDatenFehler,  setProjektDatenFehler]  = useState("");
 
@@ -394,6 +401,7 @@ export default function PolierApp() {
     if (!aktivId || !auth.session?.access_token) {
       setAktProjektAufgaben([]); setAktProjektKolonnen([]); setAktProjektBerichte([]);
       setAktProjektAngebote([]); setAktProjektKommentare([]);
+      setAktProjektBaufortschritt([]); setAktProjektRechnungen([]);
       setZeitbuchungen([]);
       return;
     }
@@ -409,6 +417,8 @@ export default function PolierApp() {
       client.from("tagesberichte").select("*").eq("projekt_id", aktivId).order("datum", { ascending: false }),
       client.from("zeitbuchungen").select("*").eq("projekt_id", aktivId),
       client.from("angebote").select("*").eq("projekt_id", aktivId).order("created_at", { ascending: false }),
+      client.from("baufortschritt").select("*").eq("projekt_id", aktivId),
+      client.from("rechnungen").select("*").eq("projekt_id", aktivId).order("created_at", { ascending: true }),
       // Für den KI-Projektkontext (baueProjektKontext in lib/ai.js) — nur die
       // letzten 40, sonst wächst der Prompt mit jedem weiteren Kommentar
       // unbegrenzt. aufgaben!inner filtert serverseitig auf diese Baustelle,
@@ -418,7 +428,7 @@ export default function PolierApp() {
         .eq("aufgaben.projekt_id", aktivId)
         .order("created_at", { ascending: false })
         .limit(40),
-    ]).then(([aRes, kRes, bRes, zRes, anRes, koRes]) => {
+    ]).then(([aRes, kRes, bRes, zRes, anRes, bfRes, reRes, koRes]) => {
       if (abgebrochen) return;
       const fehler = [];
       if (aRes.error) fehler.push(`Aufgaben: ${aRes.error.message}`);
@@ -435,6 +445,12 @@ export default function PolierApp() {
       setAktProjektBerichte(bRes.data || []);
       setZeitbuchungen(zRes.data || []);
       setAktProjektAngebote(anRes.data || []);
+      // Baufortschritt/Rechnungen bewusst nicht in die fehler-Liste oben
+      // aufgenommen (wie die Kommentar-Query) — betreffen nur den neuen
+      // Rechnungsstellungs-Tab, ein Fehlschlag dort darf das Laden der
+      // Kernprojektdaten nicht als Fehler anzeigen.
+      setAktProjektBaufortschritt(bfRes.error ? [] : (bfRes.data || []));
+      setAktProjektRechnungen(reRes.error ? [] : (reRes.data || []));
       // Kommentar-Query bewusst nicht in die fehler-Liste oben aufgenommen und
       // bei Fehler einfach als leer behandelt — sie füttert nur den optionalen
       // KI-Kontext, ein Fehlschlag dort darf das Laden der Kernprojektdaten
@@ -692,6 +708,39 @@ export default function PolierApp() {
       ? [gespeichert, ...prev]
       : prev.map(x => x.id === gespeichert.id ? gespeichert : x));
     return gespeichert;
+  }
+
+  const baufortschritt = aktProjektBaufortschritt;
+  const rechnungen     = aktProjektRechnungen;
+
+  // Leistungsstand einer Position erfassen/ändern — siehe lib/rechnung.js.
+  async function baufortschrittSpeichern(angebotId, positionId, prozent) {
+    const { daten, fehler } = await sbBaufortschrittSpeichern(
+      angebotId, aktivId, positionId, prozent, aktiveProfil?.id, auth.session);
+    if (fehler || !daten) return fehler || "Speichern fehlgeschlagen.";
+    setAktProjektBaufortschritt(prev => {
+      const bestehende = prev.find(b => b.angebot_id === angebotId && b.position_id === positionId);
+      return bestehende
+        ? prev.map(b => b === bestehende ? daten : b)
+        : [...prev, daten];
+    });
+    return null;
+  }
+
+  async function rechnungSpeichern(r, istNeu) {
+    const payload = istNeu ? { ...r, erstellt_von: aktiveProfil?.id || null } : r;
+    const { daten, fehler } = await sbRechnungSpeichern(payload, aktivId, auth.session, istNeu);
+    if (fehler || !daten) return { daten: null, fehler: fehler || "Speichern fehlgeschlagen." };
+    setAktProjektRechnungen(prev => istNeu
+      ? [...prev, daten]
+      : prev.map(x => x.id === daten.id ? daten : x));
+    return { daten, fehler: null };
+  }
+
+  async function rechnungLoeschen(id) {
+    const ok = await sbRechnungLoeschen(id, auth.session);
+    if (ok) setAktProjektRechnungen(prev => prev.filter(x => x.id !== id));
+    return ok;
   }
 
   // ── Aufgaben: laden + speichern direkt gegen Supabase ──
@@ -1221,6 +1270,7 @@ export default function PolierApp() {
     { id:"ki_frage",      icon:"💬",  label:"KI fragen",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     { id:"simulation",    icon:"🧪",  label:"Simulation",  rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     { id:"angebot",       icon:"📄",  label:"Angebot",     rollen:["administrator","geschaeftsfuehrer"] },
+    { id:"rechnungen",    icon:"🧾",  label:"Rechnungen",  rollen:["administrator","geschaeftsfuehrer"] },
     // Ein Vorarbeiter führt eine Kolonne, keine ganze Baustelle (siehe
     // Kommentar bei der vorarbeiter-Rolle weiter unten) — deshalb weder
     // Abschluss-Button noch Lese-Zugriff auf die Abschlussakte für ihn.
@@ -1400,6 +1450,7 @@ export default function PolierApp() {
         {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
         {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} session={auth.session} />}
+        {tab === "rechnungen"    && <RechnungenView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} rechnungen={rechnungen} eigeneFirma={eigeneFirma} onBaufortschrittSpeichern={baufortschrittSpeichern} onRechnungSpeichern={rechnungSpeichern} onRechnungLoeschen={rechnungLoeschen} profil={aktiveProfil} />}
         {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
         {tab === "firmen"       && <FirmenView owneFirma={eigeneFirma} setEigeneFirma={setEigeneFirma} subs={subs} setSubs={setSubs}
