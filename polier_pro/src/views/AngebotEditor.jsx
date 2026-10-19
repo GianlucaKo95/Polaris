@@ -14,6 +14,7 @@ import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
 import { AngebotNachweis } from "../components/AngebotNachweis.jsx";
 import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, gaeb90Schreiben, gaeb90AlsWindows1252, parseGaeb90Preise, gaeb90PreiseZuPositionen, gaeb90PreiseEinspielen } from "../lib/gaeb90.js";
+import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 import { leereKalkulation, kalkulationEp } from "../lib/kalkulation.js";
 import { PositionKalkulation } from "../components/PositionKalkulation.jsx";
 
@@ -46,6 +47,9 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [gaebPreisFehler, setGaebPreisFehler] = useState("");
   const [gaebPreisInfo,   setGaebPreisInfo]   = useState(null); // { treffer, fehlend, neu, warnungen }
   const gaebPreisInputRef = useRef(null);
+  const [gaebXmlFehler, setGaebXmlFehler] = useState("");
+  const [gaebXmlInfo,   setGaebXmlInfo]   = useState(null); // { anzahl, warnungen }
+  const gaebXmlInputRef = useRef(null);
   const [speichertLaedt, setSpeichertLaedt] = useState(false);
   const [wordLaedt, setWordLaedt] = useState(false);
   const [wordBlob,  setWordBlob]  = useState(null);
@@ -213,6 +217,34 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       }
     } catch (err) {
       setGaebPreisFehler("Import fehlgeschlagen: " + (err?.message || err));
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  // GAEB-DA-XML-Import (X83, DP=83) — XML-basiertes Nachfolgeformat von
+  // GAEB90, liefert dasselbe Zwischenformat wie parseGaeb90() (siehe
+  // lib/gaebXml.js), daher dieselbe Umwandlung über gaeb90ZuPositionen().
+  // Die so importierten Positionen führen dieselbe Ordnungszahl wie ein
+  // GAEB90-Import mit — ein anschließend hochgeladenes bepreistes D84/D86
+  // (gaebPreiseImportieren() oben) spielt die Preise darüber ein.
+  async function gaebXmlImportieren(e) {
+    const datei = e.target.files?.[0];
+    if (!datei) return;
+    setGaebXmlFehler("");
+    setGaebXmlInfo(null);
+    try {
+      const text = await gaebXmlDateiLesen(datei);
+      const geparst = parseGaebXml(text);
+      const neuePos = gaeb90ZuPositionen(geparst);
+      if (neuePos.length === 0) {
+        setGaebXmlFehler("Keine Positionen erkannt — ist das eine GAEB-DA-XML-Datei (.x83)?");
+        return;
+      }
+      setA(x => ({ ...x, positionen: [...x.positionen, ...neuePos] }));
+      setGaebXmlInfo({ anzahl: neuePos.length, warnungen: geparst.warnungen });
+    } catch (err) {
+      setGaebXmlFehler("Import fehlgeschlagen: " + (err?.message || err));
     } finally {
       e.target.value = "";
     }
@@ -739,6 +771,16 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               <input ref={gaebInputRef} type="file" onChange={gaebImportieren}
                 accept=".d81,.d83,.d85,.d86,.D81,.D83,.D85,.D86,.p81,.p83,.p85,.p86"
                 style={{ display:"none" }} />
+              <button onClick={() => gaebXmlInputRef.current?.click()}
+                style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                  border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                  cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                <Upload size={12} /> GAEB-XML importieren (X83)
+              </button>
+              <input ref={gaebXmlInputRef} type="file" onChange={gaebXmlImportieren}
+                accept=".x83,.X83"
+                style={{ display:"none" }} />
               <button onClick={() => gaebPreisInputRef.current?.click()}
                 style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
                   border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
@@ -770,6 +812,21 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 {gaebInfo.warnungen.length > 0 && (
                   <div style={{ marginTop:4, color:"var(--muted)" }}>
                     {gaebInfo.warnungen.length} Zeile(n) nicht erkannt, als Rohtext übernommen.
+                  </div>
+                )}
+              </div>
+            )}
+            {gaebXmlFehler && (
+              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>{gaebXmlFehler}</div>
+            )}
+            {gaebXmlInfo && (
+              <div style={{ background:"var(--gbg)", color:"var(--green)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
+                ✓ {gaebXmlInfo.anzahl} Positionen aus GAEB-XML-Datei importiert — Preise und ggf. Gruppenkopfzeilen bitte prüfen.
+                {gaebXmlInfo.warnungen.length > 0 && (
+                  <div style={{ marginTop:4, color:"var(--muted)" }}>
+                    {gaebXmlInfo.warnungen.length} Position(en) ohne erkannten Text.
                   </div>
                 )}
               </div>
