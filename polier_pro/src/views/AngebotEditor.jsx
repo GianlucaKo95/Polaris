@@ -13,7 +13,7 @@ import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
 import { AngebotNachweis } from "../components/AngebotNachweis.jsx";
 import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
-import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, gaeb90Schreiben, gaeb90AlsWindows1252 } from "../lib/gaeb90.js";
+import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, gaeb90Schreiben, gaeb90AlsWindows1252, parseGaeb90Preise, gaeb90PreiseZuPositionen, gaeb90PreiseEinspielen } from "../lib/gaeb90.js";
 import { leereKalkulation, kalkulationEp } from "../lib/kalkulation.js";
 import { PositionKalkulation } from "../components/PositionKalkulation.jsx";
 
@@ -43,6 +43,9 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [gaebFehler, setGaebFehler] = useState("");
   const [gaebInfo,   setGaebInfo]   = useState(null); // { anzahl, warnungen }
   const gaebInputRef = useRef(null);
+  const [gaebPreisFehler, setGaebPreisFehler] = useState("");
+  const [gaebPreisInfo,   setGaebPreisInfo]   = useState(null); // { treffer, fehlend, neu, warnungen }
+  const gaebPreisInputRef = useRef(null);
   const [speichertLaedt, setSpeichertLaedt] = useState(false);
   const [wordLaedt, setWordLaedt] = useState(false);
   const [wordBlob,  setWordBlob]  = useState(null);
@@ -174,6 +177,42 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       setGaebInfo({ anzahl: neuePos.length, warnungen: geparst.warnungen });
     } catch (err) {
       setGaebFehler("Import fehlgeschlagen: " + (err?.message || err));
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  // Bepreistes GAEB90 (D84/D86) einspielen — siehe lib/gaeb90.js. D84/D86
+  // enthalten nur OZ+EP+GP, keinen Text, und sind als Preis-Overlay auf eine
+  // bereits bekannte LV-Struktur gedacht: zuerst wird versucht, den EP
+  // passender, schon vorhandener Positionen (über die beim Import mit-
+  // geführte OZ) zu aktualisieren; nur wenn dabei keine einzige Position
+  // trifft (z.B. weil noch gar kein LV importiert wurde), werden die
+  // Preise stattdessen als eigenständige, nur notdürftig benannte neue
+  // Positionen angehängt.
+  async function gaebPreiseImportieren(e) {
+    const datei = e.target.files?.[0];
+    if (!datei) return;
+    setGaebPreisFehler("");
+    setGaebPreisInfo(null);
+    try {
+      const text = await gaeb90DateiLesen(datei);
+      const geparst = parseGaeb90Preise(text);
+      if (geparst.preise.length === 0) {
+        setGaebPreisFehler("Keine Preise erkannt — ist das eine bepreiste GAEB90-Datei (.d84/.d86)?");
+        return;
+      }
+      const merge = gaeb90PreiseEinspielen(a.positionen, geparst.preise);
+      if (merge.treffer > 0) {
+        setA(x => ({ ...x, positionen: merge.positionen }));
+        setGaebPreisInfo({ treffer: merge.treffer, fehlend: merge.fehlend, neu: 0, warnungen: geparst.warnungen });
+      } else {
+        const neuePos = gaeb90PreiseZuPositionen(geparst);
+        setA(x => ({ ...x, positionen: [...x.positionen, ...neuePos] }));
+        setGaebPreisInfo({ treffer: 0, fehlend: 0, neu: neuePos.length, warnungen: geparst.warnungen });
+      }
+    } catch (err) {
+      setGaebPreisFehler("Import fehlgeschlagen: " + (err?.message || err));
     } finally {
       e.target.value = "";
     }
@@ -700,6 +739,16 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               <input ref={gaebInputRef} type="file" onChange={gaebImportieren}
                 accept=".d81,.d83,.d85,.d86,.D81,.D83,.D85,.D86,.p81,.p83,.p85,.p86"
                 style={{ display:"none" }} />
+              <button onClick={() => gaebPreisInputRef.current?.click()}
+                style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                  border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                  cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                <Upload size={12} /> GAEB-Preise einspielen (D84/D86)
+              </button>
+              <input ref={gaebPreisInputRef} type="file" onChange={gaebPreiseImportieren}
+                accept=".d84,.d86,.D84,.D86,.p84,.p86"
+                style={{ display:"none" }} />
               {a.positionen.length > 0 && (
                 <button onClick={gaebExportieren}
                   style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
@@ -721,6 +770,23 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 {gaebInfo.warnungen.length > 0 && (
                   <div style={{ marginTop:4, color:"var(--muted)" }}>
                     {gaebInfo.warnungen.length} Zeile(n) nicht erkannt, als Rohtext übernommen.
+                  </div>
+                )}
+              </div>
+            )}
+            {gaebPreisFehler && (
+              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>{gaebPreisFehler}</div>
+            )}
+            {gaebPreisInfo && (
+              <div style={{ background:"var(--gbg)", color:"var(--green)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
+                {gaebPreisInfo.treffer > 0
+                  ? <>✓ {gaebPreisInfo.treffer} Einheitspreise eingespielt{gaebPreisInfo.fehlend > 0 && <> — {gaebPreisInfo.fehlend} Ordnungszahl(en) aus der Preisdatei ohne passende Position gefunden</>}.</>
+                  : <>✓ {gaebPreisInfo.neu} Positionen als eigenständiger Preisimport angelegt (keine passende Ordnungszahl in der bestehenden Liste gefunden) — Bezeichnung bitte nachtragen.</>}
+                {gaebPreisInfo.warnungen.length > 0 && (
+                  <div style={{ marginTop:4, color:"var(--muted)" }}>
+                    {gaebPreisInfo.warnungen.length} Zeile(n) nicht erkannt.
                   </div>
                 )}
               </div>

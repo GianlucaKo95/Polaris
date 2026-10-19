@@ -10,10 +10,11 @@
 // Positionen inkl. Grund-/Alternativ-/Bedarfs-/Leitposition mit
 // Unterpositionen und einer Bezugsposition) verifiziert, 0 Warnungen.
 //
-// Noch NICHT abgedeckt (v1): D84/D86 mit Einheitspreisen (kein bepreistes
-// Beispiel vorgelegen — bei Bedarf nachziehen, sobald eine echte Datei
-// vorliegt), Vertragliche-Regelungen-Vorspann (Satzart T0/T1/T9, wird
-// übersprungen), Ausfüll-Platzhalter in Katalogtexten (z.B. "41A"-Marker).
+// Noch NICHT abgedeckt (v1): Vertragliche-Regelungen-Vorspann (Satzart
+// T0/T1/T9, wird übersprungen), Ausfüll-Platzhalter in Katalogtexten
+// (z.B. "41A"-Marker). D84/D86 mit Einheitspreisen: siehe parseGaeb90Preise()
+// weiter unten — eigener Parser, da diese Dateien strukturell anders
+// aufgebaut sind (reine Preisliste ohne Text/Titel).
 
 // Menge-Feld: 8 Vorkomma- + 3 Nachkommastellen (siehe GAEB-DA-XML-
 // Zahlformattabelle, für GAEB90 identisch) — 11 Ziffern am Stück, z.B.
@@ -205,9 +206,105 @@ export function gaeb90ZuPositionen({ positionen }) {
       menge: p.menge || 0,
       ep: 0,
       rabatt: 0,
+      // OZ wird mitgeführt (sonst ungenutzt), damit ein später hochgeladenes
+      // bepreistes D84/D86 (siehe gaeb90PreiseEinspielen()) den EP dieser
+      // Position wiederfinden und nachtragen kann.
+      ...(p.oz ? { oz: p.oz } : {}),
     });
   }
   return ergebnis;
+}
+
+// ── Bepreister Import (D84/D86) ────────────────────────────────────────────
+// D84/D86 sind reine Preislisten (Satzart 23 = Position mit EP+GP, Satzart
+// 32 = Zwischensumme je Titel-/Untertitelebene) OHNE eigenen Text — anders
+// als D81/D83 fehlen Satzart 25/26 (Kurz-/Langtext) und 11/12 (Titel-
+// struktur) komplett. Sie sind als Preis-Overlay gedacht, das über die
+// Ordnungszahl (OZ) auf eine bereits bekannte, unbepreiste LV-Struktur
+// gelegt wird. Zwei Wege: gaeb90PreiseEinspielen() für den Merge auf
+// vorhandene (importierte) Positionen, gaeb90PreiseZuPositionen() als
+// eigenständiger Import, falls noch keine passende LV-Struktur vorliegt.
+//
+// Gegen eine echte, bepreiste D84-Beispieldatei verifiziert (54 Positionen
+// über 3 Titel/10 Untertitel, Summen exakt gegen das dazugehörige
+// Angebots-PDF desselben Projekts abgeglichen).
+
+// 8-stellige OZ: 2 Titel + 2 Untertitel + 4 Positionsnummer, z.B.
+// "01010010" -> "01.01.0010" — punktiert, konsistent mit der OZ-Notation
+// in Angebots-/LV-Dokumenten dieses GAEB90-Dialekts (vierstellige statt
+// wie bei D81/D83 zweistellige Positionsnummern je Untertitel).
+function ozAusZiffern(acht) {
+  return `${acht.slice(0, 2)}.${acht.slice(2, 4)}.${acht.slice(4, 8)}`;
+}
+
+export function parseGaeb90Preise(text) {
+  const zeilen = text.split(/\r?\n/);
+  const warnungen = [];
+  const preise = [];
+
+  for (const rohzeile of zeilen) {
+    if (rohzeile.length < 2) continue;
+    const satzart = rohzeile.slice(0, 2);
+    let rest = rohzeile.slice(2);
+    const moeglSatznr = rest.slice(-6);
+    if (/^\d{6}$/.test(moeglSatznr) && rest.length > 6) rest = rest.slice(0, -6);
+    rest = rest.replace(/\s+$/, "");
+
+    if (satzart === "23") {
+      // "01010010  00004482000 000000448200" bzw. mit Index-Suffix
+      // "01010010a 00000889390 000000355756" (Bedarfs-/Zulage-Variante
+      // derselben Position) — EP 11-stellig (8+3 Nachkommastellen wie das
+      // Menge-Feld), GP 12-stellig (10+2 Nachkommastellen).
+      const m = rest.match(/^(\d{8})([a-zA-Z]?)\s+(\d{11})\s(\d{12})/);
+      if (!m) {
+        warnungen.push(`Preisposition nicht erkannt: "${rest}"`);
+        continue;
+      }
+      const [, acht, suffix, epZiffern, gpZiffern] = m;
+      preise.push({
+        oz: ozAusZiffern(acht) + suffix,
+        ep: Number(epZiffern) / 1000,
+        gp: Number(gpZiffern) / 100,
+      });
+      continue;
+    }
+    if (satzart === "32" || satzart === "99") continue; // Zwischensumme/Dateiende, keine Positionsdaten
+    // 00/01/02/03/04/06/08 (Kopfdaten) und alles Unbekannte: v1 ignoriert.
+  }
+
+  return { preise, warnungen };
+}
+
+// Eigenständiger Import ohne vorhandene LV-Struktur: OZ als Bezeichnung,
+// Menge aus GP/EP zurückgerechnet (D84 selbst enthält kein eigenes
+// Mengenfeld — nur Einheitspreis und Gesamtbetrag).
+export function gaeb90PreiseZuPositionen({ preise }) {
+  let idBasis = Date.now();
+  return preise.map(p => ({
+    id: idBasis++,
+    bez: `Position ${p.oz}`,
+    einheit: "",
+    menge: p.ep > 0 ? Math.round((p.gp / p.ep) * 1000) / 1000 : 1,
+    ep: p.ep,
+    rabatt: 0,
+    oz: p.oz,
+  }));
+}
+
+// Preis-Merge: aktualisiert den EP bereits vorhandener Positionen (z.B. aus
+// einem vorherigen unbepreisten GAEB-Import, siehe oz-Feld oben) anhand der
+// Ordnungszahl — nur Positionen mit passender OZ werden verändert, alles
+// andere (Gruppen-Kopfzeilen, Positionen ohne OZ, manuell angelegte Zeilen)
+// bleibt unangetastet.
+export function gaeb90PreiseEinspielen(positionen, preise) {
+  const preisNachOz = new Map(preise.map(p => [p.oz, p]));
+  let treffer = 0;
+  const aktualisiert = positionen.map(p => {
+    if (!p.oz || !preisNachOz.has(p.oz)) return p;
+    treffer++;
+    return { ...p, ep: preisNachOz.get(p.oz).ep };
+  });
+  return { positionen: aktualisiert, treffer, fehlend: preise.length - treffer };
 }
 
 // ── Export ──────────────────────────────────────────────────────────────────
