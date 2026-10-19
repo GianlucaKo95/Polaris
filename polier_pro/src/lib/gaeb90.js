@@ -208,8 +208,11 @@ export function gaeb90ZuPositionen({ positionen }) {
       rabatt: 0,
       // OZ wird mitgeführt (sonst ungenutzt), damit ein später hochgeladenes
       // bepreistes D84/D86 (siehe gaeb90PreiseEinspielen()) den EP dieser
-      // Position wiederfinden und nachtragen kann.
+      // Position wiederfinden und nachtragen kann. stlk (nur bei GAEB-XML-
+      // Quellen vorhanden, siehe gaebXml.js) analog für den Mutter-LV-
+      // Preisabgleich über Ausschreibungen hinweg (siehe lib/mutterlv.js).
       ...(p.oz ? { oz: p.oz } : {}),
+      ...(p.stlk ? { stlk: p.stlk } : {}),
     });
   }
   return ergebnis;

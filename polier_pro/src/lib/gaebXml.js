@@ -133,6 +133,18 @@ function provisLabel(wert) {
   return null;
 }
 
+// StLK-Katalognummer (Standardleistungsbuch) aus <StLNo Type="StLK">...
+// </StLNo> am Anfang der Description — anders als die Ordnungszahl (die pro
+// Ausschreibung neu vergeben wird) ist die Katalognummer über verschiedene
+// Ausschreibungen hinweg stabil und damit die zuverlässigste Grundlage für
+// den Mutter-LV-Preisabgleich (siehe lib/mutterlv.js). Nur Type="StLK"
+// berücksichtigt — andere Kataloge (z.B. bauherreneigene) sind firmen-
+// übergreifend nicht vergleichbar und würden sonst falsche Treffer liefern.
+function stlkAus(fragment) {
+  const m = fragment.match(/<StLNo Type="StLK">([^<]*)<\/StLNo>/);
+  return m ? m[1].trim() : null;
+}
+
 function itemVerarbeiten(itemKind, titelPfad, ozPfad, positionen, warnungen) {
   const rnopart = (itemKind.attrs.match(/RNoPart="([^"]*)"/) || [])[1] || "";
   const oz = [...ozPfad, rnopart].join(".");
@@ -142,12 +154,14 @@ function itemVerarbeiten(itemKind, titelPfad, ozPfad, positionen, warnungen) {
   const provisM = inhalt.match(/<Provis>([^<]*)<\/Provis>/);
   const descKind = direkteKinder(inhalt, ["Description"])[0];
   const bez = descKind ? beschreibungsTextAus(descKind.inhalt) : "";
+  const stlk = descKind ? stlkAus(descKind.inhalt) : null;
   if (!bez) warnungen.push(`Position ${oz}: kein Text gefunden`);
   const art = provisM ? provisLabel(provisM[1]) : null;
   positionen.push({
     typ: "position",
     titelPfad: titelPfad.join(" / "),
     oz,
+    ...(stlk ? { stlk } : {}),
     art,
     bez: art ? `[${art}] ${bez}` : bez,
     menge: qtyM ? Number(qtyM[1]) || 0 : 0,

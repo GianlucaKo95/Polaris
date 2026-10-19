@@ -45,6 +45,12 @@ test("parseGaebXml extrahiert Langtext aus dem p/span-Markup als reinen Fließte
   assert.ok(!pos.bez.includes("<"), "Markup darf nicht im Text verbleiben");
 });
 
+test("parseGaebXml extrahiert die StLK-Katalognummer für den Mutter-LV-Abgleich (lib/mutterlv.js)", () => {
+  const { positionen } = parseGaebXml(beispielDatei);
+  const pos = positionen.find(p => p.oz === "01.01.0010");
+  assert.equal(pos.stlk, "1910110711");
+});
+
 test("parseGaebXml markiert Bedarfspositionen (Provis-Feld) wie parseGaeb90 die Positionsart", () => {
   const { positionen } = parseGaebXml(beispielDatei);
   const arten = positionen.filter(p => p.typ === "position").map(p => p.art).filter(Boolean);
@@ -59,6 +65,7 @@ test("gaeb90ZuPositionen wandelt das X83-Parse-Ergebnis in das AngebotEditor-Pos
   const erste = uiPositionen.find(p => p.oz === "01.01.0010");
   assert.ok(erste);
   assert.equal(erste.ep, 0);
+  assert.equal(erste.stlk, "1910110711"); // für den Mutter-LV-Abgleich, siehe lib/mutterlv.js
 });
 
 test("Mengen aus dem X83-Import stimmen mit der aus dem echten D84 zurückgerechneten Menge überein (Cross-Check zweier unabhängiger Dateien desselben Projekts)", () => {
