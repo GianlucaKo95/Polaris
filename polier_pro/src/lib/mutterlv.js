@@ -17,6 +17,21 @@
 // Keine Position wird geraten: ohne Treffer bleibt der EP 0, sichtbar als
 // "unbepreist" in der Übersicht — dieselbe tolerante Philosophie wie die
 // übrigen GAEB-Parser in gaeb90.js/gaebXml.js.
+//
+// Zuschläge: ein GAEB-Preis aus der Mutter-LV ist i.d.R. bereits ein
+// fertiger Verkaufspreis der Vorausschreibung (inkl. damaliger Zuschläge),
+// keine reine Kostenbasis — ihn beim Generieren automatisch nochmal mit
+// einem Zuschlag zu belegen würde ihn stillschweigend verteuern. Statt
+// also selbst einen Zuschlagssatz zu raten, bereitet
+// positionenMitKalkulationVorbereiten() jede gematchte Position nur für die
+// bestehende Kalkulations-UI vor (siehe kalkulation.js/
+// PositionKalkulation.jsx): der Mutter-LV-Preis wird als Fremdleistungs-
+// Kostenbasis in eine Kalkulation mit 0% Zuschlag gelegt (der EP bleibt
+// dadurch unverändert), der Nutzer trägt im Angebot nur noch die für
+// DIESES Projekt passenden Zuschlagssätze ein, statt die Kalkulation von
+// Grund auf selbst anzulegen.
+
+import { leereKalkulation, kalkulationEp } from "./kalkulation.js";
 
 function normalisierterText(bez) {
   return (bez || "")
@@ -63,4 +78,18 @@ export function angebotAusAusschreibungAbgleichen(positionen, mutterLvIndex) {
     return { ...p, ep: fund.ep };
   });
   return { positionen: abgeglichen, treffer, gesamt, fehlend: gesamt - treffer };
+}
+
+// Bereitet gematchte Positionen für die Kalkulations-UI vor (siehe
+// Datei-Kommentar oben) — der Mutter-LV-Preis wird als Fremdleistungs-
+// Kostenbasis in eine Kalkulation mit 0% Zuschlag gelegt, der EP bleibt
+// dadurch unverändert. Nur für tatsächlich gematchte Positionen (ep>0 und
+// menge>0) — eine unbepreiste oder mengenlose Position braucht keine leere
+// Kalkulation aufgedrängt zu bekommen.
+export function positionenMitKalkulationVorbereiten(positionen) {
+  return (positionen || []).map(p => {
+    if (!p.ep || !p.menge) return p;
+    const kalk = { ...leereKalkulation(), fremdleistung: p.ep * p.menge };
+    return { ...p, kalk, ep: kalkulationEp(kalk, [], p.menge) };
+  });
 }

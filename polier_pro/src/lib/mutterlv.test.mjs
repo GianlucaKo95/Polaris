@@ -3,7 +3,7 @@
 // bepreistes Angebot vorzuschlagen.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen } from "./mutterlv.js";
+import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen, positionenMitKalkulationVorbereiten } from "./mutterlv.js";
 
 const mutterLv = {
   id: 1, name: "Parkdeck-Instandsetzung (Referenz)", gewerk: "Rohbau",
@@ -70,4 +70,29 @@ test("angebotAusAusschreibungAbgleichen bevorzugt StLK vor Text, falls beide auf
   ];
   const { positionen } = angebotAusAusschreibungAbgleichen(ausschreibung, idx);
   assert.equal(positionen[0].ep, 4482);
+});
+
+test("positionenMitKalkulationVorbereiten legt für gematchte Positionen eine Kalkulation mit 0% Zuschlag an, der EP bleibt unverändert", () => {
+  const idx = mutterLvIndexBauen([mutterLv]);
+  const ausschreibung = [
+    { id: 50, bez: "Egal", einheit: "Psch", menge: 2, ep: 0, rabatt: 0, stlk: "1910110711" }, // matcht, ep=4482
+  ];
+  const { positionen: abgeglichen } = angebotAusAusschreibungAbgleichen(ausschreibung, idx);
+  const [pos] = positionenMitKalkulationVorbereiten(abgeglichen);
+  assert.ok(pos.kalk, "gematchte Position sollte eine Kalkulation bekommen");
+  assert.equal(pos.kalk.fremdleistung, 4482 * 2);
+  assert.equal(pos.kalk.zuschlagFremdleistung, 0);
+  assert.equal(pos.ep, 4482); // unverändert trotz Kalkulation, da Zuschlag 0%
+});
+
+test("positionenMitKalkulationVorbereiten lässt unbepreiste Positionen ohne Kalkulation (keine aufgedrängte leere Kalkulation)", () => {
+  const ohneTreffer = [{ id: 60, bez: "Ohne Referenz", einheit: "m2", menge: 10, ep: 0, rabatt: 0 }];
+  const [pos] = positionenMitKalkulationVorbereiten(ohneTreffer);
+  assert.equal(pos.kalk, undefined);
+});
+
+test("positionenMitKalkulationVorbereiten lässt Gruppenkopfzeilen (ep=0 durch menge=0) unangetastet", () => {
+  const kopfzeile = [{ id: 70, bez: "── Titel ──", einheit: "", menge: 0, ep: 0, rabatt: 0 }];
+  const [pos] = positionenMitKalkulationVorbereiten(kopfzeile);
+  assert.equal(pos.kalk, undefined);
 });

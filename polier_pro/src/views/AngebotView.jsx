@@ -4,7 +4,7 @@ import { AngebotEditor } from "./AngebotEditor.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
-import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen } from "../lib/mutterlv.js";
+import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen, positionenMitKalkulationVorbereiten } from "../lib/mutterlv.js";
 
 export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, session }) {
   const [aktAngebot,  setAktAngebot]  = useState(null);
@@ -40,6 +40,15 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
   // bzw. Bezeichnungstext vorbelegt (siehe lib/mutterlv.js). Positionen ohne
   // Treffer bleiben bewusst bei EP 0 — nichts wird geraten, der Nutzer prüft
   // und ergänzt sie wie jedes andere neue Angebot im Editor.
+  //
+  // Zuschläge: ein Mutter-LV-Preis ist i.d.R. schon ein fertiger
+  // Verkaufspreis, kein reiner Kostenwert — ihn automatisch nochmal mit
+  // einem Zuschlag zu belegen würde ihn stillschweigend verteuern. Jede
+  // gematchte Position bekommt deshalb über positionenMitKalkulationVorbereiten()
+  // direkt eine aktive Kalkulation (Mutter-LV-Preis als Fremdleistungs-
+  // Kostenbasis, 0% Zuschlag — der EP bleibt unverändert), damit der Nutzer
+  // im Angebot nur noch den für DIESES Projekt passenden Zuschlagssatz
+  // einträgt, statt die Kalkulation von Grund auf selbst anzulegen.
   async function ausschreibungVerarbeiten(geparst, dateiname) {
     setFehler(""); setInfo(null);
     const positionenRoh = gaeb90ZuPositionen(geparst);
@@ -48,7 +57,9 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
       return;
     }
     const index = mutterLvIndexBauen(lvVorlagen);
-    const { positionen, treffer, gesamt, fehlend } = angebotAusAusschreibungAbgleichen(positionenRoh, index);
+    const abgleich = angebotAusAusschreibungAbgleichen(positionenRoh, index);
+    const { treffer, gesamt, fehlend } = abgleich;
+    const positionen = positionenMitKalkulationVorbereiten(abgleich.positionen);
     const titel = geparst.projektTitel || dateiname.replace(/\.[^.]+$/, "");
     const a = {
       titel:        `Angebot ${titel}`,
@@ -163,7 +174,7 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
         <div style={{ background:"var(--gbg)", color:"var(--green)", borderRadius:10,
           padding:"9px 14px", marginBottom:10, fontSize:12,
           border:"1px solid var(--green)" }}>
-          ✓ „{info.titel}" erstellt — {info.treffer} von {info.gesamt} Positionen automatisch aus der Mutter-LV bepreist
+          ✓ „{info.titel}" erstellt — {info.treffer} von {info.gesamt} Positionen automatisch aus der Mutter-LV bepreist (mit Kalkulation, Zuschlag noch 0% — bitte im Angebot ergänzen)
           {info.fehlend > 0 && <>, {info.fehlend} noch ohne Preis</>}. Bitte vor dem Versenden prüfen.
         </div>
       )}

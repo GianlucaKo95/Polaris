@@ -128,9 +128,14 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
 
   function vorlageLaden(vorlage) {
     const neuPos = vorlage.positionen.map(p => {
-      const ep = einheitspreise.find(e=>e.id===p.ep_id);
+      // p.ep_id: manuell über VorlageFormular.jsx angelegte Vorlagen
+      // referenzieren einen Einheitspreise-Katalogeintrag. p.ep (direkt):
+      // aus einem GAEB-Import als Mutter-LV gespeicherte Vorlagen
+      // (AdminParameterView "Mutter-LV hochladen") tragen stattdessen schon
+      // den fertigen Preis selbst — hat Vorrang, falls vorhanden.
+      const ep = p.ep ?? einheitspreise.find(e=>e.id===p.ep_id)?.preis ?? 0;
       return { id:Date.now()+Math.random(), bez:p.bez,
-        einheit:p.einheit, menge:0, ep:ep?.preis||0 };
+        einheit:p.einheit, menge:0, ep };
     });
     setA(x => ({ ...x, positionen:[...x.positionen, ...neuPos] }));
     setVonVorlage(false);
