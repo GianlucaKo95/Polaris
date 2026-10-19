@@ -1,9 +1,13 @@
 import { useState, useEffect } from "react";
-import { MapPin, Users, Cloud, Camera, Building2, TriangleAlert, CircleCheckBig, Ban, ClipboardCheck, FileText, Download } from "lucide-react";
+import { MapPin, Users, Cloud, Camera, Building2, TriangleAlert, CircleCheckBig, Ban, ClipboardCheck, FileText, Download, Receipt } from "lucide-react";
 import { sbKundenportalDaten } from "../lib/supabase.js";
 import { PROJEKTTYPEN, AUFGABEN_STATUS } from "../config/konstanten.js";
 import { KundenMangelMelden } from "../components/KundenMangelMelden.jsx";
 import { KundenAbnahme } from "../components/KundenAbnahme.jsx";
+import { KundenRechnungBestaetigen } from "../components/KundenRechnungBestaetigen.jsx";
+import { rechnungGesamt } from "../lib/rechnung.js";
+
+const EUR = n => (n || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Öffentliche, read-only Seite für den Bauherrn — kein Login, kein Zugriff
 // auf den Rest der App. Erreicht über ?kunde=<token> (siehe App.jsx), lädt
@@ -16,6 +20,8 @@ export function KundenportalScreen({ token }) {
   const [zeigeMangelMelden, setZeigeMangelMelden] = useState(false);
   const [zeigeAbnahme, setZeigeAbnahme] = useState(false);
   const [abnahmeErgebnis, setAbnahmeErgebnis] = useState(null);
+  const [rechnungZumBestaetigen, setRechnungZumBestaetigen] = useState(null); // die gerade geöffnete Rechnung, oder null
+  const [rechnungErgebnisse, setRechnungErgebnisse] = useState({}); // { [rechnung_id]: { entscheidung, ... } } — optimistisch nach dem Absenden, bevor daten.rechnungen neu geladen wird
 
   useEffect(() => {
     let aktiv = true;
@@ -62,6 +68,7 @@ export function KundenportalScreen({ token }) {
   const tagesberichte = daten.tagesberichte || [];
   const maengel = daten.maengel || [];
   const dokumente = daten.dokumente || [];
+  const rechnungen = daten.rechnungen || [];
   const abnahmeEntscheidung = abnahmeErgebnis?.entscheidung || daten.abnahme_entscheidung;
   const abnahmeName    = abnahmeErgebnis ? abnahmeErgebnis.name    : daten.abnahme_entschieden_name;
   const abnahmeDatum   = abnahmeErgebnis ? new Date(abnahmeErgebnis.entschieden_am) : (daten.abnahme_entschieden_am ? new Date(daten.abnahme_entschieden_am) : null);
@@ -152,6 +159,66 @@ export function KundenportalScreen({ token }) {
         {zeigeAbnahme && (
           <KundenAbnahme token={token} onClose={() => setZeigeAbnahme(false)}
             onEntschieden={erg => { setAbnahmeErgebnis(erg); setZeigeAbnahme(false); }} />
+        )}
+
+        {/* Rechnungen — Abschlags-/Schlussrechnungen nach Baufortschritt
+            (siehe lib/rechnung.js), hier nur versendete/bezahlte (nie
+            Entwürfe). Vor einer Bestätigung zeigt eine Karte den
+            Leistungsstand je Position mit Button; danach den unveränderlichen
+            Beleg (Name/Zeitpunkt/Hash), analog zur Bauabnahme oben. */}
+        {rechnungen.length > 0 && (
+          <div style={{ marginBottom:18 }}>
+            <div style={{ fontWeight:800, fontSize:13, marginBottom:10,
+              display:"flex", alignItems:"center", gap:6 }}>
+              <Receipt size={14} /> Rechnungen
+            </div>
+            {rechnungen.map(r => {
+              const erg = rechnungErgebnisse[r.id];
+              const entscheidung = erg?.entscheidung || r.bestaetigung?.entscheidung;
+              const g = rechnungGesamt(r.netto_betrag, { sicherheitseinbehaltProzent: r.sicherheitseinbehalt_prozent, mwstProzent: r.mwst });
+              return (
+                <div key={r.id} style={{ background:"var(--surface)", border:"1px solid var(--border)",
+                  padding:"12px 14px", marginBottom:9 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:13.5 }}>
+                        {r.typ === "schluss" ? "Schlussrechnung" : "Abschlagsrechnung"} {r.nummer}
+                      </div>
+                      <div style={{ color:"var(--muted)", fontSize:11.5, marginTop:2 }}>
+                        {new Date(r.datum).toLocaleDateString("de-DE")}
+                      </div>
+                    </div>
+                    <div style={{ fontWeight:800, fontSize:14, color:"var(--yellow)", flexShrink:0 }}>
+                      {EUR(g.zahlbetrag)} €
+                    </div>
+                  </div>
+                  {!entscheidung ? (
+                    <button onClick={() => setRechnungZumBestaetigen(r)}
+                      style={{ width:"100%", background:"var(--ybg)", color:"var(--ydark)",
+                        border:"1.5px solid var(--yellow)", borderRadius:10, padding:"9px 12px",
+                        fontWeight:700, cursor:"pointer", fontSize:12.5, fontFamily:"inherit",
+                        marginTop:10, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                      <ClipboardCheck size={13} />Leistungsstand bestätigen
+                    </button>
+                  ) : (
+                    <div style={{ marginTop:9, color: entscheidung === "bestaetigt" ? "var(--green)" : "var(--red)",
+                      fontSize:12, fontWeight:700, display:"flex", alignItems:"center", gap:5 }}>
+                      {entscheidung === "bestaetigt" ? <CircleCheckBig size={13} /> : <Ban size={13} />}
+                      Leistungsstand {entscheidung === "bestaetigt" ? "bestätigt" : "beanstandet"}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {rechnungZumBestaetigen && (
+          <KundenRechnungBestaetigen rechnung={rechnungZumBestaetigen} token={token}
+            onClose={() => setRechnungZumBestaetigen(null)}
+            onEntschieden={erg => {
+              setRechnungErgebnisse(x => ({ ...x, [rechnungZumBestaetigen.id]: erg }));
+              setRechnungZumBestaetigen(null);
+            }} />
         )}
 
         {/* Mangel melden — läuft über eine eigene, token-geprüfte RPC

@@ -152,7 +152,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 </div></body></html>`;
 }
 
-function AuftragDetail({ auftrag, projekt, eigeneFirma, baufortschritt, rechnungen, onBaufortschrittSpeichern, onRechnungSpeichern, onRechnungLoeschen, onClose }) {
+function AuftragDetail({ auftrag, projekt, eigeneFirma, baufortschritt, rechnungen, bestaetigungen, onBaufortschrittSpeichern, onRechnungSpeichern, onRechnungLoeschen, onClose }) {
   const [prozentEntwurf, setProzentEntwurf] = useState({}); // { [positionId]: string } — lokaler Eingabepuffer bis onBlur
   const [fehler, setFehler] = useState("");
   const [erstelltLaedt, setErstelltLaedt] = useState(false);
@@ -314,6 +314,7 @@ function AuftragDetail({ auftrag, projekt, eigeneFirma, baufortschritt, rechnung
       {[...rechnungen].reverse().map(r => {
         const g = rechnungGesamt(r.netto_betrag, { sicherheitseinbehaltProzent: r.sicherheitseinbehalt_prozent, mwstProzent: r.mwst });
         const statusInfo = STATUS_RECHNUNG[r.status] || STATUS_RECHNUNG.entwurf;
+        const bestaetigung = (bestaetigungen || []).find(b => b.rechnung_id === r.id);
         return (
           <div key={r.id} style={{ background:"var(--surface)", borderRadius:12, padding:"11px 14px",
             marginBottom:7, border:"1.5px solid var(--border)" }}>
@@ -334,6 +335,14 @@ function AuftragDetail({ auftrag, projekt, eigeneFirma, baufortschritt, rechnung
                 </div>
               </div>
             </div>
+            {bestaetigung && (
+              <div style={{ marginTop:8, fontSize:11.5, fontWeight:700,
+                color: bestaetigung.entscheidung === "bestaetigt" ? "var(--green)" : "var(--red)" }}>
+                {bestaetigung.entscheidung === "bestaetigt"
+                  ? `✓ Vom Kunden bestätigt (${bestaetigung.entschieden_name}, ${new Date(bestaetigung.entschieden_am).toLocaleDateString("de-DE")})`
+                  : `⚠ Vom Kunden beanstandet${bestaetigung.beanstandungsgrund ? ": " + bestaetigung.beanstandungsgrund : ""}`}
+              </div>
+            )}
             <div style={{ display:"flex", gap:6, marginTop:9, flexWrap:"wrap" }}>
               <button onClick={() => rechnungDrucken(r)}
                 style={{ background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)",
@@ -371,7 +380,7 @@ function AuftragDetail({ auftrag, projekt, eigeneFirma, baufortschritt, rechnung
   );
 }
 
-export function RechnungenView({ projekt, angebote, baufortschritt, rechnungen, eigeneFirma, onBaufortschrittSpeichern, onRechnungSpeichern, onRechnungLoeschen }) {
+export function RechnungenView({ projekt, angebote, baufortschritt, rechnungen, rechnungBestaetigungen, eigeneFirma, onBaufortschrittSpeichern, onRechnungSpeichern, onRechnungLoeschen }) {
   const [aktAuftragId, setAktAuftragId] = useState(null);
   useBackButton(aktAuftragId, () => setAktAuftragId(null));
 
@@ -391,6 +400,7 @@ export function RechnungenView({ projekt, angebote, baufortschritt, rechnungen, 
         eigeneFirma={eigeneFirma}
         baufortschritt={(baufortschritt||[]).filter(b => b.angebot_id === auftrag.id)}
         rechnungen={(rechnungen||[]).filter(r => r.angebot_id === auftrag.id)}
+        bestaetigungen={rechnungBestaetigungen}
         onBaufortschrittSpeichern={onBaufortschrittSpeichern}
         onRechnungSpeichern={onRechnungSpeichern}
         onRechnungLoeschen={onRechnungLoeschen}

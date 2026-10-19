@@ -394,6 +394,10 @@ export default function PolierApp() {
   // änderbar bleiben muss.
   const [aktProjektBaufortschritt, setAktProjektBaufortschritt] = useState([]);
   const [aktProjektRechnungen,     setAktProjektRechnungen]     = useState([]);
+  // Firmenweit statt projektgefiltert geladen (RLS scoped ohnehin auf die
+  // eigene Firma, siehe Migration) — vermeidet eine zweite, von
+  // aktProjektRechnungen abhängige Ladephase nur für diese kleine Tabelle.
+  const [rechnungBestaetigungen,   setRechnungBestaetigungen]    = useState([]);
   const [projektDatenLaden,   setProjektDatenLaden]   = useState(false);
   const [projektDatenFehler,  setProjektDatenFehler]  = useState("");
 
@@ -401,7 +405,7 @@ export default function PolierApp() {
     if (!aktivId || !auth.session?.access_token) {
       setAktProjektAufgaben([]); setAktProjektKolonnen([]); setAktProjektBerichte([]);
       setAktProjektAngebote([]); setAktProjektKommentare([]);
-      setAktProjektBaufortschritt([]); setAktProjektRechnungen([]);
+      setAktProjektBaufortschritt([]); setAktProjektRechnungen([]); setRechnungBestaetigungen([]);
       setZeitbuchungen([]);
       return;
     }
@@ -419,6 +423,11 @@ export default function PolierApp() {
       client.from("angebote").select("*").eq("projekt_id", aktivId).order("created_at", { ascending: false }),
       client.from("baufortschritt").select("*").eq("projekt_id", aktivId),
       client.from("rechnungen").select("*").eq("projekt_id", aktivId).order("created_at", { ascending: true }),
+      // Firmenweit statt nach aktivId gefiltert (die Tabelle trägt kein
+      // projekt_id-Feld, nur rechnung_id — RLS scoped ohnehin auf die
+      // eigene Firma, siehe Migration) — RechnungenView filtert selbst auf
+      // die Rechnungen des gerade offenen Auftrags.
+      client.from("rechnung_bestaetigungen").select("*"),
       // Für den KI-Projektkontext (baueProjektKontext in lib/ai.js) — nur die
       // letzten 40, sonst wächst der Prompt mit jedem weiteren Kommentar
       // unbegrenzt. aufgaben!inner filtert serverseitig auf diese Baustelle,
@@ -428,7 +437,7 @@ export default function PolierApp() {
         .eq("aufgaben.projekt_id", aktivId)
         .order("created_at", { ascending: false })
         .limit(40),
-    ]).then(([aRes, kRes, bRes, zRes, anRes, bfRes, reRes, koRes]) => {
+    ]).then(([aRes, kRes, bRes, zRes, anRes, bfRes, reRes, rbRes, koRes]) => {
       if (abgebrochen) return;
       const fehler = [];
       if (aRes.error) fehler.push(`Aufgaben: ${aRes.error.message}`);
@@ -451,6 +460,7 @@ export default function PolierApp() {
       // Kernprojektdaten nicht als Fehler anzeigen.
       setAktProjektBaufortschritt(bfRes.error ? [] : (bfRes.data || []));
       setAktProjektRechnungen(reRes.error ? [] : (reRes.data || []));
+      setRechnungBestaetigungen(rbRes.error ? [] : (rbRes.data || []));
       // Kommentar-Query bewusst nicht in die fehler-Liste oben aufgenommen und
       // bei Fehler einfach als leer behandelt — sie füttert nur den optionalen
       // KI-Kontext, ein Fehlschlag dort darf das Laden der Kernprojektdaten
@@ -1450,7 +1460,7 @@ export default function PolierApp() {
         {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
         {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} session={auth.session} />}
-        {tab === "rechnungen"    && <RechnungenView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} rechnungen={rechnungen} eigeneFirma={eigeneFirma} onBaufortschrittSpeichern={baufortschrittSpeichern} onRechnungSpeichern={rechnungSpeichern} onRechnungLoeschen={rechnungLoeschen} profil={aktiveProfil} />}
+        {tab === "rechnungen"    && <RechnungenView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} rechnungen={rechnungen} rechnungBestaetigungen={rechnungBestaetigungen} eigeneFirma={eigeneFirma} onBaufortschrittSpeichern={baufortschrittSpeichern} onRechnungSpeichern={rechnungSpeichern} onRechnungLoeschen={rechnungLoeschen} profil={aktiveProfil} />}
         {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
         {tab === "firmen"       && <FirmenView owneFirma={eigeneFirma} setEigeneFirma={setEigeneFirma} subs={subs} setSubs={setSubs}

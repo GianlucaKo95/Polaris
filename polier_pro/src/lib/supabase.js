@@ -401,15 +401,15 @@ export async function sbKundenportalDeaktivieren(id, session) {
 // Öffentlicher Abruf ohne Session — läuft über eine SECURITY DEFINER-RPC,
 // die gezielt nur die für den Kunden freigegebenen, kuratierten Felder
 // liefert (kein Zugriff auf echte Tabellen für anon, siehe Migration).
-// _v4 statt der alten kundenportal_daten/_v2/_v3: liefert zusätzlich eine
-// Mängel-Liste je Projekt (Statusverfolgung im Portal), den aktuellen
-// Abnahme-Status (Kundenabnahme) und die von der Firma hochgeladenen
-// Dokumente (PDF-Downloads im Portal) — neue Funktion statt DROP+CREATE,
-// siehe einladung_pruefen_v2/v3 bzw. angebot_freigabe_*_v2 für denselben,
-// aus früheren Migrationen bekannten Workaround.
+// _v5 statt der alten kundenportal_daten/_v2/_v3/_v4: liefert zusätzlich die
+// versendeten/bezahlten Rechnungen (Abschlags-/Schlussrechnungen) der
+// Aufträge dieses Projekts samt einer eventuell bereits vorliegenden
+// Kundenbestätigung — neue Funktion statt DROP+CREATE, siehe
+// einladung_pruefen_v2/v3 bzw. angebot_freigabe_*_v2 für denselben, aus
+// früheren Migrationen bekannten Workaround.
 export async function sbKundenportalDaten(token) {
   try {
-    const { data, error } = await supabase.rpc("kundenportal_daten_v4", { p_token: token });
+    const { data, error } = await supabase.rpc("kundenportal_daten_v5", { p_token: token });
     if (error || !data?.length) return null;
     return data[0];
   } catch { return null; }
@@ -429,6 +429,27 @@ export async function sbKundenportalAbnahmeEntscheiden(token, { entscheidung, na
       p_signatur: signatur || null,
       p_grund: grund || null,
       p_dokument: dokument || null,
+    });
+    if (error) return { ok: false, hash: null, fehler: error.message || "Senden fehlgeschlagen." };
+    return { ok: true, hash: data, fehler: null };
+  } catch { return { ok: false, hash: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// Lässt den Kunden ohne Login über denselben Kundenportal-Token den
+// Leistungsstand EINER Rechnung bestätigen oder beanstanden — analog
+// sbKundenportalAbnahmeEntscheiden, aber pro Rechnung statt einmal pro
+// Projekt (siehe rechnung_bestaetigungen-Tabelle). Einmalig: ein zweiter
+// Aufruf für dieselbe Rechnung schlägt mit der RPC-eigenen Fehlermeldung
+// fehl ("bereits beantwortet").
+export async function sbKundenportalRechnungBestaetigen(token, { rechnungId, entscheidung, name, signatur, grund }) {
+  try {
+    const { data, error } = await supabase.rpc("kundenportal_rechnung_bestaetigen", {
+      p_token: token,
+      p_rechnung_id: rechnungId,
+      p_entscheidung: entscheidung,
+      p_name: name || "",
+      p_signatur: signatur || null,
+      p_grund: grund || null,
     });
     if (error) return { ok: false, hash: null, fehler: error.message || "Senden fehlgeschlagen." };
     return { ok: true, hash: data, fehler: null };
@@ -958,6 +979,21 @@ export async function sbRechnungLoeschen(id, session) {
     const { error } = await client.from("rechnungen").delete().eq("id", id);
     return !error;
   } catch { return false; }
+}
+
+// Vom Kunden im Portal bereits beantwortete Leistungsstand-Bestätigungen zu
+// den übergebenen Rechnungen (siehe kundenportal_rechnung_bestaetigen-RPC
+// unten) — rein lesend für die interne Rechnungen-Ansicht, damit Polier/
+// Admin sehen, ob/wie der Kunde reagiert hat.
+export async function sbRechnungBestaetigungenLaden(rechnungIds, session) {
+  if (!session?.access_token || !rechnungIds?.length) return [];
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("rechnung_bestaetigungen").select("*")
+      .in("rechnung_id", rechnungIds);
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
 }
 
 // Budget-Positionen + Stundensatz liegen (anders als Aufgaben/Kolonnen/
