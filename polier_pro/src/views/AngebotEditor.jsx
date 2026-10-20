@@ -13,10 +13,11 @@ import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
 import { AngebotNachweis } from "../components/AngebotNachweis.jsx";
 import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
-import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, gaeb90Schreiben, gaeb90AlsWindows1252, parseGaeb90Preise, gaeb90PreiseZuPositionen, gaeb90PreiseEinspielen } from "../lib/gaeb90.js";
+import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, gaeb90Schreiben, gaeb90AlsWindows1252, parseGaeb90Preise, gaeb90PreiseZuPositionen, gaeb90PreiseEinspielen, gaeb90PreiseSchreiben } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
-import { leereKalkulation, kalkulationEp } from "../lib/kalkulation.js";
+import { leereKalkulation, kalkulationEp, kalkulationEinzelkosten, kalkulationZuschlagProzent, kalkulationGesamtkosten } from "../lib/kalkulation.js";
 import { PositionKalkulation } from "../components/PositionKalkulation.jsx";
+import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
 // seine Bedeutung hängt aber vom Aufgabentyp ab (siehe extraLabel in
@@ -50,6 +51,8 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [gaebXmlFehler, setGaebXmlFehler] = useState("");
   const [gaebXmlInfo,   setGaebXmlInfo]   = useState(null); // { anzahl, warnungen }
   const gaebXmlInputRef = useRef(null);
+  const [gaebPreisExportInfo, setGaebPreisExportInfo] = useState(null); // { anzahl, warnungen }
+  const [kalkExportRows, setKalkExportRows] = useState(null);
   const [speichertLaedt, setSpeichertLaedt] = useState(false);
   const [wordLaedt, setWordLaedt] = useState(false);
   const [wordBlob,  setWordBlob]  = useState(null);
@@ -258,8 +261,8 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   // GAEB90-Export der unbepreisten Struktur (D81/D83-artig) — Umkehrung
   // von gaebImportieren(): nützlich um ein importiertes/bearbeitetes LV
   // wieder herauszugeben oder an einen Nachunternehmer weiterzureichen.
-  // Bepreister Export (D84/D86 mit Einheitspreisen) ist nicht abgedeckt,
-  // siehe lib/gaeb90.js.
+  // Bepreister Export (D84/D86 mit Einheitspreisen): siehe
+  // gaebPreiseExportieren() unten.
   function gaebExportieren() {
     const text = gaeb90Schreiben(a.positionen, { projektTitel: a.titel });
     const blob = new Blob([gaeb90AlsWindows1252(text)], { type: "application/octet-stream" });
@@ -267,6 +270,81 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
     const link = document.createElement("a");
     link.href = url; link.download = ("Angebot_" + a.titel.replace(/ /g, "_") + ".d83");
     link.click(); URL.revokeObjectURL(url);
+  }
+
+  // Bepreister GAEB90-Export (D84) — für die Rückgabe eines automatisch aus
+  // einer Ausschreibung generierten Angebots (siehe AngebotView.jsx
+  // "Aus Ausschreibung generieren" + lib/mutterlv.js) an die ausschreibende
+  // Stelle. Braucht pro Position eine Ordnungszahl im Format des X83-/D84-
+  // Dialekts (siehe gaeb90PreiseSchreiben() in lib/gaeb90.js) — die liegt vor,
+  // wenn die Positionen aus einem GAEB-XML-Import bzw. dem Mutter-LV-Abgleich
+  // stammen; eine manuell angelegte Position wird mit Warnung übersprungen.
+  function gaebPreiseExportieren() {
+    const { text, warnungen } = gaeb90PreiseSchreiben(a.positionen, { projektTitel: a.titel });
+    setGaebPreisExportInfo({ anzahl: a.positionen.length - warnungen.length, warnungen: warnungen.length });
+    const blob = new Blob([gaeb90AlsWindows1252(text)], { type: "application/octet-stream" });
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = ("Angebot_" + a.titel.replace(/ /g, "_") + ".d84");
+    link.click(); URL.revokeObjectURL(url);
+  }
+
+  // Kalkulationsübersicht als Excel — zur eigenen internen Nachverfolgung
+  // (nicht für die Ausschreibung bestimmt, siehe gaebPreiseExportieren()
+  // dafür): je Position Einzelkosten/Zuschlag/Gesamtkosten aus der
+  // Kalkulation (kalkulation.js/PositionKalkulation.jsx), damit der
+  // tatsächlich kalkulierte Zuschlag auf jede Position nachvollziehbar
+  // bleibt. Positionen ohne eigene Kalkulation (direkter EP) werden mit
+  // angezeigt, aber ohne erfundene Kostenwerte — nur EP/GP sind dort bekannt.
+  const KALK_EXPORT_SPALTEN = [
+    { width: 36 }, { width: 10 }, { width: 10 }, { width: 16 },
+    { width: 12 }, { width: 14 }, { width: 16 }, { width: 12 }, { width: 14 },
+  ];
+  function kalkZelle(value, extra) { return { value, ...extra }; }
+  function kalkulationExportieren() {
+    const kopf = ["Position", "Menge", "Einheit", "Einzelkosten (€)", "Zuschlag (%)", "Zuschlag (€)", "Gesamtkosten (€)", "EP (€)", "GP (€)"];
+    const rows = [kopf.map(t => kalkZelle(t, { fontWeight: "bold", type: String }))];
+    let summeGp = 0;
+
+    for (const p of a.positionen) {
+      if (!p.bez || p.bez.startsWith("──")) continue; // Gruppenkopfzeile, keine Kalkulationszeile
+      const gp = (p.menge || 0) * (p.ep || 0) * (1 - (p.rabatt || 0) / 100);
+      summeGp += gp;
+      if (p.kalk) {
+        const einzel = kalkulationEinzelkosten(p.kalk, kalkulationspreise);
+        const gesamt = kalkulationGesamtkosten(p.kalk, kalkulationspreise);
+        rows.push([
+          kalkZelle(p.bez, { type: String }),
+          kalkZelle(p.menge || 0, { type: Number }),
+          kalkZelle(p.einheit || "", { type: String }),
+          kalkZelle(Number(einzel.toFixed(2)), { type: Number }),
+          kalkZelle(Number(kalkulationZuschlagProzent(p.kalk, kalkulationspreise).toFixed(1)), { type: Number }),
+          kalkZelle(Number((gesamt - einzel).toFixed(2)), { type: Number }),
+          kalkZelle(Number(gesamt.toFixed(2)), { type: Number }),
+          kalkZelle(Number((p.ep || 0).toFixed(2)), { type: Number }),
+          kalkZelle(Number(gp.toFixed(2)), { type: Number }),
+        ]);
+      } else {
+        rows.push([
+          kalkZelle(p.bez, { type: String }),
+          kalkZelle(p.menge || 0, { type: Number }),
+          kalkZelle(p.einheit || "", { type: String }),
+          kalkZelle("keine Kalkulation hinterlegt", { type: String, columnSpan: 4 }),
+          null, null, null,
+          kalkZelle(Number((p.ep || 0).toFixed(2)), { type: Number }),
+          kalkZelle(Number(gp.toFixed(2)), { type: Number }),
+        ]);
+      }
+    }
+
+    rows.push([
+      kalkZelle("", { type: String }), kalkZelle("", { type: String }), kalkZelle("", { type: String }),
+      kalkZelle("", { type: String }), kalkZelle("", { type: String }), kalkZelle("", { type: String }),
+      kalkZelle("GESAMT (netto):", { fontWeight: "bold", type: String }),
+      kalkZelle("", { type: String }),
+      kalkZelle(Number(summeGp.toFixed(2)), { fontWeight: "bold", type: Number }),
+    ]);
+    setKalkExportRows(rows);
   }
 
   async function kiPositionenUebernehmen() {
@@ -805,7 +883,33 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   <ChartColumn size={12} /> GAEB-LV exportieren (unbepreist)
                 </button>
               )}
+              {a.positionen.length > 0 && (
+                <button onClick={gaebPreiseExportieren}
+                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <ChartColumn size={12} /> GAEB-Angebot exportieren (D84, bepreist)
+                </button>
+              )}
+              {a.positionen.length > 0 && (
+                <button onClick={kalkulationExportieren}
+                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <ChartColumn size={12} /> Kalkulation als Excel exportieren
+                </button>
+              )}
             </div>}
+            {gaebPreisExportInfo && (
+              <div style={{ background: gaebPreisExportInfo.warnungen > 0 ? "var(--ybg)" : "var(--gbg)",
+                color: gaebPreisExportInfo.warnungen > 0 ? "var(--ydark)" : "var(--green)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
+                ✓ {gaebPreisExportInfo.anzahl} Position(en) als bepreiste GAEB-Datei exportiert
+                {gaebPreisExportInfo.warnungen > 0 && <> — {gaebPreisExportInfo.warnungen} ohne Ordnungszahl übersprungen</>}.
+              </div>
+            )}
             {gaebFehler && (
               <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
                 padding:"8px 12px", marginBottom:9, fontSize:12 }}>{gaebFehler}</div>
@@ -1025,6 +1129,9 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
       </div>
 
       <DocxVorschauModal blob={wordBlob} dateiname={("Angebot_"+a.titel.replace(/ /g,"_")+".docx")} eigeneFirma={eigeneFirma} onClose={() => setWordBlob(null)} />
+      <ExcelVorschauModal rows={kalkExportRows} columns={KALK_EXPORT_SPALTEN}
+        dateiname={("Kalkulation_"+a.titel.replace(/ /g,"_")+".xlsx")}
+        eigeneFirma={eigeneFirma} onClose={() => setKalkExportRows(null)} />
 
     </div>
   );

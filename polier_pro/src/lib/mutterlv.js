@@ -18,18 +18,17 @@
 // "unbepreist" in der Übersicht — dieselbe tolerante Philosophie wie die
 // übrigen GAEB-Parser in gaeb90.js/gaebXml.js.
 //
-// Zuschläge: ein GAEB-Preis aus der Mutter-LV ist i.d.R. bereits ein
-// fertiger Verkaufspreis der Vorausschreibung (inkl. damaliger Zuschläge),
-// keine reine Kostenbasis — ihn beim Generieren automatisch nochmal mit
-// einem Zuschlag zu belegen würde ihn stillschweigend verteuern. Statt
-// also selbst einen Zuschlagssatz zu raten, bereitet
-// positionenMitKalkulationVorbereiten() jede gematchte Position nur für die
-// bestehende Kalkulations-UI vor (siehe kalkulation.js/
-// PositionKalkulation.jsx): der Mutter-LV-Preis wird als Fremdleistungs-
-// Kostenbasis in eine Kalkulation mit 0% Zuschlag gelegt (der EP bleibt
-// dadurch unverändert), der Nutzer trägt im Angebot nur noch die für
-// DIESES Projekt passenden Zuschlagssätze ein, statt die Kalkulation von
-// Grund auf selbst anzulegen.
+// Zuschläge: ein GAEB-Preis aus der Mutter-LV wird hier bewusst als reine
+// Kostenbasis behandelt (nicht als bereits fertiger Verkaufspreis) —
+// positionenMitKalkulationVorbereiten() legt ihn für jede gematchte Position
+// als Fremdleistungskosten in eine Kalkulation (siehe kalkulation.js/
+// PositionKalkulation.jsx) und wendet darauf das einmal in den
+// Firmenparametern hinterlegte Standard-Zuschlagsschema an
+// (standardZuschlaege.zuschlagFremdleistung, siehe AdminParameterView
+// "Standard-Zuschläge") — ohne hinterlegten Satz bleibt der Zuschlag bei 0%,
+// der EP also unverändert. Der Nutzer sieht die Position im Angebot direkt
+// im Kalkulationsmodus und kann den Satz dort noch pro Projekt anpassen,
+// statt die Kalkulation von Grund auf selbst anzulegen.
 
 import { leereKalkulation, kalkulationEp } from "./kalkulation.js";
 
@@ -81,15 +80,24 @@ export function angebotAusAusschreibungAbgleichen(positionen, mutterLvIndex) {
 }
 
 // Bereitet gematchte Positionen für die Kalkulations-UI vor (siehe
-// Datei-Kommentar oben) — der Mutter-LV-Preis wird als Fremdleistungs-
-// Kostenbasis in eine Kalkulation mit 0% Zuschlag gelegt, der EP bleibt
-// dadurch unverändert. Nur für tatsächlich gematchte Positionen (ep>0 und
-// menge>0) — eine unbepreiste oder mengenlose Position braucht keine leere
-// Kalkulation aufgedrängt zu bekommen.
-export function positionenMitKalkulationVorbereiten(positionen) {
+// Datei-Kommentar oben): der Mutter-LV-Preis wird als Fremdleistungs-
+// Kostenbasis in eine Kalkulation gelegt und mit dem dafür hinterlegten
+// Standard-Zuschlagssatz hochgerechnet (standardZuschlaege.zuschlagFremdleistung,
+// siehe AdminParameterView "Standard-Zuschläge") — ohne standardZuschlaege
+// (noch nicht konfiguriert) bleibt der Zuschlag bei 0%, der EP also
+// unverändert. Nur Fremdleistung kommt infrage: Lohn/Material/Gerät sind in
+// kalkulation.js immer Posten×Stammdatenpreis, nie ein freier Gesamtbetrag
+// — ohne eigene Lohn-/Material-/Geräte-Aufschlüsselung (die GAEB-Preisdatei
+// liefert nur einen einzigen Wert je Position) lässt sich der Mutter-LV-
+// Preis dort nicht unterbringen, ohne einen Stammdaten-Eintrag zu erfinden.
+// Nur für tatsächlich gematchte Positionen (ep>0 und menge>0) — eine
+// unbepreiste oder mengenlose Position braucht keine Kalkulation
+// aufgedrängt zu bekommen.
+export function positionenMitKalkulationVorbereiten(positionen, standardZuschlaege) {
+  const zuschlag = standardZuschlaege?.zuschlagFremdleistung || 0;
   return (positionen || []).map(p => {
     if (!p.ep || !p.menge) return p;
-    const kalk = { ...leereKalkulation(), fremdleistung: p.ep * p.menge };
+    const kalk = { ...leereKalkulation(), fremdleistung: p.ep * p.menge, zuschlagFremdleistung: zuschlag };
     return { ...p, kalk, ep: kalkulationEp(kalk, [], p.menge) };
   });
 }

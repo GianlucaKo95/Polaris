@@ -72,7 +72,7 @@ test("angebotAusAusschreibungAbgleichen bevorzugt StLK vor Text, falls beide auf
   assert.equal(positionen[0].ep, 4482);
 });
 
-test("positionenMitKalkulationVorbereiten legt für gematchte Positionen eine Kalkulation mit 0% Zuschlag an, der EP bleibt unverändert", () => {
+test("positionenMitKalkulationVorbereiten legt ohne hinterlegtes Zuschlagsschema eine Kalkulation mit 0% Zuschlag an, der EP bleibt unverändert", () => {
   const idx = mutterLvIndexBauen([mutterLv]);
   const ausschreibung = [
     { id: 50, bez: "Egal", einheit: "Psch", menge: 2, ep: 0, rabatt: 0, stlk: "1910110711" }, // matcht, ep=4482
@@ -83,6 +83,17 @@ test("positionenMitKalkulationVorbereiten legt für gematchte Positionen eine Ka
   assert.equal(pos.kalk.fremdleistung, 4482 * 2);
   assert.equal(pos.kalk.zuschlagFremdleistung, 0);
   assert.equal(pos.ep, 4482); // unverändert trotz Kalkulation, da Zuschlag 0%
+});
+
+test("positionenMitKalkulationVorbereiten wendet das hinterlegte Standard-Zuschlagsschema automatisch an", () => {
+  const idx = mutterLvIndexBauen([mutterLv]);
+  const ausschreibung = [
+    { id: 51, bez: "Egal", einheit: "Psch", menge: 2, ep: 0, rabatt: 0, stlk: "1910110711" }, // matcht, ep=4482
+  ];
+  const { positionen: abgeglichen } = angebotAusAusschreibungAbgleichen(ausschreibung, idx);
+  const [pos] = positionenMitKalkulationVorbereiten(abgeglichen, { zuschlagFremdleistung: 15 });
+  assert.equal(pos.kalk.zuschlagFremdleistung, 15);
+  assert.equal(pos.ep, 4482 * 1.15); // 15% automatisch angewendet
 });
 
 test("positionenMitKalkulationVorbereiten lässt unbepreiste Positionen ohne Kalkulation (keine aufgedrängte leere Kalkulation)", () => {

@@ -1014,13 +1014,17 @@ export async function sbProjektKostenSpeichern(projektId, budgetPositionen, stun
 // projektgebunden), deshalb auf der firmen-Zeile statt einer eigenen Tabelle.
 // kalkulationspreise: Lohn-/Material-/Geräte-/Fremdleistungs-Stammdaten für
 // die EP-Kalkulation (anders als einheitspreise, das fertige Verkaufs-EP
-// pro Gewerk sind) — gleiche Ablage, gleiches Muster.
-export async function sbFirmaParameterSpeichern(firmaId, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, session, kalkulationspreise) {
+// pro Gewerk sind) — gleiche Ablage, gleiches Muster. standardZuschlaege:
+// firmenweites Standard-Zuschlagsschema (siehe lib/kalkulation.js), wird bei
+// "Aus Ausschreibung generieren" automatisch auf die Mutter-LV-Preise
+// angewendet (lib/mutterlv.js).
+export async function sbFirmaParameterSpeichern(firmaId, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, session, kalkulationspreise, standardZuschlaege) {
   if (!session?.access_token || !firmaId) return false;
   try {
     const client = sbClientMitToken(session);
     const payload = { einheitspreise, lv_vorlagen: lvVorlagen, angebot_vorlage: angebotVorlage, tagebuch_vorlage: tagebuchVorlage };
     if (kalkulationspreise !== undefined) payload.kalkulationspreise = kalkulationspreise;
+    if (standardZuschlaege !== undefined) payload.standard_zuschlaege = standardZuschlaege;
     const { error } = await client.from("firmen")
       .update(payload)
       .eq("id", firmaId);

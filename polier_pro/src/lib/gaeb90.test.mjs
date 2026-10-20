@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import {
   parseGaeb90, gaeb90ZuPositionen, gaeb90Schreiben,
   parseGaeb90Preise, gaeb90PreiseZuPositionen, gaeb90PreiseEinspielen,
+  gaeb90PreiseSchreiben,
 } from "./gaeb90.js";
 
 const hier = dirname(fileURLToPath(import.meta.url));
@@ -121,4 +122,48 @@ test("gaeb90PreiseZuPositionen rechnet die Menge aus GP/EP zurück (D84 hat kein
   const positionen = gaeb90PreiseZuPositionen({ preise });
   const vorhalten = positionen.find(p => p.oz === "01.01.0010a");
   assert.equal(vorhalten.menge, 4); // 3557.56 / 889.39 = 4
+});
+
+test("gaeb90PreiseSchreiben + parseGaeb90Preise round-trip: EP/GP bleiben exakt erhalten (gegen echte Werte aus der D84-Datei)", () => {
+  const positionen = [
+    { id: 1, bez: "Baustelle einrichten", einheit: "Psch", menge: 1, ep: 4482, rabatt: 0, oz: "01.01.0010" },
+    { id: 2, bez: "Vorhalten der Baustelleneinrichtung", einheit: "Wo", menge: 4, ep: 889.39, rabatt: 0, oz: "01.01.0010a" },
+    { id: 3, bez: "Betonplattenfahrbahn", einheit: "m2", menge: 70, ep: 146.82, rabatt: 0, oz: "03.02.0040" },
+  ];
+  const { text, warnungen } = gaeb90PreiseSchreiben(positionen, { projektTitel: "Testprojekt" });
+  assert.equal(warnungen.length, 0);
+
+  const { preise } = parseGaeb90Preise(text);
+  assert.equal(preise.length, 3);
+  const nachOz = Object.fromEntries(preise.map(p => [p.oz, p]));
+  assert.equal(nachOz["01.01.0010"].ep, 4482);
+  assert.equal(nachOz["01.01.0010"].gp, 4482);
+  assert.equal(nachOz["01.01.0010a"].ep, 889.39);
+  assert.equal(nachOz["01.01.0010a"].gp, 3557.56);
+  assert.equal(nachOz["03.02.0040"].ep, 146.82);
+  assert.equal(nachOz["03.02.0040"].gp, 10277.40);
+});
+
+test("gaeb90PreiseSchreiben berücksichtigt den Positions-Rabatt im exportierten EP/GP", () => {
+  const positionen = [
+    { id: 1, bez: "Mit Rabatt", einheit: "Stk", menge: 2, ep: 100, rabatt: 10, oz: "01.01.0010" },
+  ];
+  const { text } = gaeb90PreiseSchreiben(positionen);
+  const { preise } = parseGaeb90Preise(text);
+  assert.equal(preise[0].ep, 90); // 100 × (1 - 10%)
+  assert.equal(preise[0].gp, 180); // 90 × 2
+});
+
+test("gaeb90PreiseSchreiben überspringt Positionen ohne Ordnungszahl oder mit fremdem OZ-Format, statt eine zu erfinden", () => {
+  const positionen = [
+    { id: 1, bez: "Manuell angelegt", einheit: "Stk", menge: 1, ep: 50, rabatt: 0 }, // keine oz
+    { id: 2, bez: "Aus altem D81/D83-Import", einheit: "m2", menge: 10, ep: 20, rabatt: 0, oz: "0101.30" }, // anderes OZ-Format
+    { id: 3, bez: "Gültig", einheit: "Stk", menge: 1, ep: 80, rabatt: 0, oz: "02.03.0001" },
+    { id: 4, bez: "── Gruppenkopfzeile ──", einheit: "", menge: 0, ep: 0, rabatt: 0 },
+  ];
+  const { text, warnungen } = gaeb90PreiseSchreiben(positionen);
+  assert.equal(warnungen.length, 2);
+  const { preise } = parseGaeb90Preise(text);
+  assert.equal(preise.length, 1);
+  assert.equal(preise[0].oz, "02.03.0001");
 });

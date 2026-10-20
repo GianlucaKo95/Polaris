@@ -10,7 +10,7 @@ import { kiAngebotVorlageAnalysieren, kiTagebuchVorlageAnalysieren } from "../li
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, parseGaeb90Preise, gaeb90PreiseEinspielen } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 
-export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, kalkulationspreise, setKalkulationspreise, session }) {
+export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, kalkulationspreise, setKalkulationspreise, standardZuschlaege, setStandardZuschlaege, session }) {
   const [aktiv,    setAktiv]    = useState("preise"); // preise | kalkpreise | vorlagen | angebotsvorlage | tagebuchvorlage
   const [neuPreis, setNeuPreis] = useState(null);
   const [neuVorlage,setNeuVorlage] = useState(null);
@@ -209,6 +209,35 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
           Zusammenstellen einer Kalkulation in AngebotEditor klar bleibt. */}
       {aktiv === "kalkpreise" && (
         <div>
+          {/* Standard-Zuschläge: firmenweites Zuschlagsschema je Kostenart
+              (siehe lib/kalkulation.js) — wird bei "Aus Ausschreibung
+              generieren" (AngebotView.jsx) automatisch auf den dort als
+              Fremdleistungs-Kostenbasis behandelten Mutter-LV-Preis
+              angewendet (lib/mutterlv.js), statt 0% anzunehmen. Für die
+              übrigen Kostenarten hier mit hinterlegt, damit das Schema an
+              einer Stelle vollständig gepflegt wird — auch wenn der
+              Mutter-LV-Abgleich aktuell nur den Fremdleistungs-Satz nutzt. */}
+          <div style={{ background:"var(--surface2)", border:"1px dashed var(--border)",
+            borderRadius:12, padding:"10px 12px", marginBottom:14 }}>
+            <div style={{ color:"var(--muted)", fontSize:11, fontWeight:700,
+              textTransform:"uppercase", marginBottom:7 }}>Standard-Zuschläge (%)</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:6 }}>
+              {[["Lohn","zuschlagLohn"],["Material","zuschlagMaterial"],["Gerät","zuschlagGeraet"],["Fremdl.","zuschlagFremdleistung"]].map(([l,feld]) => (
+                <div key={feld}>
+                  <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>{l}</div>
+                  <input type="number" min="0" value={standardZuschlaege?.[feld] ?? ""}
+                    onChange={e => setStandardZuschlaege(x => ({ ...x, [feld]: Number(e.target.value) }))}
+                    placeholder="0" style={{ width:"100%", background:"var(--surface)", color:"var(--text)",
+                      border:"1.5px solid var(--border)", borderRadius:8, padding:"7px 9px",
+                      fontSize:12.5, boxSizing:"border-box", fontFamily:"inherit" }} />
+                </div>
+              ))}
+            </div>
+            <div style={{ color:"var(--muted)", fontSize:11, marginTop:7, lineHeight:1.4 }}>
+              Der Fremdleistungs-Satz wird automatisch auf den Mutter-LV-Preis angewendet, wenn aus einer Ausschreibung ein Angebot generiert wird.
+            </div>
+          </div>
+
           <div style={{ display:"flex", justifyContent:"space-between",
             alignItems:"center", marginBottom:7 }}>
             <div style={{ color:"var(--muted)", fontSize:12 }}>

@@ -310,7 +310,77 @@ export function gaeb90PreiseEinspielen(positionen, preise) {
   return { positionen: aktualisiert, treffer, fehlend: preise.length - treffer };
 }
 
-// ── Export ──────────────────────────────────────────────────────────────────
+function gaeb90Zeile(satzart, inhalt, satznr) {
+  const inhaltGepolstert = (inhalt ?? "").slice(0, 72).padEnd(72, " ");
+  return satzart + inhaltGepolstert + String(satznr).padStart(6, "0");
+}
+
+// Dezimalzahl -> Ziffernfolge fester Breite (Kehrfunktion zum jeweiligen
+// Ziffern-Divisor in parseGaeb90Preise: EP durch 1000, GP durch 100).
+function ziffernAusBetrag(betrag, nachkommastellen, gesamtstellen) {
+  const n = Math.max(0, Math.round((Number(betrag) || 0) * 10 ** nachkommastellen));
+  return String(n).padStart(gesamtstellen, "0").slice(-gesamtstellen);
+}
+
+// "01.01.0010" bzw. "01.01.0010a" -> ["01010010", "a"] — Kehrfunktion zu
+// ozAusZiffern() oben. Nur das 2+2+4-stellige Format dieses Dialekts (siehe
+// ozAusZiffern()) wird unterstützt: eine Position, deren OZ aus dem älteren,
+// unbepreisten D81/D83-Import stammt (dort "Untertitel.PosNr", z.B.
+// "0101.30" statt "01.01.0010" — siehe parseGaeb90()/case "21") hat eine
+// andere Zählweise und wird bewusst nicht geraten, sondern mit Warnung
+// übersprungen (siehe gaeb90PreiseSchreiben()).
+function ozZiffernAusOz(oz) {
+  const m = String(oz).match(/^(\d{2})\.(\d{2})\.(\d{4})([a-zA-Z]?)$/);
+  return m ? [m[1] + m[2] + m[3], m[4] || ""] : null;
+}
+
+// ── Bepreister Export (D84/D86) ────────────────────────────────────────────
+// Schreibt eine bepreiste GAEB90-Preisdatei (Satzart 23 je Position) aus der
+// aktuellen Positionenliste eines Angebots — Umkehrung von
+// parseGaeb90Preise(). Reine Preisliste ohne Text/Titel (identisch zum
+// echten D84-Format, siehe Datei-Kommentar oben bei "Bepreister Import"):
+// jede Position braucht dafür bereits eine Ordnungszahl (oz) im 2+2+4-
+// stelligen Format dieses Dialekts — die kommt aus einem vorherigen GAEB-XML-
+// Import (Ausschreibung/LV, siehe gaebXml.js) oder dem Mutter-LV-Abgleich
+// (lib/mutterlv.js). Eine manuell angelegte Position oder eine mit OZ aus
+// dem älteren D81/D83-Import hat keine passende bzw. keine Ordnungszahl und
+// wird mit Warnung übersprungen statt eine zu erfinden.
+//
+// Kopfsatzarten nur so weit geschrieben, wie aus den Angebotsdaten
+// rekonstruierbar (01 Projekttitel, 08 Währung) — Vendor-spezifische
+// Kennsatzfelder (Satzart 00/02/03/06x, siehe gaeb90Schreiben()-Kommentar)
+// werden wie beim unbepreisten Export ausgelassen statt geraten. Satzart 32
+// (Zwischensummen je Titel-/Untertitelebene) fehlt bewusst — informativ für
+// einen Leser, aber ohne eigene Preisdaten, die ein Rückimport bräuchte.
+export function gaeb90PreiseSchreiben(positionen, { projektTitel = "Angebot" } = {}) {
+  let satznr = 1;
+  const zeilen = [];
+  const warnungen = [];
+  const add = (satzart, inhalt) => {
+    zeilen.push(gaeb90Zeile(satzart, inhalt, satznr));
+    satznr++;
+  };
+
+  add("01", projektTitel);
+  add("08", "EUR   EURO");
+
+  for (const p of positionen) {
+    if (!p.bez || p.bez.startsWith("──")) continue; // Gruppenkopfzeile, keine Preiszeile
+    if (!p.oz) { warnungen.push(`Position "${p.bez}" ohne Ordnungszahl — übersprungen.`); continue; }
+    const ozTeile = ozZiffernAusOz(p.oz);
+    if (!ozTeile) { warnungen.push(`Ordnungszahl "${p.oz}" nicht im erwarteten Format (TT.UU.PPPP) — übersprungen.`); continue; }
+    const [ziffern, suffix] = ozTeile;
+    const epEffektiv = (p.ep || 0) * (1 - (p.rabatt || 0) / 100);
+    const gp = epEffektiv * (p.menge || 0);
+    const polster = suffix ? " " : "  "; // OZ+Suffix zusammen immer auf Spalte 10 auffüllen
+    add("23", `${ziffern}${suffix}${polster}${ziffernAusBetrag(epEffektiv, 3, 11)} ${ziffernAusBetrag(gp, 2, 12)}`);
+  }
+
+  add("99", "");
+  return { text: zeilen.join("\r\n") + "\r\n", warnungen };
+}
+
+// ── Export (unbepreist) ─────────────────────────────────────────────────────
 // Schreibt die aktuelle Positionenliste eines Angebots (Format wie
 // gaeb90ZuPositionen() es liefert: {bez,einheit,menge,ep,rabatt}, inkl. der
 // "── <Titel> ──"-Gruppenkopfzeilen und "↳ "-Unterpositionen-Präfixe) als
@@ -323,12 +393,8 @@ export function gaeb90PreiseEinspielen(positionen, preise) {
 // (Kopfsatzarten 00/02/03/063/08 wie Kennsatz-Flags oder die Unterpositions-
 // Verweisblöcke in Satzart 21/24 sind aus der Beispieldatei nicht vollständig
 // rekonstruierbar und werden daher ausgelassen statt geraten). Bepreister
-// Export (D84/D86 mit Einheitspreisen) bleibt wie der Import blockiert.
-
-function gaeb90Zeile(satzart, inhalt, satznr) {
-  const inhaltGepolstert = (inhalt ?? "").slice(0, 72).padEnd(72, " ");
-  return satzart + inhaltGepolstert + String(satznr).padStart(6, "0");
-}
+// Export: siehe gaeb90PreiseSchreiben() oben (eigener Satzart-23-Writer,
+// da D84/D86 strukturell anders aufgebaut sind — reine Preisliste ohne Text).
 
 // Kehrfunktion zu mengeAusZiffern: Dezimalzahl -> 11-stellige Ziffernfolge
 // (8 Vorkomma- + 3 Nachkommastellen).

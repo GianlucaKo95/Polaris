@@ -214,6 +214,10 @@ export default function PolierApp() {
   const [angebotVorlage,setAngebotVorlage]= useState(null);
   const [tagebuchVorlage,setTagebuchVorlage]= useState(null);
   const [kalkulationspreise, setKalkulationspreise] = useState([]);
+  // Firmenweites Standard-Zuschlagsschema (siehe lib/kalkulation.js +
+  // lib/mutterlv.js) — wird bei "Aus Ausschreibung generieren" automatisch
+  // auf die als Kostenbasis behandelten Mutter-LV-Preise angewendet.
+  const [standardZuschlaege, setStandardZuschlaege] = useState(null);
   // Verhindert, dass der initiale Ladevorgang der Parameter aus Supabase
   // (setzt dieselben Werte, die gerade erst von dort kamen) sie sofort
   // wieder zurückschreibt, bevor der Nutzer überhaupt etwas geändert hat.
@@ -317,6 +321,7 @@ export default function PolierApp() {
             setAngebotVorlage(d[0].angebot_vorlage || null);
             setTagebuchVorlage(d[0].tagebuch_vorlage || null);
             setKalkulationspreise(d[0].kalkulationspreise || []);
+            setStandardZuschlaege(d[0].standard_zuschlaege || null);
             setParameterGeladen(true);
           } else {
             setFirmaLadeFehler(`Keine Firma mit ID ${auth.profil.firma_id} gefunden — profile.firma_id zeigt ins Leere.`);
@@ -340,8 +345,8 @@ export default function PolierApp() {
   // Einheitspreise/LV-Vorlagen nach jeder Änderung in der Firma persistieren.
   useEffect(() => {
     if (!parameterGeladen || !firma?.id || !auth.session?.access_token) return;
-    sbFirmaParameterSpeichern(firma.id, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, auth.session, kalkulationspreise);
-  }, [einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, kalkulationspreise]);
+    sbFirmaParameterSpeichern(firma.id, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, auth.session, kalkulationspreise, standardZuschlaege);
+  }, [einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, kalkulationspreise, standardZuschlaege]);
 
   // Projekte aus Supabase laden, sobald die Firma bekannt ist.
   // Ohne dies existierten Baustellen nur im Browser-Speicher — Neuladen,
@@ -1459,9 +1464,9 @@ export default function PolierApp() {
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
         {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
-        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} session={auth.session} />}
+        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} session={auth.session} />}
         {tab === "rechnungen"    && <RechnungenView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} rechnungen={rechnungen} rechnungBestaetigungen={rechnungBestaetigungen} eigeneFirma={eigeneFirma} onBaufortschrittSpeichern={baufortschrittSpeichern} onRechnungSpeichern={rechnungSpeichern} onRechnungLoeschen={rechnungLoeschen} profil={aktiveProfil} />}
-        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} session={auth.session} />}
+        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} standardZuschlaege={standardZuschlaege} setStandardZuschlaege={setStandardZuschlaege} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
         {tab === "firmen"       && <FirmenView owneFirma={eigeneFirma} setEigeneFirma={setEigeneFirma} subs={subs} setSubs={setSubs}
             onOnboardingReset={() => setOnboardingDone(false)} session={auth.session} firmaId={firma?.id} firma={firma} projekte={projekte} />}
