@@ -51,7 +51,13 @@ export function mutterLvIndexBauen(lvVorlagen) {
   const nachText = new Map();
   for (const vorlage of lvVorlagen || []) {
     for (const p of vorlage.positionen || []) {
-      if (!p.ep) continue; // unbepreiste Positionen taugen nicht als Preisquelle
+      if (!p.bez || p.bez.startsWith("──")) continue; // Gruppenkopfzeile, keine Preisquelle
+      // Auch mit ep===0 aufnehmen: eine 0,00-€-Position in der Mutter-LV ist
+      // trotzdem eine real erbrachte Leistung (z.B. im Ursprungsangebot so
+      // kalkuliert, etwa als Nebenleistung ohne eigenen Preis) und soll als
+      // bekannte, abgeglichene Position in der Übersicht auftauchen statt
+      // fälschlich als "fehlend"/unbekannt zu gelten — nur echt unbekannte
+      // (in keiner Vorlage vorkommende) Positionen bleiben ohne Treffer.
       if (p.stlk) nachStlk.set(p.stlk, p);
       const text = normalisierterText(p.bez);
       if (text) nachText.set(text, p);

@@ -11,13 +11,23 @@ const mutterLv = {
     { id: 1, bez: "── Allgemein ──", einheit: "", menge: 0, ep: 0, rabatt: 0 },
     { id: 2, bez: "Baustelle einrichten Sämtl.LV-Abschn. Zufahrt vorh.", einheit: "Psch", menge: 1, ep: 4482, rabatt: 0, stlk: "1910110711" },
     { id: 3, bez: "[Bedarfsposition] Beweissicherung", einheit: "psch", menge: 1, ep: 355.25, rabatt: 0 },
-    { id: 4, bez: "Position ohne Preis, nie als Quelle nutzbar", einheit: "Stk", menge: 1, ep: 0, rabatt: 0, stlk: "9999999999" },
+    { id: 4, bez: "Nebenleistung ohne eigenen Preis", einheit: "Stk", menge: 1, ep: 0, rabatt: 0, stlk: "9999999999" },
   ],
 };
 
-test("mutterLvIndexBauen ignoriert unbepreiste Positionen als Preisquelle", () => {
+// Eine 0,00-€-Position in der Mutter-LV ist trotzdem eine real erbrachte
+// Leistung (z.B. im Ursprungsangebot so kalkuliert) und soll als bekannte
+// Position gelten statt als "fehlend"/unbekannt — nur echte Gruppenkopfzeilen
+// (keine eigene Leistung) bleiben außen vor.
+test("mutterLvIndexBauen nimmt auch 0,00-€-Positionen als Treffer auf (reale Leistung, kein Ausschluss nur wegen Preis 0)", () => {
   const idx = mutterLvIndexBauen([mutterLv]);
-  assert.equal(idx.nachStlk.has("9999999999"), false);
+  assert.equal(idx.nachStlk.get("9999999999").ep, 0);
+  assert.equal(idx.nachText.get("nebenleistung ohne eigenen preis").ep, 0);
+});
+
+test("mutterLvIndexBauen ignoriert Gruppenkopfzeilen (keine eigene Leistung, keine Preisquelle)", () => {
+  const idx = mutterLvIndexBauen([mutterLv]);
+  assert.equal(idx.nachText.has("allgemein"), false);
 });
 
 test("mutterLvIndexBauen indiziert sowohl StLK als auch normalisierten Text", () => {
@@ -60,6 +70,17 @@ test("angebotAusAusschreibungAbgleichen lässt Positionen ohne Treffer unbepreis
   assert.equal(treffer, 0);
   assert.equal(fehlend, 1);
   assert.equal(positionen[0].ep, 0);
+});
+
+test("angebotAusAusschreibungAbgleichen zählt eine 0,00-€-Mutter-LV-Position als Treffer, nicht als fehlend", () => {
+  const idx = mutterLvIndexBauen([mutterLv]);
+  const ausschreibung = [
+    { id: 35, bez: "Nebenleistung – anders formuliert", einheit: "Stk", menge: 1, ep: 0, rabatt: 0, stlk: "9999999999" },
+  ];
+  const { positionen, treffer, fehlend } = angebotAusAusschreibungAbgleichen(ausschreibung, idx);
+  assert.equal(treffer, 1);
+  assert.equal(fehlend, 0);
+  assert.equal(positionen[0].ep, 0); // Treffer, aber korrekt weiterhin 0 €
 });
 
 test("angebotAusAusschreibungAbgleichen bevorzugt StLK vor Text, falls beide auf unterschiedliche Preise zeigen würden", () => {
