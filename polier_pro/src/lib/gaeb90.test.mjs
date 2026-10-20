@@ -8,7 +8,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { parseGaeb90, gaeb90ZuPositionen, gaeb90Schreiben } from "./gaeb90.js";
+import {
+  parseGaeb90, gaeb90ZuPositionen, gaeb90Schreiben,
+  parseGaeb90Preise, gaeb90PreiseZuPositionen, gaeb90PreiseEinspielen,
+  gaeb90PreiseSchreiben,
+} from "./gaeb90.js";
 
 const hier = dirname(fileURLToPath(import.meta.url));
 // Die Datei liegt als ANSI/Windows-1252 vor; die Beispieldatei enthält keine
@@ -17,6 +21,20 @@ const hier = dirname(fileURLToPath(import.meta.url));
 // eigentliche Windows-1252-Dekodierung (gaeb90DateiLesen) läuft nur im
 // Browser über TextDecoder und wird hier nicht erneut getestet.
 const beispielDatei = readFileSync(join(hier, "__fixtures__", "gaeb-sample.d83"), "latin1");
+// Echte, bepreiste D84-Datei (Kaufland Freiberg Bebelplatz 2, Projekt
+// 2025-074a) — Summen hier gegen das dazugehörige Angebots-PDF desselben
+// Projekts abgeglichen (Angebotssumme Netto 64.548,62 €, 54 Positionen).
+const beispielDateiD84 = readFileSync(join(hier, "__fixtures__", "gaeb-priced-sample.D84"), "latin1");
+// Zweiter echter GAEB90-Dialekt ("Hans Dach"-Projekt derselben Bieterfirma
+// wie oben, "HANS.eatische DACH.technik GmbH") mit einstufiger statt
+// zweistufiger Titelgliederung — 7- statt 8-stellige Ordnungszahl (3-
+// stellige Titelgruppe + 4-stellige Positionsnummer statt 2+2+4, siehe
+// ozAusZiffern() in gaeb90.js). D83 (unbepreiste Ausschreibung) und D84
+// (bepreistes eigenes Angebot) desselben Projekts, gegen die zugehörige
+// Angebots-PDF (KAL250) und Kalkulationsauswertung (Ludwig.xlsx) desselben
+// Projekts abgeglichen: 473 Positionen in 7 Titelgruppen.
+const beispielDateiD83HansDach = readFileSync(join(hier, "__fixtures__", "gaeb-sample-hansdach.D83"), "latin1");
+const beispielDateiD84HansDach = readFileSync(join(hier, "__fixtures__", "gaeb-priced-sample-hansdach.D84"), "latin1");
 
 test("parseGaeb90 liest alle 19 Positionen der Beispieldatei ohne Warnungen", () => {
   const { positionen, warnungen } = parseGaeb90(beispielDatei);
@@ -68,4 +86,150 @@ test("gaeb90Schreiben + parseGaeb90 round-trip: Struktur und Texte bleiben erhal
   const originalTexte = positionenListe.map(p => p.bez);
   const zurueckTexte = zurueckImportiert.map(p => p.bez);
   assert.deepEqual(zurueckTexte, originalTexte);
+});
+
+test("parseGaeb90Preise liest alle 54 Preispositionen der echten D84-Datei ohne Warnungen", () => {
+  const { preise, warnungen } = parseGaeb90Preise(beispielDateiD84);
+  assert.equal(warnungen.length, 0);
+  assert.equal(preise.length, 54);
+});
+
+test("parseGaeb90Preise dekodiert EP (11-stellig) und GP (12-stellig) korrekt — gegen das echte Angebots-PDF abgeglichen", () => {
+  const { preise } = parseGaeb90Preise(beispielDateiD84);
+  const nachOz = Object.fromEntries(preise.map(p => [p.oz, p]));
+  assert.equal(nachOz["01.01.0010"].ep, 4482);
+  assert.equal(nachOz["01.01.0010"].gp, 4482);
+  // "a"-Suffix (Bedarfs-/Zulagevariante derselben Position) wird an die OZ angehängt.
+  assert.equal(nachOz["01.01.0010a"].ep, 889.39);
+  assert.equal(nachOz["01.01.0010a"].gp, 3557.56);
+  assert.equal(nachOz["03.02.0040"].ep, 146.82);
+  assert.equal(nachOz["03.02.0040"].gp, 10277.40);
+});
+
+test("Summe aller Gesamtpreise aus der D84-Datei ergibt die echte Angebotssumme Netto (64.548,62 €)", () => {
+  const { preise } = parseGaeb90Preise(beispielDateiD84);
+  const summe = preise.reduce((s, p) => s + p.gp, 0);
+  assert.ok(Math.abs(summe - 64548.62) < 0.01, `Summe war ${summe}, erwartet 64548.62`);
+});
+
+test("gaeb90PreiseEinspielen aktualisiert nur Positionen mit passender OZ, lässt den Rest unangetastet", () => {
+  const { preise } = parseGaeb90Preise(beispielDateiD84);
+  const vorhanden = [
+    { id: 1, bez: "Baustelle einrichten", einheit: "Psch", menge: 1, ep: 0, rabatt: 0, oz: "01.01.0010" },
+    { id: 2, bez: "Position ohne Treffer", einheit: "Stk", menge: 1, ep: 0, rabatt: 0, oz: "99.99.9999" },
+    { id: 3, bez: "Manuell angelegt, keine OZ", einheit: "Stk", menge: 1, ep: 42, rabatt: 0 },
+  ];
+  const { positionen, treffer, fehlend } = gaeb90PreiseEinspielen(vorhanden, preise);
+  assert.equal(treffer, 1);
+  assert.equal(fehlend, 53);
+  assert.equal(positionen[0].ep, 4482);
+  assert.equal(positionen[1].ep, 0); // keine passende OZ gefunden -> unverändert
+  assert.equal(positionen[2].ep, 42); // keine OZ -> unverändert
+});
+
+test("gaeb90PreiseZuPositionen rechnet die Menge aus GP/EP zurück (D84 hat kein eigenes Mengenfeld)", () => {
+  const { preise } = parseGaeb90Preise(beispielDateiD84);
+  const positionen = gaeb90PreiseZuPositionen({ preise });
+  const vorhalten = positionen.find(p => p.oz === "01.01.0010a");
+  assert.equal(vorhalten.menge, 4); // 3557.56 / 889.39 = 4
+});
+
+test("gaeb90PreiseSchreiben + parseGaeb90Preise round-trip: EP/GP bleiben exakt erhalten (gegen echte Werte aus der D84-Datei)", () => {
+  const positionen = [
+    { id: 1, bez: "Baustelle einrichten", einheit: "Psch", menge: 1, ep: 4482, rabatt: 0, oz: "01.01.0010" },
+    { id: 2, bez: "Vorhalten der Baustelleneinrichtung", einheit: "Wo", menge: 4, ep: 889.39, rabatt: 0, oz: "01.01.0010a" },
+    { id: 3, bez: "Betonplattenfahrbahn", einheit: "m2", menge: 70, ep: 146.82, rabatt: 0, oz: "03.02.0040" },
+  ];
+  const { text, warnungen } = gaeb90PreiseSchreiben(positionen, { projektTitel: "Testprojekt" });
+  assert.equal(warnungen.length, 0);
+
+  const { preise } = parseGaeb90Preise(text);
+  assert.equal(preise.length, 3);
+  const nachOz = Object.fromEntries(preise.map(p => [p.oz, p]));
+  assert.equal(nachOz["01.01.0010"].ep, 4482);
+  assert.equal(nachOz["01.01.0010"].gp, 4482);
+  assert.equal(nachOz["01.01.0010a"].ep, 889.39);
+  assert.equal(nachOz["01.01.0010a"].gp, 3557.56);
+  assert.equal(nachOz["03.02.0040"].ep, 146.82);
+  assert.equal(nachOz["03.02.0040"].gp, 10277.40);
+});
+
+test("gaeb90PreiseSchreiben berücksichtigt den Positions-Rabatt im exportierten EP/GP", () => {
+  const positionen = [
+    { id: 1, bez: "Mit Rabatt", einheit: "Stk", menge: 2, ep: 100, rabatt: 10, oz: "01.01.0010" },
+  ];
+  const { text } = gaeb90PreiseSchreiben(positionen);
+  const { preise } = parseGaeb90Preise(text);
+  assert.equal(preise[0].ep, 90); // 100 × (1 - 10%)
+  assert.equal(preise[0].gp, 180); // 90 × 2
+});
+
+test("gaeb90PreiseSchreiben überspringt Positionen ohne Ordnungszahl oder mit fremdem OZ-Format, statt eine zu erfinden", () => {
+  const positionen = [
+    { id: 1, bez: "Manuell angelegt", einheit: "Stk", menge: 1, ep: 50, rabatt: 0 }, // keine oz
+    { id: 2, bez: "Aus altem D81/D83-Import", einheit: "m2", menge: 10, ep: 20, rabatt: 0, oz: "0101.30" }, // anderes OZ-Format
+    { id: 3, bez: "Gültig", einheit: "Stk", menge: 1, ep: 80, rabatt: 0, oz: "02.03.0001" },
+    { id: 4, bez: "── Gruppenkopfzeile ──", einheit: "", menge: 0, ep: 0, rabatt: 0 },
+  ];
+  const { text, warnungen } = gaeb90PreiseSchreiben(positionen);
+  assert.equal(warnungen.length, 2);
+  const { preise } = parseGaeb90Preise(text);
+  assert.equal(preise.length, 1);
+  assert.equal(preise[0].oz, "02.03.0001");
+});
+
+// ── Zweiter GAEB90-Dialekt ("Hans Dach", einstufige Titelgliederung) ──────
+
+test("parseGaeb90 liest alle 473 Positionen der Hans-Dach-D83-Datei ohne Warnungen (einstufiger Dialekt)", () => {
+  const { positionen, warnungen } = parseGaeb90(beispielDateiD83HansDach);
+  assert.equal(warnungen.length, 0);
+  assert.equal(positionen.filter(p => p.typ === "position").length, 473);
+});
+
+test("parseGaeb90 erkennt die 7-stellige Ordnungszahl des Hans-Dach-Dialekts im GGG.PPPP-Format", () => {
+  const { positionen } = parseGaeb90(beispielDateiD83HansDach);
+  const erste = positionen.find(p => p.typ === "position");
+  assert.equal(erste.oz, "001.0001");
+  assert.equal(erste.einheit, "qm");
+});
+
+test("parseGaeb90Preise liest alle 473 Preispositionen der Hans-Dach-D84-Datei ohne Warnungen (7-stellige statt 8-stellige OZ)", () => {
+  const { preise, warnungen } = parseGaeb90Preise(beispielDateiD84HansDach);
+  assert.equal(warnungen.length, 0);
+  assert.equal(preise.length, 473);
+});
+
+test("parseGaeb90Preise dekodiert EP/GP des Hans-Dach-Dialekts korrekt — gegen die echte Angebots-PDF/Excel-Kalkulationsauswertung desselben Projekts abgeglichen", () => {
+  const { preise } = parseGaeb90Preise(beispielDateiD84HansDach);
+  const nachOz = Object.fromEntries(preise.map(p => [p.oz, p]));
+  assert.equal(nachOz["001.0001"].ep, 0.68);
+  assert.equal(nachOz["001.0001"].gp, 0.68);
+  assert.equal(nachOz["001.0010"].ep, 577.50);
+  assert.equal(nachOz["001.0010"].gp, 577.50);
+});
+
+test("gaeb90PreiseEinspielen matcht D83- und D84-Positionen des Hans-Dach-Dialekts über die OZ (472 von 473 Positionen, identischer Dialekt in beiden Dateien)", () => {
+  const { positionen: roh, warnungen: w1 } = parseGaeb90(beispielDateiD83HansDach);
+  assert.equal(w1.length, 0);
+  const vorhanden = gaeb90ZuPositionen({ positionen: roh });
+  const { preise, warnungen: w2 } = parseGaeb90Preise(beispielDateiD84HansDach);
+  assert.equal(w2.length, 0);
+  const { treffer, fehlend } = gaeb90PreiseEinspielen(vorhanden, preise);
+  assert.equal(treffer, 472);
+  assert.equal(fehlend, 1); // eine Pauschalposition (075.0999) nur im Preisfile, nicht in der Ausschreibungsstruktur
+});
+
+test("gaeb90PreiseSchreiben + parseGaeb90Preise round-trip im einstufigen GGG.PPPP-Format des Hans-Dach-Dialekts", () => {
+  const positionen = [
+    { id: 1, bez: "Reinigen des Untergrundes", einheit: "qm", menge: 1, ep: 0.68, rabatt: 0, oz: "001.0001" },
+    { id: 2, bez: "Baustelleneinrichtung Raum Hamburg", einheit: "stck", menge: 1, ep: 577.50, rabatt: 0, oz: "001.0010" },
+  ];
+  const { text, warnungen } = gaeb90PreiseSchreiben(positionen, { projektTitel: "Hans Dach Test" });
+  assert.equal(warnungen.length, 0);
+
+  const { preise } = parseGaeb90Preise(text);
+  assert.equal(preise.length, 2);
+  const nachOz = Object.fromEntries(preise.map(p => [p.oz, p]));
+  assert.equal(nachOz["001.0001"].ep, 0.68);
+  assert.equal(nachOz["001.0010"].gp, 577.50);
 });

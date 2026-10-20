@@ -6,14 +6,18 @@
 // unterschiedlich gepolstert) wird tolerant per Regex geparst: robuster
 // gegen reale Dateien, und ein nicht erkanntes Muster fällt sichtbar auf
 // eine Rohtext-Zeile zurück statt eine falsche Zahl zu erfinden — gegen
-// eine echte GAEB90-Beispieldatei (D83, 8 Titel-/Untertitelgruppen, 19
-// Positionen inkl. Grund-/Alternativ-/Bedarfs-/Leitposition mit
-// Unterpositionen und einer Bezugsposition) verifiziert, 0 Warnungen.
+// zwei echte GAEB90-Beispieldateien unterschiedlicher Erzeuger-Dialekte
+// verifiziert, je 0 Warnungen: eine zweistufige (D83, 8 Titel-/
+// Untertitelgruppen, 19 Positionen inkl. Grund-/Alternativ-/Bedarfs-/
+// Leitposition mit Unterpositionen und einer Bezugsposition) und eine
+// einstufige (D83, 7 Titelgruppen, 473 Positionen) — siehe case "21" unten
+// für die Unterscheidung.
 //
-// Noch NICHT abgedeckt (v1): D84/D86 mit Einheitspreisen (kein bepreistes
-// Beispiel vorgelegen — bei Bedarf nachziehen, sobald eine echte Datei
-// vorliegt), Vertragliche-Regelungen-Vorspann (Satzart T0/T1/T9, wird
-// übersprungen), Ausfüll-Platzhalter in Katalogtexten (z.B. "41A"-Marker).
+// Noch NICHT abgedeckt (v1): Vertragliche-Regelungen-Vorspann (Satzart
+// T0/T1/T9, wird übersprungen), Ausfüll-Platzhalter in Katalogtexten
+// (z.B. "41A"-Marker). D84/D86 mit Einheitspreisen: siehe parseGaeb90Preise()
+// weiter unten — eigener Parser, da diese Dateien strukturell anders
+// aufgebaut sind (reine Preisliste ohne Text/Titel).
 
 // Menge-Feld: 8 Vorkomma- + 3 Nachkommastellen (siehe GAEB-DA-XML-
 // Zahlformattabelle, für GAEB90 identisch) — 11 Ziffern am Stück, z.B.
@@ -75,12 +79,14 @@ export function parseGaeb90(text) {
       }
 
       case "11": {
-        // Titelnummer: 2-stellig = neue Ebene 1 (Titel), 4-stellig =
-        // Ebene 2 (Untertitel) unter dem zuletzt eröffneten Titel — beide
-        // kommen über dieselbe Satzart "11", nur mit unterschiedlich
-        // langer Nummer ("0101" statt "01").
+        // Titelnummer: 2- oder 3-stellig = neue Ebene 1 (Titel, z.B. "01"
+        // beim zweistufigen "Kaufland"-Dialekt bzw. "001" beim einstufigen
+        // "Hans Dach"-Dialekt, siehe case "21" unten), 4-stellig = Ebene 2
+        // (Untertitel) unter dem zuletzt eröffneten Titel — alle kommen
+        // über dieselbe Satzart "11", nur mit unterschiedlich langer
+        // Nummer ("0101" statt "01").
         const nr = rest.trim().split(/\s+/)[0] || "";
-        if (nr.length <= 2) titelPfad = [`T${nr}`];
+        if (nr.length <= 3) titelPfad = [`T${nr}`];
         else titelPfad = [titelPfad[0] || `T${nr.slice(0,2)}`, `T${nr}`];
         break;
       }
@@ -104,27 +110,46 @@ export function parseGaeb90(text) {
         break;
 
       case "21": {
-        // Position: "0101  10 NNN    X    00000048000m2 ..."
-        // Einheit: 1-3 Buchstaben, optional mit einer Ziffer für m²/m³
-        // (als "m2"/"m3" geschrieben) — bewusst auf max. 1 Ziffer
-        // begrenzt, damit die langen Katalognummern danach (teils direkt
-        // ohne Leerzeichen folgend) nicht versehentlich als Einheit
-        // mitgerissen werden.
+        // Position: zwei real beobachtete Dialekte (siehe ozAusZiffern()
+        // weiter unten, dieselbe Unterscheidung wie beim D84-Preisimport).
+        // "Kaufland"-Dialekt: Untertitel-OZ und Positionsnummer stehen als
+        // zwei durch Leerzeichen getrennte Zifferngruppen da, z.B.
+        // "0101  10 NNN    X    00000048000m2 ...". Einheit: 1-3
+        // Buchstaben, optional mit einer Ziffer für m²/m³ (als "m2"/"m3"
+        // geschrieben) — bewusst auf max. 1 Ziffer begrenzt, damit die
+        // langen Katalognummern danach (teils direkt ohne Leerzeichen
+        // folgend) nicht versehentlich als Einheit mitgerissen werden.
         const m = rest.match(/^(\d{4,6})\s+(\d{2})\s+([A-Z ]{3})\s*(\S{0,4})?\s*(\d{11})([A-Za-zÄÖÜäöü]{1,3}\d?)?/);
-        if (!m) {
+        if (m) {
+          const [, untertitelOZ, posNr, art, , mengeZiffern, einheit] = m;
+          pushPos({
+            typ:"position", titelPfad: titelPfad.join(" / "),
+            oz: `${untertitelOZ}.${posNr}`,
+            art: positionsartLabel(art),
+            istLeit: art?.[2] === "L",
+            bez:"", menge: mengeAusZiffern(mengeZiffern),
+            einheit: (einheit || "").trim() || "Stk", ep:0,
+          });
+          break;
+        }
+        // "Hans Dach"-Dialekt: einstufige Titelgruppe direkt gefolgt von
+        // der 4-stelligen Positionsnummer, OHNE eigenes durch Leerzeichen
+        // getrenntes Postennummer-Feld, z.B. "0010001  NNN         00000001000qm".
+        const m2 = rest.match(/^(\d{5,9})\s+([A-Z ]{3})\s*(\S{0,4})?\s*(\d{11})([A-Za-zÄÖÜäöü]{1,3}\d?)?/);
+        if (!m2) {
           warnungen.push(`Position nicht erkannt: "${rest}"`);
           pushPos({ typ:"position", titelPfad: titelPfad.join(" / "),
             bez:"(nicht erkannte Position) " + rest, menge:0, einheit:"", ep:0 });
           break;
         }
-        const [, untertitelOZ, posNr, art, , mengeZiffern, einheit] = m;
+        const [, ziffern, art2, , mengeZiffern2, einheit2] = m2;
         pushPos({
           typ:"position", titelPfad: titelPfad.join(" / "),
-          oz: `${untertitelOZ}.${posNr}`,
-          art: positionsartLabel(art),
-          istLeit: art?.[2] === "L",
-          bez:"", menge: mengeAusZiffern(mengeZiffern),
-          einheit: (einheit || "").trim() || "Stk", ep:0,
+          oz: ozAusZiffern(ziffern),
+          art: positionsartLabel(art2),
+          istLeit: art2?.[2] === "L",
+          bez:"", menge: mengeAusZiffern(mengeZiffern2),
+          einheit: (einheit2 || "").trim() || "Stk", ep:0,
         });
         break;
       }
@@ -205,12 +230,210 @@ export function gaeb90ZuPositionen({ positionen }) {
       menge: p.menge || 0,
       ep: 0,
       rabatt: 0,
+      // OZ wird mitgeführt (sonst ungenutzt), damit ein später hochgeladenes
+      // bepreistes D84/D86 (siehe gaeb90PreiseEinspielen()) den EP dieser
+      // Position wiederfinden und nachtragen kann. stlk (nur bei GAEB-XML-
+      // Quellen vorhanden, siehe gaebXml.js) analog für den Mutter-LV-
+      // Preisabgleich über Ausschreibungen hinweg (siehe lib/mutterlv.js).
+      ...(p.oz ? { oz: p.oz } : {}),
+      ...(p.stlk ? { stlk: p.stlk } : {}),
     });
   }
   return ergebnis;
 }
 
-// ── Export ──────────────────────────────────────────────────────────────────
+// ── Bepreister Import (D84/D86) ────────────────────────────────────────────
+// D84/D86 sind reine Preislisten (Satzart 23 = Position mit EP+GP, Satzart
+// 32 = Zwischensumme je Titel-/Untertitelebene) OHNE eigenen Text — anders
+// als D81/D83 fehlen Satzart 25/26 (Kurz-/Langtext) und 11/12 (Titel-
+// struktur) komplett. Sie sind als Preis-Overlay gedacht, das über die
+// Ordnungszahl (OZ) auf eine bereits bekannte, unbepreiste LV-Struktur
+// gelegt wird. Zwei Wege: gaeb90PreiseEinspielen() für den Merge auf
+// vorhandene (importierte) Positionen, gaeb90PreiseZuPositionen() als
+// eigenständiger Import, falls noch keine passende LV-Struktur vorliegt.
+//
+// Gegen zwei echte, bepreiste D84-Beispieldateien verschiedener Dialekte
+// verifiziert: "Kaufland"-Dialekt (54 Positionen über 3 Titel/10
+// Untertitel, Summen exakt gegen das dazugehörige Angebots-PDF
+// abgeglichen) und "Hans Dach"-Dialekt (473 Positionen über 7 Titelgruppen,
+// EP/GP gegen die zugehörige Angebots-PDF/Excel-Kalkulationsauswertung
+// abgeglichen) — siehe ozAusZiffern() unten für den Unterschied.
+
+// Die letzten 4 Ziffern sind immer die Positionsnummer, der Rest ist die
+// Titel-/Gruppenebene — bewusst anhand der Gesamtlänge statt eines fest
+// angenommenen Stellenschemas gesplittet: reale GAEB90-Erzeuger gliedern
+// hier unterschiedlich tief. Zwei Dialekte gegen echte Dateien verifiziert:
+// "Kaufland"-Dialekt, 8 Ziffern = 2 Titel + 2 Untertitel + 4 Positionsnummer
+// (z.B. "01010010" -> "01.01.0010", punktiert wie in diesem Dialekt üblich)
+// und "Hans Dach"-Dialekt, 7 Ziffern = eine einzige 3-stellige Titelgruppe
+// ohne Untertitelebene (z.B. "0010001" -> "001.0001", gegen die zugehörige
+// Angebots-PDF/Excel-Kalkulationsauswertung desselben Projekts abgeglichen).
+// Eine 4-stellige Gruppe wird als das bekannte 2+2-Schema interpretiert
+// (Rückwärtskompatibilität zu bereits gespeicherten OZ dieses Formats),
+// jede andere Gruppenlänge bleibt unverändert als ein Block stehen.
+function ozAusZiffern(ziffern) {
+  const posNr = ziffern.slice(-4);
+  const gruppe = ziffern.slice(0, -4);
+  if (gruppe.length === 4) return `${gruppe.slice(0, 2)}.${gruppe.slice(2, 4)}.${posNr}`;
+  return `${gruppe}.${posNr}`;
+}
+
+export function parseGaeb90Preise(text) {
+  const zeilen = text.split(/\r?\n/);
+  const warnungen = [];
+  const preise = [];
+
+  for (const rohzeile of zeilen) {
+    if (rohzeile.length < 2) continue;
+    const satzart = rohzeile.slice(0, 2);
+    let rest = rohzeile.slice(2);
+    const moeglSatznr = rest.slice(-6);
+    if (/^\d{6}$/.test(moeglSatznr) && rest.length > 6) rest = rest.slice(0, -6);
+    rest = rest.replace(/\s+$/, "");
+
+    if (satzart === "23") {
+      // "01010010  00004482000 000000448200" bzw. mit Index-Suffix
+      // "01010010a 00000889390 000000355756" (Bedarfs-/Zulage-Variante
+      // derselben Position) im "Kaufland"-Dialekt, oder "0010001   ..."
+      // (7-stellig) im "Hans Dach"-Dialekt — EP 11-stellig (8+3
+      // Nachkommastellen wie das Menge-Feld), GP 12-stellig (10+2
+      // Nachkommastellen). OZ-Stellenzahl bewusst nicht fest vorgegeben
+      // (siehe ozAusZiffern() oben), sondern als zusammenhängender
+      // Ziffernblock vor dem Leerraum-Feld erkannt: die Spalte, an der EP
+      // beginnt, ist in beiden Dialekten gegen echte Dateien gleich
+      // (OZ+Suffix immer auf Spalte 10 aufgefüllt, siehe gaeb90PreiseSchreiben()).
+      const m = rest.match(/^(\d{5,9})([a-zA-Z]?)\s+(\d{11})\s(\d{12})/);
+      if (!m) {
+        warnungen.push(`Preisposition nicht erkannt: "${rest}"`);
+        continue;
+      }
+      const [, ziffern, suffix, epZiffern, gpZiffern] = m;
+      preise.push({
+        oz: ozAusZiffern(ziffern) + suffix,
+        ep: Number(epZiffern) / 1000,
+        gp: Number(gpZiffern) / 100,
+      });
+      continue;
+    }
+    if (satzart === "32" || satzart === "99") continue; // Zwischensumme/Dateiende, keine Positionsdaten
+    // 00/01/02/03/04/06/08 (Kopfdaten) und alles Unbekannte: v1 ignoriert.
+  }
+
+  return { preise, warnungen };
+}
+
+// Eigenständiger Import ohne vorhandene LV-Struktur: OZ als Bezeichnung,
+// Menge aus GP/EP zurückgerechnet (D84 selbst enthält kein eigenes
+// Mengenfeld — nur Einheitspreis und Gesamtbetrag).
+export function gaeb90PreiseZuPositionen({ preise }) {
+  let idBasis = Date.now();
+  return preise.map(p => ({
+    id: idBasis++,
+    bez: `Position ${p.oz}`,
+    einheit: "",
+    menge: p.ep > 0 ? Math.round((p.gp / p.ep) * 1000) / 1000 : 1,
+    ep: p.ep,
+    rabatt: 0,
+    oz: p.oz,
+  }));
+}
+
+// Preis-Merge: aktualisiert den EP bereits vorhandener Positionen (z.B. aus
+// einem vorherigen unbepreisten GAEB-Import, siehe oz-Feld oben) anhand der
+// Ordnungszahl — nur Positionen mit passender OZ werden verändert, alles
+// andere (Gruppen-Kopfzeilen, Positionen ohne OZ, manuell angelegte Zeilen)
+// bleibt unangetastet.
+export function gaeb90PreiseEinspielen(positionen, preise) {
+  const preisNachOz = new Map(preise.map(p => [p.oz, p]));
+  let treffer = 0;
+  const aktualisiert = positionen.map(p => {
+    if (!p.oz || !preisNachOz.has(p.oz)) return p;
+    treffer++;
+    return { ...p, ep: preisNachOz.get(p.oz).ep };
+  });
+  return { positionen: aktualisiert, treffer, fehlend: preise.length - treffer };
+}
+
+function gaeb90Zeile(satzart, inhalt, satznr) {
+  const inhaltGepolstert = (inhalt ?? "").slice(0, 72).padEnd(72, " ");
+  return satzart + inhaltGepolstert + String(satznr).padStart(6, "0");
+}
+
+// Dezimalzahl -> Ziffernfolge fester Breite (Kehrfunktion zum jeweiligen
+// Ziffern-Divisor in parseGaeb90Preise: EP durch 1000, GP durch 100).
+function ziffernAusBetrag(betrag, nachkommastellen, gesamtstellen) {
+  const n = Math.max(0, Math.round((Number(betrag) || 0) * 10 ** nachkommastellen));
+  return String(n).padStart(gesamtstellen, "0").slice(-gesamtstellen);
+}
+
+// "01.01.0010" bzw. "01.01.0010a" -> ["01010010", "a"] (Kaufland-Dialekt,
+// 2+2+4-stellig) oder "001.0001" -> ["0010001", ""] (Hans-Dach-Dialekt,
+// einstufig) — Kehrfunktion zu ozAusZiffern() oben, beide von dort erzeugten
+// Formate werden unterstützt. Eine Position, deren OZ aus dem älteren,
+// unbepreisten D81/D83-Import des Kaufland-Dialekts stammt (dort
+// "Untertitel.PosNr", z.B. "0101.30" statt "01.01.0010" — siehe
+// parseGaeb90()/case "21") hat eine andere Zählweise und wird bewusst nicht
+// geraten, sondern mit Warnung übersprungen (siehe gaeb90PreiseSchreiben()).
+function ozZiffernAusOz(oz) {
+  const alt = String(oz).match(/^(\d{2})\.(\d{2})\.(\d{4})([a-zA-Z]?)$/);
+  if (alt) return [alt[1] + alt[2] + alt[3], alt[4] || ""];
+  const neu = String(oz).match(/^(\d{1,5})\.(\d{4})([a-zA-Z]?)$/);
+  if (neu) return [neu[1] + neu[2], neu[3] || ""];
+  return null;
+}
+
+// ── Bepreister Export (D84/D86) ────────────────────────────────────────────
+// Schreibt eine bepreiste GAEB90-Preisdatei (Satzart 23 je Position) aus der
+// aktuellen Positionenliste eines Angebots — Umkehrung von
+// parseGaeb90Preise(). Reine Preisliste ohne Text/Titel (identisch zum
+// echten D84-Format, siehe Datei-Kommentar oben bei "Bepreister Import"):
+// jede Position braucht dafür bereits eine Ordnungszahl (oz) in einem der
+// beiden von ozAusZiffern()/ozZiffernAusOz() unterstützten Formate — die
+// kommt aus einem vorherigen GAEB-XML-Import (Ausschreibung/LV, siehe
+// gaebXml.js) oder dem Mutter-LV-Abgleich (lib/mutterlv.js). Eine manuell
+// angelegte Position oder eine mit OZ aus dem älteren D81/D83-Import des
+// Kaufland-Dialekts (siehe case "21" in parseGaeb90()) hat keine passende
+// bzw. keine Ordnungszahl und wird mit Warnung übersprungen statt eine zu
+// erfinden.
+//
+// Kopfsatzarten nur so weit geschrieben, wie aus den Angebotsdaten
+// rekonstruierbar (01 Projekttitel, 08 Währung) — Vendor-spezifische
+// Kennsatzfelder (Satzart 00/02/03/06x, siehe gaeb90Schreiben()-Kommentar)
+// werden wie beim unbepreisten Export ausgelassen statt geraten. Satzart 32
+// (Zwischensummen je Titel-/Untertitelebene) fehlt bewusst — informativ für
+// einen Leser, aber ohne eigene Preisdaten, die ein Rückimport bräuchte.
+export function gaeb90PreiseSchreiben(positionen, { projektTitel = "Angebot" } = {}) {
+  let satznr = 1;
+  const zeilen = [];
+  const warnungen = [];
+  const add = (satzart, inhalt) => {
+    zeilen.push(gaeb90Zeile(satzart, inhalt, satznr));
+    satznr++;
+  };
+
+  add("01", projektTitel);
+  add("08", "EUR   EURO");
+
+  for (const p of positionen) {
+    if (!p.bez || p.bez.startsWith("──")) continue; // Gruppenkopfzeile, keine Preiszeile
+    if (!p.oz) { warnungen.push(`Position "${p.bez}" ohne Ordnungszahl — übersprungen.`); continue; }
+    const ozTeile = ozZiffernAusOz(p.oz);
+    if (!ozTeile) { warnungen.push(`Ordnungszahl "${p.oz}" nicht im erwarteten Format (TT.UU.PPPP oder GGG.PPPP) — übersprungen.`); continue; }
+    const [ziffern, suffix] = ozTeile;
+    const epEffektiv = (p.ep || 0) * (1 - (p.rabatt || 0) / 100);
+    const gp = epEffektiv * (p.menge || 0);
+    // OZ+Suffix zusammen immer auf Spalte 10 auffüllen — unabhängig von der
+    // OZ-Stellenzahl des jeweiligen Dialekts (7 oder 8 Ziffern, siehe
+    // ozAusZiffern()), gegen beide echten Dateien abgeglichen.
+    const ozFeld = (ziffern + suffix).padEnd(10, " ");
+    add("23", `${ozFeld}${ziffernAusBetrag(epEffektiv, 3, 11)} ${ziffernAusBetrag(gp, 2, 12)}`);
+  }
+
+  add("99", "");
+  return { text: zeilen.join("\r\n") + "\r\n", warnungen };
+}
+
+// ── Export (unbepreist) ─────────────────────────────────────────────────────
 // Schreibt die aktuelle Positionenliste eines Angebots (Format wie
 // gaeb90ZuPositionen() es liefert: {bez,einheit,menge,ep,rabatt}, inkl. der
 // "── <Titel> ──"-Gruppenkopfzeilen und "↳ "-Unterpositionen-Präfixe) als
@@ -223,12 +446,8 @@ export function gaeb90ZuPositionen({ positionen }) {
 // (Kopfsatzarten 00/02/03/063/08 wie Kennsatz-Flags oder die Unterpositions-
 // Verweisblöcke in Satzart 21/24 sind aus der Beispieldatei nicht vollständig
 // rekonstruierbar und werden daher ausgelassen statt geraten). Bepreister
-// Export (D84/D86 mit Einheitspreisen) bleibt wie der Import blockiert.
-
-function gaeb90Zeile(satzart, inhalt, satznr) {
-  const inhaltGepolstert = (inhalt ?? "").slice(0, 72).padEnd(72, " ");
-  return satzart + inhaltGepolstert + String(satznr).padStart(6, "0");
-}
+// Export: siehe gaeb90PreiseSchreiben() oben (eigener Satzart-23-Writer,
+// da D84/D86 strukturell anders aufgebaut sind — reine Preisliste ohne Text).
 
 // Kehrfunktion zu mengeAusZiffern: Dezimalzahl -> 11-stellige Ziffernfolge
 // (8 Vorkomma- + 3 Nachkommastellen).

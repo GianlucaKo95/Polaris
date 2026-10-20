@@ -401,15 +401,15 @@ export async function sbKundenportalDeaktivieren(id, session) {
 // Öffentlicher Abruf ohne Session — läuft über eine SECURITY DEFINER-RPC,
 // die gezielt nur die für den Kunden freigegebenen, kuratierten Felder
 // liefert (kein Zugriff auf echte Tabellen für anon, siehe Migration).
-// _v4 statt der alten kundenportal_daten/_v2/_v3: liefert zusätzlich eine
-// Mängel-Liste je Projekt (Statusverfolgung im Portal), den aktuellen
-// Abnahme-Status (Kundenabnahme) und die von der Firma hochgeladenen
-// Dokumente (PDF-Downloads im Portal) — neue Funktion statt DROP+CREATE,
-// siehe einladung_pruefen_v2/v3 bzw. angebot_freigabe_*_v2 für denselben,
-// aus früheren Migrationen bekannten Workaround.
+// _v5 statt der alten kundenportal_daten/_v2/_v3/_v4: liefert zusätzlich die
+// versendeten/bezahlten Rechnungen (Abschlags-/Schlussrechnungen) der
+// Aufträge dieses Projekts samt einer eventuell bereits vorliegenden
+// Kundenbestätigung — neue Funktion statt DROP+CREATE, siehe
+// einladung_pruefen_v2/v3 bzw. angebot_freigabe_*_v2 für denselben, aus
+// früheren Migrationen bekannten Workaround.
 export async function sbKundenportalDaten(token) {
   try {
-    const { data, error } = await supabase.rpc("kundenportal_daten_v4", { p_token: token });
+    const { data, error } = await supabase.rpc("kundenportal_daten_v5", { p_token: token });
     if (error || !data?.length) return null;
     return data[0];
   } catch { return null; }
@@ -429,6 +429,27 @@ export async function sbKundenportalAbnahmeEntscheiden(token, { entscheidung, na
       p_signatur: signatur || null,
       p_grund: grund || null,
       p_dokument: dokument || null,
+    });
+    if (error) return { ok: false, hash: null, fehler: error.message || "Senden fehlgeschlagen." };
+    return { ok: true, hash: data, fehler: null };
+  } catch { return { ok: false, hash: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+// Lässt den Kunden ohne Login über denselben Kundenportal-Token den
+// Leistungsstand EINER Rechnung bestätigen oder beanstanden — analog
+// sbKundenportalAbnahmeEntscheiden, aber pro Rechnung statt einmal pro
+// Projekt (siehe rechnung_bestaetigungen-Tabelle). Einmalig: ein zweiter
+// Aufruf für dieselbe Rechnung schlägt mit der RPC-eigenen Fehlermeldung
+// fehl ("bereits beantwortet").
+export async function sbKundenportalRechnungBestaetigen(token, { rechnungId, entscheidung, name, signatur, grund }) {
+  try {
+    const { data, error } = await supabase.rpc("kundenportal_rechnung_bestaetigen", {
+      p_token: token,
+      p_rechnung_id: rechnungId,
+      p_entscheidung: entscheidung,
+      p_name: name || "",
+      p_signatur: signatur || null,
+      p_grund: grund || null,
     });
     if (error) return { ok: false, hash: null, fehler: error.message || "Senden fehlgeschlagen." };
     return { ok: true, hash: data, fehler: null };
@@ -877,6 +898,104 @@ export async function sbAngebotSpeichern(a, projektId, session, istNeu) {
   } catch { return null; }
 }
 
+// Baufortschritt (Leistungsstand % je Position eines angenommenen Angebots)
+// liegt bewusst NICHT in angebote.positionen, sondern in einer eigenen
+// Tabelle — ein angenommenes Angebot wird gesperrt (angebote.gesperrt), der
+// Leistungsstand muss aber während der ganzen Bauzeit änderbar bleiben
+// (siehe lib/rechnung.js). upsert über den unique-Index (angebot_id,
+// position_id): neu erfasste Positionen legen die Zeile an, eine Änderung
+// am bestehenden Prozentsatz überschreibt sie.
+export async function sbBaufortschrittSpeichern(angebotId, projektId, positionId, prozent, profilId, session) {
+  if (!session?.access_token || !angebotId || !projektId) return { daten: null, fehler: "Keine gültige Sitzung." };
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("baufortschritt")
+      .upsert({
+        angebot_id: angebotId, projekt_id: projektId, position_id: positionId,
+        prozent: Math.max(0, Math.min(100, Number(prozent) || 0)),
+        aktualisiert_von: profilId || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "angebot_id,position_id" })
+      .select();
+    const fehler = sbSchreibfehler(error, data, false);
+    return { daten: fehler ? null : (data?.[0] || null), fehler };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbBaufortschrittLaden(angebotId, session) {
+  if (!session?.access_token || !angebotId) return [];
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("baufortschritt").select("*").eq("angebot_id", angebotId);
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
+}
+
+// Rechnungen (Abschlags-/Schlussrechnungen nach Baufortschritt, siehe
+// lib/rechnung.js) — Snapshot-Zeilen, daher kein Payload-Mapping auf
+// Einzelfelder wie bei sbAngebotSpeichern: r trägt bereits exakt die
+// Spalten der Tabelle.
+export async function sbRechnungSpeichern(r, projektId, session, istNeu) {
+  if (!session?.access_token || !projektId) return { daten: null, fehler: "Keine gültige Sitzung." };
+  const payload = {
+    projekt_id: projektId,
+    angebot_id: r.angebot_id,
+    typ: r.typ || "abschlag",
+    nummer: r.nummer || "",
+    datum: r.datum || new Date().toISOString().slice(0,10),
+    status: r.status || "entwurf",
+    positionen_snapshot: r.positionen_snapshot || [],
+    netto_betrag: r.netto_betrag || 0,
+    sicherheitseinbehalt_prozent: r.sicherheitseinbehalt_prozent || 0,
+    mwst: r.mwst ?? 19,
+  };
+  try {
+    const client = sbClientMitToken(session);
+    const query = istNeu
+      ? client.from("rechnungen").insert({ ...payload, erstellt_von: r.erstellt_von || null }).select()
+      : client.from("rechnungen").update(payload).eq("id", r.id).select();
+    const { data, error } = await query;
+    const fehler = sbSchreibfehler(error, data, !istNeu);
+    return { daten: fehler ? null : (data?.[0] || null), fehler };
+  } catch { return { daten: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
+}
+
+export async function sbRechnungenLaden(angebotId, session) {
+  if (!session?.access_token || !angebotId) return [];
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("rechnungen").select("*")
+      .eq("angebot_id", angebotId).order("created_at", { ascending: true });
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
+}
+
+export async function sbRechnungLoeschen(id, session) {
+  if (!session?.access_token || !id) return false;
+  try {
+    const client = sbClientMitToken(session);
+    const { error } = await client.from("rechnungen").delete().eq("id", id);
+    return !error;
+  } catch { return false; }
+}
+
+// Vom Kunden im Portal bereits beantwortete Leistungsstand-Bestätigungen zu
+// den übergebenen Rechnungen (siehe kundenportal_rechnung_bestaetigen-RPC
+// unten) — rein lesend für die interne Rechnungen-Ansicht, damit Polier/
+// Admin sehen, ob/wie der Kunde reagiert hat.
+export async function sbRechnungBestaetigungenLaden(rechnungIds, session) {
+  if (!session?.access_token || !rechnungIds?.length) return [];
+  try {
+    const client = sbClientMitToken(session);
+    const { data, error } = await client.from("rechnung_bestaetigungen").select("*")
+      .in("rechnung_id", rechnungIds);
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
+}
+
 // Budget-Positionen + Stundensatz liegen (anders als Aufgaben/Kolonnen/
 // Angebote) direkt als Spalten auf der projekte-Zeile, da es pro Baustelle
 // nur je eine Liste bzw. einen Wert gibt — keine eigene Tabelle nötig.
@@ -895,13 +1014,17 @@ export async function sbProjektKostenSpeichern(projektId, budgetPositionen, stun
 // projektgebunden), deshalb auf der firmen-Zeile statt einer eigenen Tabelle.
 // kalkulationspreise: Lohn-/Material-/Geräte-/Fremdleistungs-Stammdaten für
 // die EP-Kalkulation (anders als einheitspreise, das fertige Verkaufs-EP
-// pro Gewerk sind) — gleiche Ablage, gleiches Muster.
-export async function sbFirmaParameterSpeichern(firmaId, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, session, kalkulationspreise) {
+// pro Gewerk sind) — gleiche Ablage, gleiches Muster. standardZuschlaege:
+// firmenweites Standard-Zuschlagsschema (siehe lib/kalkulation.js), wird bei
+// "Aus Ausschreibung generieren" automatisch auf die Mutter-LV-Preise
+// angewendet (lib/mutterlv.js).
+export async function sbFirmaParameterSpeichern(firmaId, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, session, kalkulationspreise, standardZuschlaege) {
   if (!session?.access_token || !firmaId) return false;
   try {
     const client = sbClientMitToken(session);
     const payload = { einheitspreise, lv_vorlagen: lvVorlagen, angebot_vorlage: angebotVorlage, tagebuch_vorlage: tagebuchVorlage };
     if (kalkulationspreise !== undefined) payload.kalkulationspreise = kalkulationspreise;
+    if (standardZuschlaege !== undefined) payload.standard_zuschlaege = standardZuschlaege;
     const { error } = await client.from("firmen")
       .update(payload)
       .eq("id", firmaId);

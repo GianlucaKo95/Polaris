@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator } from "lucide-react";
+import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator, Upload, Coins } from "lucide-react";
 import { PreisFormular } from "./PreisFormular.jsx";
 import { KalkulationspreisFormular, KALKULATIONSPREIS_KATEGORIEN } from "./KalkulationspreisFormular.jsx";
 import { VorlageFormular } from "./VorlageFormular.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
 import { VorlagenUploadPanel } from "../components/VorlagenUploadPanel.jsx";
 import { kiAngebotVorlageAnalysieren, kiTagebuchVorlageAnalysieren } from "../lib/ai.js";
+import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, parseGaeb90Preise, gaeb90PreiseEinspielen } from "../lib/gaeb90.js";
+import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 
-export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, kalkulationspreise, setKalkulationspreise, session }) {
+export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, kalkulationspreise, setKalkulationspreise, standardZuschlaege, setStandardZuschlaege, session }) {
   const [aktiv,    setAktiv]    = useState("preise"); // preise | kalkpreise | vorlagen | angebotsvorlage | tagebuchvorlage
   const [neuPreis, setNeuPreis] = useState(null);
   const [neuVorlage,setNeuVorlage] = useState(null);
@@ -18,6 +20,91 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
   useBackButton(neuPreis || editPreis, () => { setNeuPreis(null); setEditPreis(null); });
   useBackButton(neuVorlage, () => setNeuVorlage(null));
   useBackButton(neuKalkPreis || editKalkPreis, () => { setNeuKalkPreis(null); setEditKalkPreis(null); });
+
+  // ── Mutter-LV: GAEB-Import direkt als LV-Vorlage speichern ────────────────
+  // Baut auf denselben Parsern wie der GAEB-Import im Angebot (gaeb90.js/
+  // gaebXml.js) auf, landet aber direkt in lvVorlagen (firmenweite, dauerhafte
+  // Preisbibliothek) statt in einem einzelnen Angebot — Grundlage für den
+  // automatischen Preisabgleich neuer Ausschreibungen (siehe AngebotView.jsx,
+  // lib/mutterlv.js).
+  const [mutterLvFehler, setMutterLvFehler] = useState("");
+  const [mutterLvInfo,   setMutterLvInfo]   = useState(null);
+  const mutterLvStructInputRef = useRef(null);
+  const mutterLvXmlInputRef    = useRef(null);
+  const mutterLvPreiseInputRef = useRef(null);
+  const [preiseZielVorlageId, setPreiseZielVorlageId] = useState(null);
+
+  function vorlageAusImport(name, positionen) {
+    setLvVorlagen(prev => [...prev, { id: Date.now(), name, gewerk: "", positionen }]);
+  }
+
+  async function mutterLvStrukturImportieren(e) {
+    const datei = e.target.files?.[0];
+    if (!datei) return;
+    setMutterLvFehler(""); setMutterLvInfo(null);
+    try {
+      const text = await gaeb90DateiLesen(datei);
+      const geparst = parseGaeb90(text);
+      const positionen = gaeb90ZuPositionen(geparst);
+      if (positionen.length === 0) {
+        setMutterLvFehler("Keine Positionen erkannt — ist das eine GAEB90-Datei (.d81/.d83/.d85/.d86)?");
+        return;
+      }
+      const name = geparst.projektTitel || datei.name.replace(/\.[^.]+$/, "");
+      vorlageAusImport(name, positionen);
+      setMutterLvInfo({ name, anzahl: positionen.length, warnungen: geparst.warnungen.length });
+    } catch (err) {
+      setMutterLvFehler("Import fehlgeschlagen: " + (err?.message || err));
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function mutterLvXmlImportieren(e) {
+    const datei = e.target.files?.[0];
+    if (!datei) return;
+    setMutterLvFehler(""); setMutterLvInfo(null);
+    try {
+      const text = await gaebXmlDateiLesen(datei);
+      const geparst = parseGaebXml(text);
+      const positionen = gaeb90ZuPositionen(geparst);
+      if (positionen.length === 0) {
+        setMutterLvFehler("Keine Positionen erkannt — ist das eine GAEB-DA-XML-Datei (.x83)?");
+        return;
+      }
+      const name = geparst.projektTitel || datei.name.replace(/\.[^.]+$/, "");
+      vorlageAusImport(name, positionen);
+      setMutterLvInfo({ name, anzahl: positionen.length, warnungen: geparst.warnungen.length });
+    } catch (err) {
+      setMutterLvFehler("Import fehlgeschlagen: " + (err?.message || err));
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function mutterLvPreiseImportieren(e) {
+    const datei = e.target.files?.[0];
+    const zielId = preiseZielVorlageId;
+    if (!datei || zielId == null) return;
+    setMutterLvFehler(""); setMutterLvInfo(null);
+    try {
+      const text = await gaeb90DateiLesen(datei);
+      const geparst = parseGaeb90Preise(text);
+      if (geparst.preise.length === 0) {
+        setMutterLvFehler("Keine Preise erkannt — ist das eine bepreiste GAEB90-Datei (.d84/.d86)?");
+        return;
+      }
+      const ziel = lvVorlagen.find(v => v.id === zielId);
+      const { positionen, treffer, fehlend } = gaeb90PreiseEinspielen(ziel?.positionen || [], geparst.preise);
+      setLvVorlagen(prev => prev.map(v => v.id === zielId ? { ...v, positionen } : v));
+      setMutterLvInfo({ name: ziel?.name, treffer, fehlend, preise: true });
+    } catch (err) {
+      setMutterLvFehler("Import fehlgeschlagen: " + (err?.message || err));
+    } finally {
+      e.target.value = "";
+      setPreiseZielVorlageId(null);
+    }
+  }
 
   function preisLoeschen(id) {
     setEinheitspreise(prev => prev.filter(p => p.id !== id));
@@ -122,6 +209,35 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
           Zusammenstellen einer Kalkulation in AngebotEditor klar bleibt. */}
       {aktiv === "kalkpreise" && (
         <div>
+          {/* Standard-Zuschläge: firmenweites Zuschlagsschema je Kostenart
+              (siehe lib/kalkulation.js) — wird bei "Aus Ausschreibung
+              generieren" (AngebotView.jsx) automatisch auf den dort als
+              Fremdleistungs-Kostenbasis behandelten Mutter-LV-Preis
+              angewendet (lib/mutterlv.js), statt 0% anzunehmen. Für die
+              übrigen Kostenarten hier mit hinterlegt, damit das Schema an
+              einer Stelle vollständig gepflegt wird — auch wenn der
+              Mutter-LV-Abgleich aktuell nur den Fremdleistungs-Satz nutzt. */}
+          <div style={{ background:"var(--surface2)", border:"1px dashed var(--border)",
+            borderRadius:12, padding:"10px 12px", marginBottom:14 }}>
+            <div style={{ color:"var(--muted)", fontSize:11, fontWeight:700,
+              textTransform:"uppercase", marginBottom:7 }}>Standard-Zuschläge (%)</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:6 }}>
+              {[["Lohn","zuschlagLohn"],["Material","zuschlagMaterial"],["Gerät","zuschlagGeraet"],["Fremdl.","zuschlagFremdleistung"]].map(([l,feld]) => (
+                <div key={feld}>
+                  <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>{l}</div>
+                  <input type="number" min="0" value={standardZuschlaege?.[feld] ?? ""}
+                    onChange={e => setStandardZuschlaege(x => ({ ...x, [feld]: Number(e.target.value) }))}
+                    placeholder="0" style={{ width:"100%", background:"var(--surface)", color:"var(--text)",
+                      border:"1.5px solid var(--border)", borderRadius:8, padding:"7px 9px",
+                      fontSize:12.5, boxSizing:"border-box", fontFamily:"inherit" }} />
+                </div>
+              ))}
+            </div>
+            <div style={{ color:"var(--muted)", fontSize:11, marginTop:7, lineHeight:1.4 }}>
+              Der Fremdleistungs-Satz wird automatisch auf den Mutter-LV-Preis angewendet, wenn aus einer Ausschreibung ein Angebot generiert wird.
+            </div>
+          </div>
+
           <div style={{ display:"flex", justifyContent:"space-between",
             alignItems:"center", marginBottom:7 }}>
             <div style={{ color:"var(--muted)", fontSize:12 }}>
@@ -199,6 +315,51 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
             </button>
           </div>
 
+          {/* Mutter-LV: fertiges GAEB-LV (z.B. von einem früheren, ähnlichen
+              Projekt) direkt als dauerhafte Preisquelle hochladen, statt
+              jede Position manuell abzutippen — Grundlage für den
+              automatischen Preisvorschlag bei neuen Ausschreibungen
+              ("Aus Ausschreibung generieren" in Angebote). */}
+          <div style={{ background:"var(--surface2)", border:"1px dashed var(--border)",
+            borderRadius:12, padding:"10px 12px", marginBottom:10 }}>
+            <div style={{ color:"var(--muted)", fontSize:11, fontWeight:700,
+              textTransform:"uppercase", marginBottom:7 }}>Mutter-LV hochladen</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:7 }}>
+              <button onClick={() => mutterLvStructInputRef.current?.click()}
+                style={{ background:"var(--surface)", color:"var(--text)",
+                  border:"1.5px solid var(--border)", borderRadius:10, padding:"8px 0",
+                  cursor:"pointer", fontSize:11.5, fontWeight:700, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                <Upload size={12} /> GAEB90 (D81/D83)
+              </button>
+              <button onClick={() => mutterLvXmlInputRef.current?.click()}
+                style={{ background:"var(--surface)", color:"var(--text)",
+                  border:"1.5px solid var(--border)", borderRadius:10, padding:"8px 0",
+                  cursor:"pointer", fontSize:11.5, fontWeight:700, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                <Upload size={12} /> GAEB-XML (X83)
+              </button>
+            </div>
+            <input ref={mutterLvStructInputRef} type="file" onChange={mutterLvStrukturImportieren}
+              accept=".d81,.d83,.d85,.d86,.D81,.D83,.D85,.D86,.p81,.p83,.p85,.p86" style={{ display:"none" }} />
+            <input ref={mutterLvXmlInputRef} type="file" onChange={mutterLvXmlImportieren}
+              accept=".x83,.X83" style={{ display:"none" }} />
+            <input ref={mutterLvPreiseInputRef} type="file" onChange={mutterLvPreiseImportieren}
+              accept=".d84,.d86,.D84,.D86,.p84,.p86" style={{ display:"none" }} />
+            {mutterLvFehler && (
+              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:8,
+                padding:"7px 10px", marginTop:8, fontSize:11.5 }}>{mutterLvFehler}</div>
+            )}
+            {mutterLvInfo && (
+              <div style={{ background:"var(--gbg)", color:"var(--green)", borderRadius:8,
+                padding:"7px 10px", marginTop:8, fontSize:11.5 }}>
+                {mutterLvInfo.preise
+                  ? <>✓ {mutterLvInfo.treffer} Preise in „{mutterLvInfo.name}" eingespielt{mutterLvInfo.fehlend > 0 && <> — {mutterLvInfo.fehlend} ohne passende Position</>}.</>
+                  : <>✓ „{mutterLvInfo.name}" mit {mutterLvInfo.anzahl} Positionen angelegt{mutterLvInfo.warnungen > 0 && <> ({mutterLvInfo.warnungen} Zeile(n) nicht erkannt)</>} — Preise fehlen noch, siehe „Preise einspielen" unten.</>}
+              </div>
+            )}
+          </div>
+
           {lvVorlagen.map(v => (
             <div key={v.id} style={{ background:"var(--surface)", borderRadius:12,
               padding:"9px 14px", marginBottom:6,
@@ -208,15 +369,24 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
                 <div style={{ color:"var(--text)", fontWeight:700, fontSize:13 }}>
                   {v.name}
                 </div>
-                <button onClick={() => setLvVorlagen(prev => prev.filter(x=>x.id!==v.id))}
-                  style={{ background:"var(--rbg)", border:"1px solid var(--red)",
-                    color:"var(--red)", borderRadius:8, padding:"4px 10px",
-                    cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><X size={13} /></button>
+                <div style={{ display:"flex", gap:5 }}>
+                  <button onClick={() => { setPreiseZielVorlageId(v.id); mutterLvPreiseInputRef.current?.click(); }}
+                    title="GAEB-Preise einspielen (D84/D86)"
+                    style={{ background:"var(--surface2)", border:"1px solid var(--border)",
+                      color:"var(--text)", borderRadius:8, padding:"4px 8px",
+                      cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><Coins size={13} /></button>
+                  <button onClick={() => setLvVorlagen(prev => prev.filter(x=>x.id!==v.id))}
+                    style={{ background:"var(--rbg)", border:"1px solid var(--red)",
+                      color:"var(--red)", borderRadius:8, padding:"4px 10px",
+                      cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><X size={13} /></button>
+                </div>
               </div>
               {v.positionen.map((pos,i) => (
                 <div key={i} style={{ color:"var(--muted)", fontSize:11,
-                  padding:"3px 0", borderBottom:"1px solid var(--border)" }}>
-                  {pos.bez} · {pos.einheit}
+                  padding:"3px 0", borderBottom:"1px solid var(--border)",
+                  display:"flex", justifyContent:"space-between", gap:8 }}>
+                  <span>{pos.bez} · {pos.einheit}</span>
+                  {pos.ep > 0 && <span style={{ flexShrink:0 }}>{pos.ep.toLocaleString("de-DE",{minimumFractionDigits:2})} €</span>}
                 </div>
               ))}
             </div>

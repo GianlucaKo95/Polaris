@@ -2,6 +2,7 @@ import { Plus, X } from "lucide-react";
 import { Label, inputStyle } from "./Label.jsx";
 import {
   kalkulationAufschluesselung, kalkulationZuschlagProzent,
+  kalkulationZuschlagProzentJeKostenart, ZUSCHLAG_FELD,
   kalkulationGesamtkosten, kalkulationEp,
 } from "../lib/kalkulation.js";
 
@@ -68,13 +69,17 @@ function PostenKategorie({ titel, kategorie, kalk, stammdaten, menge, gesperrt, 
 
 // Inline-Panel für die EP-Kalkulation einer Position: Lohn-/Material-/
 // Geräte-Posten aus den Kalkulations-Stammdaten zusammenstellen, direkte
-// Fremdleistungskosten eintragen, drei getrennte Zuschlagssätze (Gemein-
-// kosten/Wagnis/Gewinn) — der EP der Position wird daraus automatisch
-// berechnet (siehe lib/kalkulation.js) statt direkt eingegeben zu werden.
+// Fremdleistungskosten eintragen, je Kostenart ein eigener Zuschlagssatz
+// (z.B. Lohn üblicherweise höher als Fremdleistung, siehe lib/kalkulation.js)
+// — der EP der Position wird daraus automatisch berechnet statt direkt
+// eingegeben zu werden. Die Eingabefelder zeigen bei älteren, noch nach dem
+// alten (einheitlichen) Schema kalkulierten Positionen den daraus
+// zurückgerechneten gemeinsamen Satz vor — erst eine Änderung legt für die
+// betreffende Kostenart einen eigenen Satz fest.
 export function PositionKalkulation({ kalk, stammdaten, menge, gesperrt, onChange }) {
   const aufschluesselung = kalkulationAufschluesselung(kalk, stammdaten);
   const einzelkosten = aufschluesselung.lohn + aufschluesselung.material + aufschluesselung.geraet + aufschluesselung.fremdleistung;
-  const zuschlagProzent = kalkulationZuschlagProzent(kalk);
+  const zuschlagProzent = kalkulationZuschlagProzent(kalk, stammdaten);
   const gesamtkosten = kalkulationGesamtkosten(kalk, stammdaten);
   const ep = kalkulationEp(kalk, stammdaten, menge);
 
@@ -95,14 +100,14 @@ export function PositionKalkulation({ kalk, stammdaten, menge, gesperrt, onChang
       </div>
 
       <div style={{ color:"var(--muted)", fontSize:11, fontWeight:700, textTransform:"uppercase", marginBottom:5 }}>
-        Zuschläge (%)
+        Zuschläge je Kostenart (%)
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:10 }}>
-        {[["Gemeinkosten","zuschlagGemeinkosten"],["Wagnis","zuschlagWagnis"],["Gewinn","zuschlagGewinn"]].map(([l,k]) => (
-          <div key={k}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:6, marginBottom:10 }}>
+        {[["Lohn","lohn"],["Material","material"],["Gerät","geraet"],["Fremdl.","fremdleistung"]].map(([l,kostenart]) => (
+          <div key={kostenart}>
             <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>{l}</div>
-            <input type="number" min="0" value={kalk[k] || ""} disabled={gesperrt}
-              onChange={e => onChange({ ...kalk, [k]: Number(e.target.value) })}
+            <input type="number" min="0" value={kalkulationZuschlagProzentJeKostenart(kalk, kostenart) || ""} disabled={gesperrt}
+              onChange={e => onChange({ ...kalk, [ZUSCHLAG_FELD[kostenart]]: Number(e.target.value) })}
               placeholder="0" style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
           </div>
         ))}
