@@ -25,6 +25,16 @@ const beispielDatei = readFileSync(join(hier, "__fixtures__", "gaeb-sample.d83")
 // 2025-074a) — Summen hier gegen das dazugehörige Angebots-PDF desselben
 // Projekts abgeglichen (Angebotssumme Netto 64.548,62 €, 54 Positionen).
 const beispielDateiD84 = readFileSync(join(hier, "__fixtures__", "gaeb-priced-sample.D84"), "latin1");
+// Zweiter echter GAEB90-Dialekt ("Hans Dach"-Projekt derselben Bieterfirma
+// wie oben, "HANS.eatische DACH.technik GmbH") mit einstufiger statt
+// zweistufiger Titelgliederung — 7- statt 8-stellige Ordnungszahl (3-
+// stellige Titelgruppe + 4-stellige Positionsnummer statt 2+2+4, siehe
+// ozAusZiffern() in gaeb90.js). D83 (unbepreiste Ausschreibung) und D84
+// (bepreistes eigenes Angebot) desselben Projekts, gegen die zugehörige
+// Angebots-PDF (KAL250) und Kalkulationsauswertung (Ludwig.xlsx) desselben
+// Projekts abgeglichen: 473 Positionen in 7 Titelgruppen.
+const beispielDateiD83HansDach = readFileSync(join(hier, "__fixtures__", "gaeb-sample-hansdach.D83"), "latin1");
+const beispielDateiD84HansDach = readFileSync(join(hier, "__fixtures__", "gaeb-priced-sample-hansdach.D84"), "latin1");
 
 test("parseGaeb90 liest alle 19 Positionen der Beispieldatei ohne Warnungen", () => {
   const { positionen, warnungen } = parseGaeb90(beispielDatei);
@@ -166,4 +176,60 @@ test("gaeb90PreiseSchreiben überspringt Positionen ohne Ordnungszahl oder mit f
   const { preise } = parseGaeb90Preise(text);
   assert.equal(preise.length, 1);
   assert.equal(preise[0].oz, "02.03.0001");
+});
+
+// ── Zweiter GAEB90-Dialekt ("Hans Dach", einstufige Titelgliederung) ──────
+
+test("parseGaeb90 liest alle 473 Positionen der Hans-Dach-D83-Datei ohne Warnungen (einstufiger Dialekt)", () => {
+  const { positionen, warnungen } = parseGaeb90(beispielDateiD83HansDach);
+  assert.equal(warnungen.length, 0);
+  assert.equal(positionen.filter(p => p.typ === "position").length, 473);
+});
+
+test("parseGaeb90 erkennt die 7-stellige Ordnungszahl des Hans-Dach-Dialekts im GGG.PPPP-Format", () => {
+  const { positionen } = parseGaeb90(beispielDateiD83HansDach);
+  const erste = positionen.find(p => p.typ === "position");
+  assert.equal(erste.oz, "001.0001");
+  assert.equal(erste.einheit, "qm");
+});
+
+test("parseGaeb90Preise liest alle 473 Preispositionen der Hans-Dach-D84-Datei ohne Warnungen (7-stellige statt 8-stellige OZ)", () => {
+  const { preise, warnungen } = parseGaeb90Preise(beispielDateiD84HansDach);
+  assert.equal(warnungen.length, 0);
+  assert.equal(preise.length, 473);
+});
+
+test("parseGaeb90Preise dekodiert EP/GP des Hans-Dach-Dialekts korrekt — gegen die echte Angebots-PDF/Excel-Kalkulationsauswertung desselben Projekts abgeglichen", () => {
+  const { preise } = parseGaeb90Preise(beispielDateiD84HansDach);
+  const nachOz = Object.fromEntries(preise.map(p => [p.oz, p]));
+  assert.equal(nachOz["001.0001"].ep, 0.68);
+  assert.equal(nachOz["001.0001"].gp, 0.68);
+  assert.equal(nachOz["001.0010"].ep, 577.50);
+  assert.equal(nachOz["001.0010"].gp, 577.50);
+});
+
+test("gaeb90PreiseEinspielen matcht D83- und D84-Positionen des Hans-Dach-Dialekts über die OZ (472 von 473 Positionen, identischer Dialekt in beiden Dateien)", () => {
+  const { positionen: roh, warnungen: w1 } = parseGaeb90(beispielDateiD83HansDach);
+  assert.equal(w1.length, 0);
+  const vorhanden = gaeb90ZuPositionen({ positionen: roh });
+  const { preise, warnungen: w2 } = parseGaeb90Preise(beispielDateiD84HansDach);
+  assert.equal(w2.length, 0);
+  const { treffer, fehlend } = gaeb90PreiseEinspielen(vorhanden, preise);
+  assert.equal(treffer, 472);
+  assert.equal(fehlend, 1); // eine Pauschalposition (075.0999) nur im Preisfile, nicht in der Ausschreibungsstruktur
+});
+
+test("gaeb90PreiseSchreiben + parseGaeb90Preise round-trip im einstufigen GGG.PPPP-Format des Hans-Dach-Dialekts", () => {
+  const positionen = [
+    { id: 1, bez: "Reinigen des Untergrundes", einheit: "qm", menge: 1, ep: 0.68, rabatt: 0, oz: "001.0001" },
+    { id: 2, bez: "Baustelleneinrichtung Raum Hamburg", einheit: "stck", menge: 1, ep: 577.50, rabatt: 0, oz: "001.0010" },
+  ];
+  const { text, warnungen } = gaeb90PreiseSchreiben(positionen, { projektTitel: "Hans Dach Test" });
+  assert.equal(warnungen.length, 0);
+
+  const { preise } = parseGaeb90Preise(text);
+  assert.equal(preise.length, 2);
+  const nachOz = Object.fromEntries(preise.map(p => [p.oz, p]));
+  assert.equal(nachOz["001.0001"].ep, 0.68);
+  assert.equal(nachOz["001.0010"].gp, 577.50);
 });
