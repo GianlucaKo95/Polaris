@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen, positionenMitKalkulationVorbereiten } from "./mutterlv.js";
+import { kalkulationZuschlagProzentJeKostenart } from "./kalkulation.js";
 
 const mutterLv = {
   id: 1, name: "Parkdeck-Instandsetzung (Referenz)", gewerk: "Rohbau",
@@ -102,18 +103,19 @@ test("positionenMitKalkulationVorbereiten legt ohne hinterlegtes Zuschlagsschema
   const [pos] = positionenMitKalkulationVorbereiten(abgeglichen);
   assert.ok(pos.kalk, "gematchte Position sollte eine Kalkulation bekommen");
   assert.equal(pos.kalk.fremdleistung, 4482 * 2);
-  assert.equal(pos.kalk.zuschlagFremdleistung, 0);
+  assert.equal(kalkulationZuschlagProzentJeKostenart(pos.kalk, "fremdleistung"), 0);
   assert.equal(pos.ep, 4482); // unverändert trotz Kalkulation, da Zuschlag 0%
 });
 
-test("positionenMitKalkulationVorbereiten wendet das hinterlegte Standard-Zuschlagsschema automatisch an", () => {
+test("positionenMitKalkulationVorbereiten wendet das hinterlegte, granulare Standard-Zuschlagsschema automatisch an", () => {
   const idx = mutterLvIndexBauen([mutterLv]);
   const ausschreibung = [
     { id: 51, bez: "Egal", einheit: "Psch", menge: 2, ep: 0, rabatt: 0, stlk: "1910110711" }, // matcht, ep=4482
   ];
   const { positionen: abgeglichen } = angebotAusAusschreibungAbgleichen(ausschreibung, idx);
-  const [pos] = positionenMitKalkulationVorbereiten(abgeglichen, { zuschlagFremdleistung: 15 });
-  assert.equal(pos.kalk.zuschlagFremdleistung, 15);
+  const standardZuschlaege = { zuschlagFremdleistungBgk: 5, zuschlagFremdleistungAgk: 5, zuschlagFremdleistungWg: 5 };
+  const [pos] = positionenMitKalkulationVorbereiten(abgeglichen, standardZuschlaege);
+  assert.equal(kalkulationZuschlagProzentJeKostenart(pos.kalk, "fremdleistung"), 15); // 5+5+5
   assert.equal(pos.ep, 4482 * 1.15); // 15% automatisch angewendet
 });
 

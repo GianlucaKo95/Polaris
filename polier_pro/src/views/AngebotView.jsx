@@ -5,6 +5,7 @@ import { useBackButton } from "../hooks/useBackButton.js";
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen, positionenMitKalkulationVorbereiten } from "../lib/mutterlv.js";
+import { kalkulationZuschlagProzentJeKostenart } from "../lib/kalkulation.js";
 
 export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, session }) {
   const [aktAngebot,  setAktAngebot]  = useState(null);
@@ -114,6 +115,7 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
       lvVorlagen={lvVorlagen}
       angebotVorlage={angebotVorlage}
       kalkulationspreise={kalkulationspreise}
+      standardZuschlaege={standardZuschlaege}
       projekt={projekt}
       eigeneFirma={eigeneFirma}
       firmaId={firmaId}
@@ -175,7 +177,9 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
           padding:"9px 14px", marginBottom:10, fontSize:12,
           border:"1px solid var(--green)" }}>
           ✓ „{info.titel}" erstellt — {info.treffer} von {info.gesamt} Positionen automatisch aus der Mutter-LV bepreist (mit Kalkulation
-          {standardZuschlaege?.zuschlagFremdleistung ? <>, {standardZuschlaege.zuschlagFremdleistung}% Standard-Zuschlag angewendet</> : <>, Zuschlag noch 0% — siehe Parameter &rsaquo; Standard-Zuschläge</>})
+          {kalkulationZuschlagProzentJeKostenart(standardZuschlaege || {}, "fremdleistung")
+            ? <>, {kalkulationZuschlagProzentJeKostenart(standardZuschlaege, "fremdleistung")}% Standard-Zuschlag angewendet</>
+            : <>, Zuschlag noch 0% — siehe Parameter &rsaquo; Standard-Zuschläge</>})
           {info.fehlend > 0 && <>, {info.fehlend} noch ohne Preis</>}. Bitte vor dem Versenden prüfen.
         </div>
       )}

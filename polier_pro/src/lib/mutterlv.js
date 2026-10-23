@@ -23,12 +23,13 @@
 // positionenMitKalkulationVorbereiten() legt ihn für jede gematchte Position
 // als Fremdleistungskosten in eine Kalkulation (siehe kalkulation.js/
 // PositionKalkulation.jsx) und wendet darauf das einmal in den
-// Firmenparametern hinterlegte Standard-Zuschlagsschema an
-// (standardZuschlaege.zuschlagFremdleistung, siehe AdminParameterView
-// "Standard-Zuschläge") — ohne hinterlegten Satz bleibt der Zuschlag bei 0%,
-// der EP also unverändert. Der Nutzer sieht die Position im Angebot direkt
-// im Kalkulationsmodus und kann den Satz dort noch pro Projekt anpassen,
-// statt die Kalkulation von Grund auf selbst anzulegen.
+// Firmenparametern hinterlegte, granulare Standard-Zuschlagsschema an
+// (standardZuschlaege.zuschlagFremdleistungBgk/Agk/Wg, siehe
+// AdminParameterView "Standard-Zuschläge") — ohne hinterlegten Satz bleibt
+// der Zuschlag bei 0%, der EP also unverändert. Der Nutzer sieht die
+// Position im Angebot direkt im Kalkulationsmodus und kann den Satz dort
+// noch pro Projekt anpassen, statt die Kalkulation von Grund auf selbst
+// anzulegen.
 
 import { leereKalkulation, kalkulationEp } from "./kalkulation.js";
 
@@ -87,9 +88,10 @@ export function angebotAusAusschreibungAbgleichen(positionen, mutterLvIndex) {
 
 // Bereitet gematchte Positionen für die Kalkulations-UI vor (siehe
 // Datei-Kommentar oben): der Mutter-LV-Preis wird als Fremdleistungs-
-// Kostenbasis in eine Kalkulation gelegt und mit dem dafür hinterlegten
-// Standard-Zuschlagssatz hochgerechnet (standardZuschlaege.zuschlagFremdleistung,
-// siehe AdminParameterView "Standard-Zuschläge") — ohne standardZuschlaege
+// Kostenbasis in eine Kalkulation gelegt und mit dem dafür hinterlegten,
+// granularen Standard-Zuschlagssatz hochgerechnet
+// (standardZuschlaege.zuschlagFremdleistungBgk/Agk/Wg, siehe
+// AdminParameterView "Standard-Zuschläge") — ohne standardZuschlaege
 // (noch nicht konfiguriert) bleibt der Zuschlag bei 0%, der EP also
 // unverändert. Nur Fremdleistung kommt infrage: Lohn/Material/Gerät sind in
 // kalkulation.js immer Posten×Stammdatenpreis, nie ein freier Gesamtbetrag
@@ -100,10 +102,14 @@ export function angebotAusAusschreibungAbgleichen(positionen, mutterLvIndex) {
 // unbepreiste oder mengenlose Position braucht keine Kalkulation
 // aufgedrängt zu bekommen.
 export function positionenMitKalkulationVorbereiten(positionen, standardZuschlaege) {
-  const zuschlag = standardZuschlaege?.zuschlagFremdleistung || 0;
   return (positionen || []).map(p => {
     if (!p.ep || !p.menge) return p;
-    const kalk = { ...leereKalkulation(), fremdleistung: p.ep * p.menge, zuschlagFremdleistung: zuschlag };
+    // leereKalkulation(standardZuschlaege) befüllt ALLE Kostenarten (auch
+    // Lohn/Material/Gerät) mit dem granularen BGK/AGK/WuG-Firmenschema —
+    // harmlos hier, da bei Mutter-LV-Positionen nur Fremdleistung einen
+    // Kostenwert ungleich 0 hat (siehe Datei-Kommentar oben), die übrigen
+    // Zuschlagssätze also nie auf einen Betrag angewendet werden.
+    const kalk = { ...leereKalkulation(standardZuschlaege), fremdleistung: p.ep * p.menge };
     return { ...p, kalk, ep: kalkulationEp(kalk, [], p.menge) };
   });
 }

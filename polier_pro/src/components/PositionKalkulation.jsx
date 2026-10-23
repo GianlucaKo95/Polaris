@@ -2,7 +2,8 @@ import { Plus, X } from "lucide-react";
 import { Label, inputStyle } from "./Label.jsx";
 import {
   kalkulationAufschluesselung, kalkulationZuschlagProzent,
-  kalkulationZuschlagProzentJeKostenart, ZUSCHLAG_FELD,
+  kalkulationZuschlagProzentJeKostenart, zuschlagFeldName,
+  ZUSCHLAG_KOMPONENTEN, ZUSCHLAG_KOMPONENTEN_LABEL, ZUSCHLAG_KOMPONENTEN_BESCHREIBUNG,
   kalkulationGesamtkosten, kalkulationEp,
 } from "../lib/kalkulation.js";
 
@@ -70,12 +71,16 @@ function PostenKategorie({ titel, kategorie, kalk, stammdaten, menge, gesperrt, 
 // Inline-Panel für die EP-Kalkulation einer Position: Lohn-/Material-/
 // Geräte-Posten aus den Kalkulations-Stammdaten zusammenstellen, direkte
 // Fremdleistungskosten eintragen, je Kostenart ein eigener Zuschlagssatz
-// (z.B. Lohn üblicherweise höher als Fremdleistung, siehe lib/kalkulation.js)
-// — der EP der Position wird daraus automatisch berechnet statt direkt
-// eingegeben zu werden. Die Eingabefelder zeigen bei älteren, noch nach dem
-// alten (einheitlichen) Schema kalkulierten Positionen den daraus
-// zurückgerechneten gemeinsamen Satz vor — erst eine Änderung legt für die
-// betreffende Kostenart einen eigenen Satz fest.
+// (z.B. Lohn üblicherweise höher als Fremdleistung, siehe lib/kalkulation.js),
+// selbst wieder aufgeteilt in Baustellengemeinkosten (BGK), Allgemeine
+// Geschäftskosten (AGK) und Wagnis & Gewinn (WuG) — der EP der Position wird
+// daraus automatisch berechnet statt direkt eingegeben zu werden. Die
+// "Summe"-Spalte zeigt bei älteren, noch nach einem der beiden Vorgänger-
+// schemata kalkulierten Positionen den daraus zurückgerechneten Satz vor,
+// solange die BGK/AGK/WuG-Felder der Kostenart noch leer sind (siehe
+// kalkulationZuschlagProzentJeKostenart() in lib/kalkulation.js) — erst eine
+// Änderung an einer der drei Komponenten legt für die betreffende Kostenart
+// einen eigenen, granularen Satz fest.
 export function PositionKalkulation({ kalk, stammdaten, menge, gesperrt, onChange }) {
   const aufschluesselung = kalkulationAufschluesselung(kalk, stammdaten);
   const einzelkosten = aufschluesselung.lohn + aufschluesselung.material + aufschluesselung.geraet + aufschluesselung.fremdleistung;
@@ -102,16 +107,33 @@ export function PositionKalkulation({ kalk, stammdaten, menge, gesperrt, onChang
       <div style={{ color:"var(--muted)", fontSize:11, fontWeight:700, textTransform:"uppercase", marginBottom:5 }}>
         Zuschläge je Kostenart (%)
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:6, marginBottom:10 }}>
-        {[["Lohn","lohn"],["Material","material"],["Gerät","geraet"],["Fremdl.","fremdleistung"]].map(([l,kostenart]) => (
-          <div key={kostenart}>
-            <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>{l}</div>
-            <input type="number" min="0" value={kalkulationZuschlagProzentJeKostenart(kalk, kostenart) || ""} disabled={gesperrt}
-              onChange={e => onChange({ ...kalk, [ZUSCHLAG_FELD[kostenart]]: Number(e.target.value) })}
-              placeholder="0" style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
+      <div style={{ display:"grid", gridTemplateColumns:"52px 1fr 1fr 1fr 44px", gap:5, marginBottom:4 }}>
+        <div></div>
+        {ZUSCHLAG_KOMPONENTEN.map(komponente => (
+          <div key={komponente} title={ZUSCHLAG_KOMPONENTEN_BESCHREIBUNG[komponente]}
+            style={{ color:"var(--muted)", fontSize:9.5, textAlign:"center" }}>
+            {ZUSCHLAG_KOMPONENTEN_LABEL[komponente]}
           </div>
         ))}
+        <div style={{ color:"var(--muted)", fontSize:9.5, textAlign:"center" }}>Summe</div>
       </div>
+      {[["Lohn","lohn"],["Material","material"],["Gerät","geraet"],["Fremdl.","fremdleistung"]].map(([l,kostenart]) => (
+        <div key={kostenart} style={{ display:"grid", gridTemplateColumns:"52px 1fr 1fr 1fr 44px",
+          gap:5, marginBottom:5, alignItems:"center" }}>
+          <div style={{ color:"var(--muted)", fontSize:11 }}>{l}</div>
+          {ZUSCHLAG_KOMPONENTEN.map(komponente => {
+            const feld = zuschlagFeldName(kostenart, komponente);
+            return (
+              <input key={komponente} type="number" min="0" value={kalk[feld] ?? ""} disabled={gesperrt}
+                onChange={e => onChange({ ...kalk, [feld]: Number(e.target.value) })}
+                placeholder="0" style={{ ...inputStyle(), padding:"6px 6px", fontSize:11.5, textAlign:"center" }} />
+            );
+          })}
+          <div style={{ fontSize:11.5, fontWeight:700, textAlign:"center", color:"var(--text)" }}>
+            {kalkulationZuschlagProzentJeKostenart(kalk, kostenart).toLocaleString("de-DE")}%
+          </div>
+        </div>
+      ))}
 
       <div style={{ borderTop:"1px solid var(--border)", paddingTop:8, fontSize:12 }}>
         <div style={{ display:"flex", justifyContent:"space-between", color:"var(--muted)", marginBottom:2 }}>

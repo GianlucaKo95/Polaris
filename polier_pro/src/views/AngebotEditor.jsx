@@ -33,7 +33,7 @@ import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], projekt, eigeneFirma, firmaId, profil, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], standardZuschlaege, projekt, eigeneFirma, firmaId, profil, session }) {
   const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
@@ -114,11 +114,14 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
 
   // Umschalten zwischen direktem EP und EP-Kalkulation (Lohn/Material/Gerät/
   // Fremdleistung + Zuschläge, siehe lib/kalkulation.js + PositionKalkulation.jsx).
+  // Neue Kalkulation startet mit dem firmenweit hinterlegten Zuschlagsschema
+  // (AdminParameterView "Standard-Zuschläge") statt bei 0%, damit nicht jede
+  // Position einzeln manuell auf die üblichen Sätze gebracht werden muss.
   function kalkUmschalten(id) {
     setA(x => ({ ...x, positionen: x.positionen.map(p => {
       if (p.id !== id) return p;
       if (p.kalk) { const { kalk, ...rest } = p; return rest; }
-      const kalk = leereKalkulation();
+      const kalk = leereKalkulation(standardZuschlaege);
       return { ...p, kalk, ep: kalkulationEp(kalk, kalkulationspreise, p.menge) };
     }) }));
   }
