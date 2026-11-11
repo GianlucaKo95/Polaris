@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { ClipboardList, X, CircleCheckBig, ChevronLeft, ChartColumn, FileText, Settings, Plus, Sparkles, TriangleAlert, Upload } from "lucide-react";
+import { ClipboardList, X, CircleCheckBig, ChevronLeft, ChartColumn, FileText, Settings, Plus, Sparkles, TriangleAlert, Upload, Download } from "lucide-react";
 import { AUFGABEN_TYPEN } from "../config/konstanten.js";
 import { inputStyle, Label } from "../components/Label.jsx";
 import { escapeHtml } from "../lib/utils.js";
@@ -26,12 +26,15 @@ import { AngebotNachweis } from "../components/AngebotNachweis.jsx";
 import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, gaeb90Schreiben, gaeb90AlsWindows1252, parseGaeb90Preise, gaeb90PreiseZuPositionen, gaeb90PreiseEinspielen, gaeb90PreiseSchreiben } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
-import { leereKalkulation, kalkulationEp, kalkulationEinzelkosten, kalkulationZuschlagProzent, kalkulationGesamtkosten } from "../lib/kalkulation.js";
+import { leereKalkulation, kalkulationEp, kalkulationEinzelkosten, kalkulationZuschlagProzent, kalkulationGesamtkosten, kalkulationAufriss } from "../lib/kalkulation.js";
 import { PositionKalkulation } from "../components/PositionKalkulation.jsx";
 import { gaebX84Schreiben } from "../lib/gaebX84.js";
 import { efbAuswerten, efbHtml } from "../lib/efb.js";
 import { Co2Panel } from "../components/Co2Panel.jsx";
 import { useIstDesktop } from "../hooks/useIstDesktop.js";
+import { Menue } from "../components/Menue.jsx";
+import { LvTabelle } from "../components/LvTabelle.jsx";
+import { Kalkulationsaufriss } from "../components/Kalkulationsaufriss.jsx";
 import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
@@ -51,6 +54,9 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const istDesktop = useIstDesktop();
   const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
+  // Desktop: ausgewählte LV-Zeile und Inhalt des Seitenfelds (position | angebot)
+  const [auswahlId, setAuswahlId] = useState(null);
+  const [rechts,    setRechts]    = useState("angebot");
   const [vonVorlage,setVonVorlage]= useState(false);
   const [vonAufgabe,setVonAufgabe]= useState(false);
   const [vonKI,     setVonKI]     = useState(false);
@@ -108,7 +114,9 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const setA = updater => { if (!gesperrt) setARoh(updater); };
 
   function addPosition(pos) {
-    setA(x => ({ ...x, positionen:[...x.positionen, { rabatt:0, ...pos, id:Date.now() }] }));
+    const id = Date.now();
+    setA(x => ({ ...x, positionen:[...x.positionen, { rabatt:0, ...pos, id }] }));
+    return id;
   }
 
   function updatePos(id, key, val) {
@@ -803,311 +811,141 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
     );
   }
 
-  return (
-    <div>
-      {/* Header */}
-      <div style={{ background:"var(--surface)", padding:"10px 16px",
-        paddingTop:"calc(14px + env(safe-area-inset-top))",
-        borderBottom:"1px solid var(--border)", position:"sticky", top:0,
-        zIndex:10, display:"flex", justifyContent:"space-between",
-        alignItems:"center" }}>
-        <button onClick={onClose}
-          style={{ background:"var(--surface2)", border:"1.5px solid var(--border)",
-            color:"var(--text)", borderRadius:10, padding:"7px 14px",
-            cursor:"pointer", fontFamily:"inherit", display:"flex" }}><ChevronLeft size={16} /></button>
-        <div style={{ color:"var(--text)", fontWeight:700, fontSize:14,
-          flex:1, textAlign:"center", margin:"0 10px" }}>{a.titel}</div>
-        <div style={{ display:"flex", gap:6 }}>
-          <button onClick={exportCSV}
-            style={{ background:"var(--surface2)", color:"var(--text)",
-              border:"1.5px solid var(--border)", borderRadius:8,
-              padding:"6px 10px", cursor:"pointer", fontSize:12,
-              fontFamily:"inherit", display:"flex", alignItems:"center", gap:5 }}><ChartColumn size={12} /> CSV</button>
-          <button onClick={exportWord} disabled={wordLaedt}
-            style={{ background:"var(--surface2)", color:"var(--text)",
-              border:"1.5px solid var(--border)", borderRadius:8,
-              padding:"6px 10px", cursor: wordLaedt ? "default" : "pointer", fontSize:12,
-              fontFamily:"inherit", display:"flex", alignItems:"center", gap:5 }}>
-            {wordLaedt ? <Spinner size={12} /> : <FileText size={12} />} Word
-          </button>
-          <button onClick={exportPDF}
-            style={{ background:"var(--yellow)", color:"#1a1200", border:"none",
-              borderRadius:8, padding:"6px 12px", fontWeight:700,
-              cursor:"pointer", fontSize:12, fontFamily:"inherit",
-              display:"flex", alignItems:"center", gap:5 }}><FileText size={12} /> PDF</button>
-        </div>
+  // ── Desktop: Kopf mit Titel, Empfänger, Menüs und Summen ──
+  const desktopKopf = f => {
+    const aufriss = kalkulationAufriss(a.positionen.filter(p => !istTitel(p) && inSumme(p)), kalkulationspreise);
+    const leer = a.positionen.length === 0;
+    const zahl = { fontFamily:"var(--font-zahl)", fontVariantNumeric:"tabular-nums" };
+    const summe = (label, wert, gross) => (
+      <div style={{ textAlign:"right" }}>
+        <div style={{ fontSize:13, color:"var(--text2)" }}>{label}</div>
+        <div style={{ ...zahl, fontSize: gross ? 24 : 16, lineHeight: gross ? "32px" : "24px", fontWeight:500, marginTop:4, whiteSpace:"nowrap" }}>{f(wert)} €</div>
       </div>
-
-      <div style={istDesktop ? { padding:"24px 0 48px" } : { padding:"16px 14px 100px" }}>
-        {/* Summen-Banner */}
-        {(() => {
-          const f = n => n.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-          // Desktop: ruhige Summenzeile im Werkplan-Stil; Handy: dunkles Banner wie bisher
-          const d = istDesktop;
-          return (
-            <div style={d ? { background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 20px",
-                marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"flex-end", gap:24 }
-              : { background:"#1a1a1a", borderRadius:14, padding:"10px 18px", marginBottom:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div>
-                <div style={{ color: d ? "var(--text2)" : "#888", fontSize: d ? 13 : 11 }}>Angebotssumme (brutto)</div>
-                <div style={d ? { color:"var(--text)", fontFamily:"var(--font-zahl)", fontWeight:500, fontSize:28, lineHeight:"36px", marginTop:4, fontVariantNumeric:"tabular-nums" }
-                  : { color:"#F5C400", fontWeight:900, fontSize:26, marginTop:2 }}>{f(bruttoGesamt)} €</div>
-              </div>
-              <div style={{ textAlign:"right" }}>
-                <div style={{ color: d ? "var(--text2)" : "#888", fontSize: d ? 13 : 11 }}>Netto</div>
-                <div style={{ color: d ? "var(--text)" : "#fff", fontWeight: d ? 500 : 700, fontSize: d ? 16 : 14, fontFamily: d ? "var(--font-zahl)" : undefined }}>{f(netto)} €</div>
-                <div style={{ color: d ? "var(--text2)" : "#888", fontSize: d ? 13 : 11, marginTop:2 }}>MwSt. {f(mwstBetrag)} €</div>
-              </div>
+    );
+    return (
+      <div style={{ marginBottom:24 }}>
+        <button onClick={onClose} className="desk-nav"
+          style={{ display:"inline-flex", alignItems:"center", gap:4, height:28, padding:"0 8px 0 4px", marginLeft:-4,
+            background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontFamily:"inherit", fontSize:13 }}>
+          <ChevronLeft size={16} strokeWidth={1.5} /> Alle Angebote
+        </button>
+        <div style={{ display:"flex", alignItems:"flex-start", gap:16, marginTop:8 }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <input className="desk-feld" value={a.titel || ""} disabled={gesperrt} aria-label="Titel des Angebots" placeholder="Titel des Angebots"
+              onChange={e => setA(x => ({ ...x, titel: e.target.value }))}
+              style={{ fontSize:24, lineHeight:"32px", fontWeight:500, width:"100%", marginLeft:-6 }} />
+            <div style={{ display:"flex", alignItems:"center", gap:8, color:"var(--text2)", marginTop:4 }}>
+              <span>An</span>
+              <input className="desk-feld" value={a.empfaenger || ""} disabled={gesperrt} aria-label="Empfänger" placeholder="Empfänger eintragen"
+                onChange={e => setA(x => ({ ...x, empfaenger: e.target.value }))} size={Math.max(18, (a.empfaenger || "").length + 2)} style={{ maxWidth:420 }} />
+              {a.datum && <span style={{ ...zahl, fontSize:13 }}>{new Date(a.datum).toLocaleDateString("de-DE")}</span>}
+              {nachtragZu && <span>· Nachtrag</span>}
+              {gesperrt && <span>· angenommen und gesperrt</span>}
             </div>
-          );
-        })()}
-
-        {gesperrt && (
-          <div style={{ background:"var(--gbg)", border:"1.5px solid var(--green)", borderRadius:10,
-            padding:"9px 14px", marginBottom:10, color:"var(--green)", fontSize:12.5, fontWeight:600,
-            display:"flex", alignItems:"center", gap:7 }}>
-            🔒 Digital angenommen und gesperrt — keine Änderungen mehr möglich.
+          </div>
+          <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+            {!gesperrt && (
+              <Menue label="Neu aus …" icon={Plus} eintraege={[
+                { gruppe: "Leistungsverzeichnis" },
+                { label: "KI-Assistent", aktion: () => setVonKI(true) },
+                { label: "LV-Vorlage", aktion: () => setVonVorlage(true) },
+                { label: "Aufgaben der Baustelle", aktion: () => setVonAufgabe(true) },
+                { gruppe: "GAEB-Datei" },
+                { label: "GAEB 90 einlesen", hinweis: "D81–D86", aktion: () => gaebInputRef.current?.click() },
+                { label: "GAEB XML einlesen", hinweis: "X83–X86", aktion: () => gaebXmlInputRef.current?.click() },
+                { label: "Preise einspielen", hinweis: "D84, D86", aktion: () => gaebPreisInputRef.current?.click() },
+                !leer && { gruppe: "Nachunternehmer" },
+                !leer && { label: "NU-Preisspiegel", aktion: () => setPreisspiegelOffen(true) },
+              ]} />
+            )}
+            <Menue label="Exportieren" icon={Download} eintraege={[
+              { gruppe: "Angebot" },
+              { label: "PDF", aktion: exportPDF },
+              { label: "Word", hinweis: wordLaedt ? "lädt …" : ".docx", disabled: wordLaedt, aktion: exportWord },
+              { label: "Tabelle", hinweis: ".csv", aktion: exportCSV },
+              { gruppe: "GAEB" },
+              { label: "LV ohne Preise", hinweis: "D83", disabled: leer, aktion: gaebExportieren },
+              { label: "Angebot mit Preisen", hinweis: "D84", disabled: leer, aktion: gaebPreiseExportieren },
+              { label: "Angebot mit Preisen", hinweis: "X84", disabled: leer, aktion: gaebX84Exportieren },
+              { gruppe: "Kalkulation" },
+              { label: "Formblätter EFB 221/223", disabled: leer, aktion: efbExportieren },
+              { label: "Kalkulation", hinweis: ".xlsx", disabled: leer, aktion: kalkulationExportieren },
+            ]} />
+            <button onClick={speichernKlick} disabled={speichertLaedt || gesperrt}
+              style={{ height:36, padding:"0 16px", background: gesperrt ? "var(--surface2)" : "var(--text)", color: gesperrt ? "var(--muted)" : "var(--surface)",
+                border:"none", borderRadius:8, fontFamily:"inherit", fontSize:14, fontWeight:500,
+                cursor: (speichertLaedt || gesperrt) ? "default" : "pointer", display:"flex", alignItems:"center", gap:8 }}>
+              {speichertLaedt && <Spinner size={14} />}{gesperrt ? "Gesperrt" : speichertLaedt ? "Speichert" : "Speichern"}
+            </button>
+          </div>
+        </div>
+        <div style={{ marginTop:20, background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 20px",
+          display:"grid", gridTemplateColumns:"minmax(0,1fr) auto", gap:"12px 48px", alignItems:"end" }}>
+          <div>
+            <div style={{ fontSize:13, color:"var(--text2)", marginBottom:8 }}>Kalkulationsaufriss</div>
+            {aufriss.summe > 0
+              ? <Kalkulationsaufriss aufriss={aufriss} kompakt />
+              : <div style={{ color:"var(--muted)" }}>Noch keine bepreisten Positionen</div>}
+          </div>
+          <div style={{ display:"flex", gap:32 }}>
+            {summe(a.rabatt > 0 ? `Netto nach ${a.rabatt} % Rabatt` : "Netto", nettoNachRabatt)}
+            {summe(`MwSt. ${a.mwst || 19} %`, mwstBetrag)}
+            {summe("Brutto", bruttoGesamt, true)}
+          </div>
+        </div>
+        {efbInfo?.warnungen.length > 0 && (
+          <div style={{ marginTop:12, background:"var(--ybg)", color:"var(--ydark)", borderRadius:8, padding:"8px 12px", fontSize:13 }}>
+            EFB erstellt, {efbInfo.warnungen.length} Hinweis(e): {efbInfo.warnungen.slice(0, 3).join(" ")}{efbInfo.warnungen.length > 3 && " …"}
           </div>
         )}
+      </div>
+    );
+  };
 
-        {/* Tab-Toggle — auf dem Desktop stehen Positionen und Einstellungen nebeneinander */}
-        <div style={{ display: istDesktop ? "none" : "flex", gap:6, marginBottom:10 }}>
-          {[["positionen",ClipboardList,"Positionen"],["einstellungen",Settings,"Einstellungen"]].map(([k,Icon,l]) => (
-            <button key={k} onClick={() => setAnsicht(k)}
-              style={{ flex:1, background: ansicht===k ? "var(--yellow)" : "var(--surface2)",
-                color: ansicht===k ? "#1a1200" : "var(--muted)",
-                border:`1.5px solid ${ansicht===k ? "var(--yellow)" : "var(--border)"}`,
-                borderRadius:10, padding:9, fontWeight: ansicht===k ? 700 : 400,
-                cursor:"pointer", fontSize:12, fontFamily:"inherit",
-                display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}><Icon size={13} /> {l}</button>
-          ))}
-        </div>
+  // ── Desktop: Seitenfeld mit den Reitern Position und Angebot ──
+  const seitenfeldKopf = () => (
+    <div role="tablist" style={{ display:"flex", gap:24, borderBottom:"1px solid var(--border)", margin:"0 -20px 16px", padding:"0 20px",
+      position:"sticky", top:0, background:"var(--surface)", zIndex:2 }}>
+      {[["position", "Position"], ["angebot", "Angebot"]].map(([k, l]) => (
+        <button key={k} role="tab" aria-selected={rechts === k} className="desk-reiter" onClick={() => setRechts(k)}
+          style={{ height:44, padding:0, background:"none", border:"none", borderRadius:0, borderBottom:`2px solid ${rechts === k ? "var(--text)" : "transparent"}`,
+            marginBottom:-1, color: rechts === k ? "var(--text)" : "var(--text2)", fontFamily:"inherit", fontSize:14,
+            fontWeight: rechts === k ? 500 : 400, cursor:"pointer" }}>{l}</button>
+      ))}
+    </div>
+  );
 
-        <div style={istDesktop ? { display:"flex", gap:24, alignItems:"flex-start" } : undefined}>
-        {/* POSITIONEN */}
-        {(istDesktop || ansicht === "positionen") && (
-          <div style={istDesktop ? { flex:"2 1 0", minWidth:0 } : undefined}>
-            {/* Import-Buttons */}
-            {!gesperrt && <div className="angebot-werkzeuge" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:9 }}>
-              <button onClick={() => setVonKI(true)}
-                style={{ background:"var(--ybg)", color:"var(--ydark)",
-                  border:"1.5px solid var(--yellow)", borderRadius:10, padding:"9px 0",
-                  cursor:"pointer", fontSize:12, fontWeight:700,
-                  fontFamily:"inherit",
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}><Sparkles size={12} /> Per KI</button>
-              <button onClick={() => setVonVorlage(true)}
-                style={{ background:"var(--bbg)", color:"var(--blue)",
-                  border:"1.5px solid var(--blue)", borderRadius:10, padding:"9px 0",
-                  cursor:"pointer", fontSize:12, fontWeight:700,
-                  fontFamily:"inherit",
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}><ClipboardList size={12} /> Aus Vorlage</button>
-              <button onClick={() => setVonAufgabe(true)}
-                style={{ background:"var(--gbg)", color:"var(--green)",
-                  border:"1.5px solid var(--green)", borderRadius:10, padding:"9px 0",
-                  cursor:"pointer", fontSize:12, fontWeight:700,
-                  fontFamily:"inherit",
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}><CircleCheckBig size={12} /> Aus Aufgaben</button>
-              <button onClick={() => addPosition({ bez:"", einheit:"m²", menge:0, ep:0 })}
-                style={{ background:"var(--surface2)", color:"var(--text)",
-                  border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
-                  cursor:"pointer", fontSize:12, fontFamily:"inherit",
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}><Plus size={12} /> Manuell</button>
-              <button onClick={() => gaebInputRef.current?.click()}
-                style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
-                  border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
-                  cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
-                <Upload size={12} /> GAEB-LV importieren (D81/D83/D85/D86)
-              </button>
-              <input ref={gaebInputRef} type="file" onChange={gaebImportieren}
-                accept=".d81,.d83,.d85,.d86,.D81,.D83,.D85,.D86,.p81,.p83,.p85,.p86"
-                style={{ display:"none" }} />
-              <button onClick={() => gaebXmlInputRef.current?.click()}
-                style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
-                  border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
-                  cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
-                <Upload size={12} /> GAEB-XML importieren (X83/X84/X86)
-              </button>
-              <input ref={gaebXmlInputRef} type="file" onChange={gaebXmlImportieren}
-                accept=".x83,.X83,.x84,.X84,.x86,.X86"
-                style={{ display:"none" }} />
-              <button onClick={() => gaebPreisInputRef.current?.click()}
-                style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
-                  border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
-                  cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
-                <Upload size={12} /> GAEB-Preise einspielen (D84/D86)
-              </button>
-              <input ref={gaebPreisInputRef} type="file" onChange={gaebPreiseImportieren}
-                accept=".d84,.d86,.D84,.D86,.p84,.p86"
-                style={{ display:"none" }} />
-              {a.positionen.length > 0 && (
-                <button onClick={gaebExportieren}
-                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
-                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
-                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
-                  <ChartColumn size={12} /> GAEB-LV exportieren (unbepreist)
-                </button>
-              )}
-              {a.positionen.length > 0 && (
-                <button onClick={gaebPreiseExportieren}
-                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
-                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
-                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
-                  <ChartColumn size={12} /> GAEB-Angebot exportieren (D84, bepreist)
-                </button>
-              )}
-              {a.positionen.length > 0 && !gesperrt && (
-                <button onClick={() => setPreisspiegelOffen(true)}
-                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
-                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
-                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
-                  <ChartColumn size={12} /> NU-Preisspiegel
-                </button>
-              )}
-              {a.positionen.length > 0 && (
-                <button onClick={gaebX84Exportieren}
-                  style={{ background:"var(--surface2)", color:"var(--text)",
-                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
-                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
-                  <ChartColumn size={12} /> GAEB X84
-                </button>
-              )}
-              {a.positionen.length > 0 && (
-                <button onClick={efbExportieren}
-                  style={{ background:"var(--surface2)", color:"var(--text)",
-                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
-                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
-                  <FileText size={12} /> EFB 221/223
-                </button>
-              )}
-              {efbInfo?.warnungen.length > 0 && (
-                <div style={{ gridColumn:"1 / -1", background:"var(--ybg)", color:"var(--ydark)", borderRadius:10,
-                  padding:"8px 12px", fontSize:12, lineHeight:1.4 }}>
-                  EFB erstellt — {efbInfo.warnungen.length} Hinweis(e): {efbInfo.warnungen.slice(0, 3).join(" ")}
-                  {efbInfo.warnungen.length > 3 && " …"}
-                </div>
-              )}
-              {a.positionen.length > 0 && (
-                <button onClick={kalkulationExportieren}
-                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
-                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
-                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
-                  <ChartColumn size={12} /> Kalkulation als Excel exportieren
-                </button>
-              )}
-            </div>}
-            {gaebPreisExportInfo && (
-              <div style={{ background: gaebPreisExportInfo.warnungen > 0 ? "var(--ybg)" : "var(--gbg)",
-                color: gaebPreisExportInfo.warnungen > 0 ? "var(--ydark)" : "var(--green)", borderRadius:10,
-                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
-                ✓ {gaebPreisExportInfo.anzahl} Position(en) als bepreiste GAEB-Datei exportiert
-                {gaebPreisExportInfo.warnungen > 0 && <> — {gaebPreisExportInfo.warnungen} ohne Ordnungszahl übersprungen</>}.
-              </div>
-            )}
-            {gaebFehler && (
-              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
-                padding:"8px 12px", marginBottom:9, fontSize:12 }}>{gaebFehler}</div>
-            )}
-            {gaebInfo && (
-              <div style={{ background:"var(--gbg)", color:"var(--green)", borderRadius:10,
-                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
-                ✓ {gaebInfo.anzahl} Positionen aus GAEB-Datei importiert — Preise und ggf. Gruppenkopfzeilen bitte prüfen.
-                {gaebInfo.warnungen.length > 0 && (
-                  <div style={{ marginTop:4, color:"var(--muted)" }}>
-                    {gaebInfo.warnungen.length} Zeile(n) nicht erkannt, als Rohtext übernommen.
-                  </div>
-                )}
-              </div>
-            )}
-            {gaebXmlFehler && (
-              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
-                padding:"8px 12px", marginBottom:9, fontSize:12 }}>{gaebXmlFehler}</div>
-            )}
-            {gaebXmlInfo && (
-              <div style={{ background:"var(--gbg)", color:"var(--green)", borderRadius:10,
-                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
-                ✓ {gaebXmlInfo.anzahl} Positionen aus GAEB-XML-Datei importiert — Preise und ggf. Gruppenkopfzeilen bitte prüfen.
-                {gaebXmlInfo.warnungen.length > 0 && (
-                  <div style={{ marginTop:4, color:"var(--muted)" }}>
-                    {gaebXmlInfo.warnungen.length} Position(en) ohne erkannten Text.
-                  </div>
-                )}
-              </div>
-            )}
-            {gaebPreisFehler && (
-              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
-                padding:"8px 12px", marginBottom:9, fontSize:12 }}>{gaebPreisFehler}</div>
-            )}
-            {gaebPreisInfo && (
-              <div style={{ background:"var(--gbg)", color:"var(--green)", borderRadius:10,
-                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
-                {gaebPreisInfo.treffer > 0
-                  ? <>✓ {gaebPreisInfo.treffer} Einheitspreise eingespielt{gaebPreisInfo.fehlend > 0 && <> — {gaebPreisInfo.fehlend} Ordnungszahl(en) aus der Preisdatei ohne passende Position gefunden</>}.</>
-                  : <>✓ {gaebPreisInfo.neu} Positionen als eigenständiger Preisimport angelegt (keine passende Ordnungszahl in der bestehenden Liste gefunden) — Bezeichnung bitte nachtragen.</>}
-                {gaebPreisInfo.warnungen.length > 0 && (
-                  <div style={{ marginTop:4, color:"var(--muted)" }}>
-                    {gaebPreisInfo.warnungen.length} Zeile(n) nicht erkannt.
-                  </div>
-                )}
-              </div>
-            )}
+  const seitenfeldPosition = () => {
+    const i = a.positionen.findIndex(p => p.id === auswahlId);
+    const pos = a.positionen[i];
+    if (!pos) return (
+      <div style={{ color:"var(--text2)", padding:"8px 0", lineHeight:"20px" }}>
+        Eine Zeile im Leistungsverzeichnis anklicken, um Langtext, Kalkulation und Preisaufriss zu bearbeiten
+      </div>
+    );
+    if (istTitel(pos)) return positionsKarte(pos, i, true);
+    const aufriss = kalkulationAufriss([pos], kalkulationspreise);
+    return (
+      <>
+        {pos.kalk && aufriss.summe > 0 && (
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:13, color:"var(--text2)", marginBottom:8 }}>Preisaufriss je {pos.einheit}</div>
+            <Kalkulationsaufriss aufriss={aufriss} teiler={pos.menge || 1} einheit={pos.einheit} />
+          </div>
+        )}
+        {!pos.kalk && (
+          <div style={{ fontSize:13, color:"var(--text2)", marginBottom:12, lineHeight:"20px" }}>
+            Einheitspreis direkt eingegeben. Mit „Kalkulieren“ wird er in Lohn, Material, Gerät und Zuschläge aufgeschlüsselt
+          </div>
+        )}
+        {positionsKarte(pos, i, true)}
+      </>
+    );
+  };
 
-            {kiInfo && (
-              <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10,
-                padding:"8px 12px", marginBottom:9, fontSize:12, color:"var(--text)" }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                  <div style={{ fontWeight:700 }}>
-                    ✓ {kiInfo.anzahl} Positionen von der KI übernommen
-                    {kiInfo.ohnePreis > 0 && <span style={{ color:"var(--red)" }}> · {kiInfo.ohnePreis} ohne Preis</span>}
-                  </div>
-                  <button onClick={() => setKiInfo(null)} style={{ background:"none", border:"none",
-                    color:"var(--muted)", cursor:"pointer", display:"flex" }}><X size={13} /></button>
-                </div>
-                {kiInfo.annahmen?.length > 0 && (
-                  <div style={{ marginTop:5, color:"var(--muted)" }}>
-                    Annahmen: {kiInfo.annahmen.join(" · ")}
-                  </div>
-                )}
-              </div>
-            )}
-            {(pruefung.zaehler.rot > 0 || pruefung.zaehler.gelb > 0) && (
-              <div style={{ background: pruefung.zaehler.rot > 0 ? "var(--rbg)" : "var(--ybg)",
-                color: pruefung.zaehler.rot > 0 ? "var(--red)" : "var(--ydark)", borderRadius:10,
-                padding:"8px 12px", marginBottom:9, fontSize:12, display:"flex", alignItems:"center", gap:6 }}>
-                <TriangleAlert size={13} />
-                Preisprüfung: {pruefung.zaehler.rot > 0 && <>{pruefung.zaehler.rot} rot</>}
-                {pruefung.zaehler.rot > 0 && pruefung.zaehler.gelb > 0 && " · "}
-                {pruefung.zaehler.gelb > 0 && <>{pruefung.zaehler.gelb} gelb</>} — Positionen vor dem Versand prüfen.
-              </div>
-            )}
-
-            {!gesperrt && (
-              <div style={{ display:"flex", gap:6, marginBottom:8 }}>
-                <button onClick={() => addPosition({ bez:"── Neuer Titel ──", einheit:"", menge:0, ep:0 })}
-                  style={{ flex:1, background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)", borderRadius:10,
-                    padding:"8px 0", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit" }}>+ Titel</button>
-                <button onClick={() => addPosition({ bez:"", einheit:"m²", menge:0, ep:0 })}
-                  style={{ flex:1, background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)", borderRadius:10,
-                    padding:"8px 0", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit" }}>+ Position</button>
-              </div>
-            )}
-
-            {/* Positionen */}
-            {a.positionen.length === 0 && (
-              <div style={{ textAlign:"center", padding:"23px 20px", color:"var(--muted)",
-                fontSize:13 }}>
-                Noch keine Positionen · Aus Vorlage oder Aufgaben importieren
-              </div>
-            )}
-            {a.positionen.map((pos, i) => istTitel(pos) ? (
+  // Eine LV-Zeile als Karte: auf dem Handy die Liste, auf dem Desktop das
+  // Seitenfeld der ausgewählten Tabellenzeile (imPanel).
+  const positionsKarte = (pos, i, imPanel = false) => istTitel(pos) ? (
               <div key={pos.id} style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 12px", marginBottom:6,
                 border:"1.5px solid var(--border)", display:"flex", alignItems:"center", gap:8 }}>
                 <input value={titelName(pos)} disabled={gesperrt}
@@ -1122,7 +960,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 )}
               </div>
             ) : (
-              <div key={pos.id} style={{ background:"var(--surface)", borderRadius:12,
+              <div key={pos.id} style={imPanel ? {} : { background:"var(--surface)", borderRadius:12,
                 padding:"9px 14px", marginBottom:6,
                 border:"1.5px solid var(--border)" }}>
                 <div style={{ display:"flex", justifyContent:"space-between",
@@ -1247,17 +1085,354 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   </div>
                 )}
               </div>
-            ))}
+            );
+
+  return (
+    <div>
+      {/* Header (Handy) — auf dem Desktop steht der Kopf im Inhalt */}
+      {!istDesktop && (
+      <div style={{ background:"var(--surface)", padding:"10px 16px",
+        paddingTop:"calc(14px + env(safe-area-inset-top))",
+        borderBottom:"1px solid var(--border)", position:"sticky", top:0,
+        zIndex:10, display:"flex", justifyContent:"space-between",
+        alignItems:"center" }}>
+        <button onClick={onClose}
+          style={{ background:"var(--surface2)", border:"1.5px solid var(--border)",
+            color:"var(--text)", borderRadius:10, padding:"7px 14px",
+            cursor:"pointer", fontFamily:"inherit", display:"flex" }}><ChevronLeft size={16} /></button>
+        <div style={{ color:"var(--text)", fontWeight:700, fontSize:14,
+          flex:1, textAlign:"center", margin:"0 10px" }}>{a.titel}</div>
+        <div style={{ display:"flex", gap:6 }}>
+          <button onClick={exportCSV}
+            style={{ background:"var(--surface2)", color:"var(--text)",
+              border:"1.5px solid var(--border)", borderRadius:8,
+              padding:"6px 10px", cursor:"pointer", fontSize:12,
+              fontFamily:"inherit", display:"flex", alignItems:"center", gap:5 }}><ChartColumn size={12} /> CSV</button>
+          <button onClick={exportWord} disabled={wordLaedt}
+            style={{ background:"var(--surface2)", color:"var(--text)",
+              border:"1.5px solid var(--border)", borderRadius:8,
+              padding:"6px 10px", cursor: wordLaedt ? "default" : "pointer", fontSize:12,
+              fontFamily:"inherit", display:"flex", alignItems:"center", gap:5 }}>
+            {wordLaedt ? <Spinner size={12} /> : <FileText size={12} />} Word
+          </button>
+          <button onClick={exportPDF}
+            style={{ background:"var(--yellow)", color:"#1a1200", border:"none",
+              borderRadius:8, padding:"6px 12px", fontWeight:700,
+              cursor:"pointer", fontSize:12, fontFamily:"inherit",
+              display:"flex", alignItems:"center", gap:5 }}><FileText size={12} /> PDF</button>
+        </div>
+      </div>
+      )}
+
+      <div style={istDesktop ? { padding:"0 0 48px" } : { padding:"16px 14px 100px" }}>
+        {/* Summen-Banner */}
+        {(() => {
+          const f = n => n.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          // Desktop: ruhige Summenzeile im Werkplan-Stil; Handy: dunkles Banner wie bisher
+          const d = istDesktop;
+          if (d) return desktopKopf(f);
+          return (
+            <div style={d ? { background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 20px",
+                marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"flex-end", gap:24 }
+              : { background:"#1a1a1a", borderRadius:14, padding:"10px 18px", marginBottom:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ color: d ? "var(--text2)" : "#888", fontSize: d ? 13 : 11 }}>Angebotssumme (brutto)</div>
+                <div style={d ? { color:"var(--text)", fontFamily:"var(--font-zahl)", fontWeight:500, fontSize:28, lineHeight:"36px", marginTop:4, fontVariantNumeric:"tabular-nums" }
+                  : { color:"#F5C400", fontWeight:900, fontSize:26, marginTop:2 }}>{f(bruttoGesamt)} €</div>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ color: d ? "var(--text2)" : "#888", fontSize: d ? 13 : 11 }}>Netto</div>
+                <div style={{ color: d ? "var(--text)" : "#fff", fontWeight: d ? 500 : 700, fontSize: d ? 16 : 14, fontFamily: d ? "var(--font-zahl)" : undefined }}>{f(netto)} €</div>
+                <div style={{ color: d ? "var(--text2)" : "#888", fontSize: d ? 13 : 11, marginTop:2 }}>MwSt. {f(mwstBetrag)} €</div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {gesperrt && (
+          <div style={{ background:"var(--gbg)", border:"1.5px solid var(--green)", borderRadius:10,
+            padding:"9px 14px", marginBottom:10, color:"var(--green)", fontSize:12.5, fontWeight:600,
+            display:"flex", alignItems:"center", gap:7 }}>
+            🔒 Digital angenommen und gesperrt — keine Änderungen mehr möglich.
+          </div>
+        )}
+
+        {/* Tab-Toggle — auf dem Desktop stehen Positionen und Einstellungen nebeneinander */}
+        <div style={{ display: istDesktop ? "none" : "flex", gap:6, marginBottom:10 }}>
+          {[["positionen",ClipboardList,"Positionen"],["einstellungen",Settings,"Einstellungen"]].map(([k,Icon,l]) => (
+            <button key={k} onClick={() => setAnsicht(k)}
+              style={{ flex:1, background: ansicht===k ? "var(--yellow)" : "var(--surface2)",
+                color: ansicht===k ? "#1a1200" : "var(--muted)",
+                border:`1.5px solid ${ansicht===k ? "var(--yellow)" : "var(--border)"}`,
+                borderRadius:10, padding:9, fontWeight: ansicht===k ? 700 : 400,
+                cursor:"pointer", fontSize:12, fontFamily:"inherit",
+                display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}><Icon size={13} /> {l}</button>
+          ))}
+        </div>
+
+        <div style={istDesktop ? { display:"flex", gap:24, alignItems:"flex-start" } : undefined}>
+        {/* POSITIONEN */}
+        {(istDesktop || ansicht === "positionen") && (
+          <div style={istDesktop ? { flex:"2 1 0", minWidth:0 } : undefined}>
+            {/* Import-Buttons */}
+            {!gesperrt && !istDesktop && <div className="angebot-werkzeuge" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:9 }}>
+              <button onClick={() => setVonKI(true)}
+                style={{ background:"var(--ybg)", color:"var(--ydark)",
+                  border:"1.5px solid var(--yellow)", borderRadius:10, padding:"9px 0",
+                  cursor:"pointer", fontSize:12, fontWeight:700,
+                  fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}><Sparkles size={12} /> Per KI</button>
+              <button onClick={() => setVonVorlage(true)}
+                style={{ background:"var(--bbg)", color:"var(--blue)",
+                  border:"1.5px solid var(--blue)", borderRadius:10, padding:"9px 0",
+                  cursor:"pointer", fontSize:12, fontWeight:700,
+                  fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}><ClipboardList size={12} /> Aus Vorlage</button>
+              <button onClick={() => setVonAufgabe(true)}
+                style={{ background:"var(--gbg)", color:"var(--green)",
+                  border:"1.5px solid var(--green)", borderRadius:10, padding:"9px 0",
+                  cursor:"pointer", fontSize:12, fontWeight:700,
+                  fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}><CircleCheckBig size={12} /> Aus Aufgaben</button>
+              <button onClick={() => addPosition({ bez:"", einheit:"m²", menge:0, ep:0 })}
+                style={{ background:"var(--surface2)", color:"var(--text)",
+                  border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                  cursor:"pointer", fontSize:12, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}><Plus size={12} /> Manuell</button>
+              <button onClick={() => gaebInputRef.current?.click()}
+                style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                  border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                  cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                <Upload size={12} /> GAEB-LV importieren (D81/D83/D85/D86)
+              </button>
+              <button onClick={() => gaebXmlInputRef.current?.click()}
+                style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                  border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                  cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                <Upload size={12} /> GAEB-XML importieren (X83/X84/X86)
+              </button>
+              <button onClick={() => gaebPreisInputRef.current?.click()}
+                style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                  border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                  cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                <Upload size={12} /> GAEB-Preise einspielen (D84/D86)
+              </button>
+              {a.positionen.length > 0 && (
+                <button onClick={gaebExportieren}
+                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <ChartColumn size={12} /> GAEB-LV exportieren (unbepreist)
+                </button>
+              )}
+              {a.positionen.length > 0 && (
+                <button onClick={gaebPreiseExportieren}
+                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <ChartColumn size={12} /> GAEB-Angebot exportieren (D84, bepreist)
+                </button>
+              )}
+              {a.positionen.length > 0 && !gesperrt && (
+                <button onClick={() => setPreisspiegelOffen(true)}
+                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <ChartColumn size={12} /> NU-Preisspiegel
+                </button>
+              )}
+              {a.positionen.length > 0 && (
+                <button onClick={gaebX84Exportieren}
+                  style={{ background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <ChartColumn size={12} /> GAEB X84
+                </button>
+              )}
+              {a.positionen.length > 0 && (
+                <button onClick={efbExportieren}
+                  style={{ background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <FileText size={12} /> EFB 221/223
+                </button>
+              )}
+              {efbInfo?.warnungen.length > 0 && (
+                <div style={{ gridColumn:"1 / -1", background:"var(--ybg)", color:"var(--ydark)", borderRadius:10,
+                  padding:"8px 12px", fontSize:12, lineHeight:1.4 }}>
+                  EFB erstellt — {efbInfo.warnungen.length} Hinweis(e): {efbInfo.warnungen.slice(0, 3).join(" ")}
+                  {efbInfo.warnungen.length > 3 && " …"}
+                </div>
+              )}
+              {a.positionen.length > 0 && (
+                <button onClick={kalkulationExportieren}
+                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <ChartColumn size={12} /> Kalkulation als Excel exportieren
+                </button>
+              )}
+            </div>}
+            <input ref={gaebInputRef} type="file" onChange={gaebImportieren}
+              accept=".d81,.d83,.d85,.d86,.D81,.D83,.D85,.D86,.p81,.p83,.p85,.p86"
+              style={{ display:"none" }} />
+            <input ref={gaebXmlInputRef} type="file" onChange={gaebXmlImportieren}
+              accept=".x83,.X83,.x84,.X84,.x86,.X86"
+              style={{ display:"none" }} />
+            <input ref={gaebPreisInputRef} type="file" onChange={gaebPreiseImportieren}
+              accept=".d84,.d86,.D84,.D86,.p84,.p86"
+              style={{ display:"none" }} />
+            {gaebPreisExportInfo && (
+              <div style={{ background: gaebPreisExportInfo.warnungen > 0 ? "var(--ybg)" : "var(--gbg)",
+                color: gaebPreisExportInfo.warnungen > 0 ? "var(--ydark)" : "var(--green)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
+                ✓ {gaebPreisExportInfo.anzahl} Position(en) als bepreiste GAEB-Datei exportiert
+                {gaebPreisExportInfo.warnungen > 0 && <> — {gaebPreisExportInfo.warnungen} ohne Ordnungszahl übersprungen</>}.
+              </div>
+            )}
+            {gaebFehler && (
+              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>{gaebFehler}</div>
+            )}
+            {gaebInfo && (
+              <div style={{ background:"var(--gbg)", color:"var(--green)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
+                ✓ {gaebInfo.anzahl} Positionen aus GAEB-Datei importiert — Preise und ggf. Gruppenkopfzeilen bitte prüfen.
+                {gaebInfo.warnungen.length > 0 && (
+                  <div style={{ marginTop:4, color:"var(--muted)" }}>
+                    {gaebInfo.warnungen.length} Zeile(n) nicht erkannt, als Rohtext übernommen.
+                  </div>
+                )}
+              </div>
+            )}
+            {gaebXmlFehler && (
+              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>{gaebXmlFehler}</div>
+            )}
+            {gaebXmlInfo && (
+              <div style={{ background:"var(--gbg)", color:"var(--green)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
+                ✓ {gaebXmlInfo.anzahl} Positionen aus GAEB-XML-Datei importiert — Preise und ggf. Gruppenkopfzeilen bitte prüfen.
+                {gaebXmlInfo.warnungen.length > 0 && (
+                  <div style={{ marginTop:4, color:"var(--muted)" }}>
+                    {gaebXmlInfo.warnungen.length} Position(en) ohne erkannten Text.
+                  </div>
+                )}
+              </div>
+            )}
+            {gaebPreisFehler && (
+              <div style={{ background:"var(--rbg)", color:"var(--red)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>{gaebPreisFehler}</div>
+            )}
+            {gaebPreisInfo && (
+              <div style={{ background:"var(--gbg)", color:"var(--green)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12 }}>
+                {gaebPreisInfo.treffer > 0
+                  ? <>✓ {gaebPreisInfo.treffer} Einheitspreise eingespielt{gaebPreisInfo.fehlend > 0 && <> — {gaebPreisInfo.fehlend} Ordnungszahl(en) aus der Preisdatei ohne passende Position gefunden</>}.</>
+                  : <>✓ {gaebPreisInfo.neu} Positionen als eigenständiger Preisimport angelegt (keine passende Ordnungszahl in der bestehenden Liste gefunden) — Bezeichnung bitte nachtragen.</>}
+                {gaebPreisInfo.warnungen.length > 0 && (
+                  <div style={{ marginTop:4, color:"var(--muted)" }}>
+                    {gaebPreisInfo.warnungen.length} Zeile(n) nicht erkannt.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {kiInfo && (
+              <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12, color:"var(--text)" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{ fontWeight:700 }}>
+                    ✓ {kiInfo.anzahl} Positionen von der KI übernommen
+                    {kiInfo.ohnePreis > 0 && <span style={{ color:"var(--red)" }}> · {kiInfo.ohnePreis} ohne Preis</span>}
+                  </div>
+                  <button onClick={() => setKiInfo(null)} style={{ background:"none", border:"none",
+                    color:"var(--muted)", cursor:"pointer", display:"flex" }}><X size={13} /></button>
+                </div>
+                {kiInfo.annahmen?.length > 0 && (
+                  <div style={{ marginTop:5, color:"var(--muted)" }}>
+                    Annahmen: {kiInfo.annahmen.join(" · ")}
+                  </div>
+                )}
+              </div>
+            )}
+            {(pruefung.zaehler.rot > 0 || pruefung.zaehler.gelb > 0) && (
+              <div style={{ background: pruefung.zaehler.rot > 0 ? "var(--rbg)" : "var(--ybg)",
+                color: pruefung.zaehler.rot > 0 ? "var(--red)" : "var(--ydark)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12, display:"flex", alignItems:"center", gap:6 }}>
+                <TriangleAlert size={13} />
+                Preisprüfung: {pruefung.zaehler.rot > 0 && <>{pruefung.zaehler.rot} rot</>}
+                {pruefung.zaehler.rot > 0 && pruefung.zaehler.gelb > 0 && " · "}
+                {pruefung.zaehler.gelb > 0 && <>{pruefung.zaehler.gelb} gelb</>} — Positionen vor dem Versand prüfen.
+              </div>
+            )}
+
+            {istDesktop ? (
+              <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, overflow:"clip" }}>
+                {a.positionen.length > 0 ? (
+                  <LvTabelle positionen={a.positionen} pruefung={pruefung} tSummen={tSummen} gpOf={gpOf}
+                    auswahlId={auswahlId} onAuswahl={id => { setAuswahlId(id); setRechts("position"); }}
+                    updatePos={updatePos} gesperrt={gesperrt} />
+                ) : (
+                  <div style={{ padding:"32px 20px", color:"var(--text2)" }}>
+                    Noch keine Positionen. Über „Neu aus …“ ein LV aus GAEB, Vorlage, Aufgaben oder per KI anlegen, oder eine Position von Hand hinzufügen
+                  </div>
+                )}
+                {!gesperrt && (
+                  <div style={{ display:"flex", gap:8, padding:"12px 16px", borderTop:"1px solid var(--border)" }}>
+                    {[["Position", { bez:"", einheit:"m²", menge:0, ep:0 }], ["Titel", { bez:"── Neuer Titel ──", einheit:"", menge:0, ep:0 }]].map(([l, neu]) => (
+                      <button key={l} className="desk-nav" onClick={() => { setAuswahlId(addPosition(neu)); setRechts("position"); }}
+                        style={{ display:"flex", alignItems:"center", gap:6, height:32, padding:"0 10px", background:"none", border:"none",
+                          color:"var(--text2)", cursor:"pointer", fontFamily:"inherit", fontSize:14 }}>
+                        <Plus size={16} strokeWidth={1.5} /> {l}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (<>
+            {!gesperrt && (
+              <div style={{ display:"flex", gap:6, marginBottom:8 }}>
+                <button onClick={() => addPosition({ bez:"── Neuer Titel ──", einheit:"", menge:0, ep:0 })}
+                  style={{ flex:1, background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)", borderRadius:10,
+                    padding:"8px 0", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit" }}>+ Titel</button>
+                <button onClick={() => addPosition({ bez:"", einheit:"m²", menge:0, ep:0 })}
+                  style={{ flex:1, background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)", borderRadius:10,
+                    padding:"8px 0", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit" }}>+ Position</button>
+              </div>
+            )}
+
+            {/* Positionen */}
+            {a.positionen.length === 0 && (
+              <div style={{ textAlign:"center", padding:"23px 20px", color:"var(--muted)",
+                fontSize:13 }}>
+                Noch keine Positionen · Aus Vorlage oder Aufgaben importieren
+              </div>
+            )}
+            {a.positionen.map((pos, i) => positionsKarte(pos, i))}
+            </>)}
           </div>
         )}
 
         {/* EINSTELLUNGEN */}
         {(istDesktop || ansicht === "einstellungen") && (
-          <div style={istDesktop ? { flex:"1 1 360px", minWidth:320, maxWidth:440, background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:20 } : undefined}>
-            {[
+          <div style={istDesktop ? { flex:"0 0 360px", position:"sticky", top:16, maxHeight:"calc(100vh - 32px)", overflowY:"auto", boxSizing:"border-box", background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"0 20px 20px" } : undefined}>
+            {istDesktop && seitenfeldKopf()}
+            {istDesktop && rechts === "position" && seitenfeldPosition()}
+            <div style={istDesktop && rechts !== "angebot" ? { display:"none" } : undefined}>
+            {(istDesktop ? [] : [
               ["Titel","titel","Angebot Bodenplatte"],
               ["Empfänger","empfaenger","Auftraggeber GmbH"],
-            ].map(([l,k,ph]) => (
+            ]).map(([l,k,ph]) => (
               <div key={k} style={{ marginBottom:9 }}>
                 <Label>{l}</Label>
                 <input value={a[k]||""} disabled={gesperrt}
@@ -1497,6 +1672,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
               {gesperrt ? "Gesperrt" : speichertLaedt ? <><Spinner size={14} /> Speichert…</> : "Angebot speichern"}
             </button>
+            </div>
           </div>
         )}
         </div>

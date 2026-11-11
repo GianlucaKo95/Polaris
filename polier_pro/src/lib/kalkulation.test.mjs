@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import {
   leereKalkulation, kalkulationAufschluesselung, kalkulationEinzelkosten,
   kalkulationZuschlagProzent, kalkulationZuschlagProzentJeKostenart,
-  kalkulationGesamtkosten, kalkulationEp, kalkulationSollAufschluesselung,
+  kalkulationGesamtkosten, kalkulationEp, kalkulationSollAufschluesselung, kalkulationAufriss,
 } from "./kalkulation.js";
 
 const stammdaten = [
@@ -112,4 +112,16 @@ test("kalkulationSollAufschluesselung summiert über mehrere Angebote und Positi
   assert.equal(soll.geraet, 120);
   assert.equal(soll.fremdleistung, 30);
   assert.equal(soll.zuschlag, 140); // 840 - 700, zweites Angebot hat 0% Zuschlag
+});
+
+test("kalkulationAufriss: Teile ergeben den GP, Rabatt wirkt anteilig, direkte Positionen getrennt", () => {
+  const gesamt = kalkulationGesamtkosten(kalk, stammdaten);
+  const r = kalkulationAufriss([
+    { menge: 10, ep: gesamt / 10, kalk, rabatt: 10 },
+    { menge: 4, ep: 25 },
+  ], stammdaten);
+  assert.equal(Math.round(r.lohn * 100) / 100, 405);        // 450 × 0,9
+  assert.equal(r.direkt, 100);
+  assert.ok(Math.abs(r.summe - (gesamt * 0.9 + 100)) < 1e-9);
+  assert.ok(Math.abs(r.zuschlag - (gesamt - 700) * 0.9) < 1e-9);
 });

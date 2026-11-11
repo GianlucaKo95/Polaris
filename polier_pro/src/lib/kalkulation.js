@@ -119,3 +119,31 @@ export function kalkulationSollAufschluesselung(angebote, stammdaten) {
   }
   return summe;
 }
+
+// Kalkulationsaufriss für die Desktop-Ansicht des Angebotseditors: wie setzt
+// sich der Positionspreis (bzw. die Angebotssumme) aus Lohn, Material,
+// Gerät, Fremdleistung und Zuschlägen zusammen? Positionen ohne
+// Kalkulationsschema landen als „direkt“ (nur EP bekannt). Der
+// Positionsrabatt wirkt anteilig auf alle Teile, damit die Summe dem GP
+// entspricht. Der Aufrufer filtert Titel und nicht summenwirksame
+// Positionen (Bedarf/Alternative) vorher heraus.
+export function kalkulationAufriss(positionen, stammdaten) {
+  const s = { lohn: 0, material: 0, geraet: 0, fremdleistung: 0, zuschlag: 0, direkt: 0 };
+  for (const p of positionen || []) {
+    if (!p) continue;
+    const f = 1 - (p.rabatt || 0) / 100;
+    if (p.kalk) {
+      const a = kalkulationAufschluesselung(p.kalk, stammdaten);
+      const einzel = a.lohn + a.material + a.geraet + a.fremdleistung;
+      s.lohn += a.lohn * f;
+      s.material += a.material * f;
+      s.geraet += a.geraet * f;
+      s.fremdleistung += a.fremdleistung * f;
+      s.zuschlag += (kalkulationGesamtkosten(p.kalk, stammdaten) - einzel) * f;
+    } else {
+      s.direkt += (p.menge || 0) * (p.ep || 0) * f;
+    }
+  }
+  s.summe = s.lohn + s.material + s.geraet + s.fremdleistung + s.zuschlag + s.direkt;
+  return s;
+}
