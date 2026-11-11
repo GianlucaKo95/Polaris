@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { datevBuchungsstapel } from "../lib/datev.js";
 import { FileText, ChevronLeft, TrendingUp, Printer, Trash2, Receipt } from "lucide-react";
 import { useBackButton } from "../hooks/useBackButton.js";
 import { escapeHtml } from "../lib/utils.js";
@@ -380,7 +381,24 @@ function AuftragDetail({ auftrag, projekt, eigeneFirma, baufortschritt, rechnung
   );
 }
 
-export function RechnungenView({ projekt, angebote, baufortschritt, rechnungen, rechnungBestaetigungen, eigeneFirma, onBaufortschrittSpeichern, onRechnungSpeichern, onRechnungLoeschen }) {
+export function RechnungenView({ projekt, angebote, baufortschritt, rechnungen, rechnungBestaetigungen, eigeneFirma, onBaufortschrittSpeichern, onRechnungSpeichern, onRechnungLoeschen, datevEinstellungen = null }) {
+  const [datevMeldung, setDatevMeldung] = useState("");
+  // DATEV-Buchungsstapel (lib/datev.js) aller gestellten Rechnungen dieser Baustelle.
+  function datevExportieren() {
+    const liste = (rechnungen || []).filter(r => r.status !== "entwurf").map(r => {
+      const g = rechnungGesamt(r.netto_betrag, { sicherheitseinbehaltProzent: r.sicherheitseinbehalt_prozent, mwstProzent: r.mwst });
+      const auftrag = (angebote || []).find(a => a.id === r.angebot_id);
+      return { nummer: r.nummer, datum: r.datum, bruttoBetrag: g.bruttoBetrag,
+        text: `${r.typ === "schluss" ? "SR" : "AR"} ${projekt?.name || ""} ${auftrag?.empfaenger || ""}`.trim() };
+    });
+    if (!liste.length) { setDatevMeldung("Keine gestellten Rechnungen (Entwürfe werden nicht exportiert)."); return; }
+    const { text, dateiname, fehler } = datevBuchungsstapel(liste, datevEinstellungen);
+    if (fehler.length) { setDatevMeldung(fehler.join(" ") + " Einstellungen unter Parameter › DATEV."); return; }
+    const blob = new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a"); link.href = url; link.download = dateiname; link.click(); URL.revokeObjectURL(url);
+    setDatevMeldung(`✓ ${liste.length} Buchung(en) exportiert — vor der ersten Übergabe mit dem Steuerberater testen.`);
+  }
   const [aktAuftragId, setAktAuftragId] = useState(null);
   useBackButton(aktAuftragId, () => setAktAuftragId(null));
 
@@ -414,7 +432,13 @@ export function RechnungenView({ projekt, angebote, baufortschritt, rechnungen, 
       <div style={{ color:"var(--text)", fontWeight:700, fontSize:15,
         display:"flex", alignItems:"center", gap:7, marginBottom:14 }}>
         <FileText size={16} /> Rechnungen
+        {(rechnungen || []).length > 0 && (
+          <button onClick={datevExportieren} style={{ marginLeft:"auto", background:"var(--surface2)", color:"var(--text)",
+            border:"1.5px solid var(--border)", borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:700,
+            cursor:"pointer", fontFamily:"inherit" }}>DATEV-Export</button>
+        )}
       </div>
+      {datevMeldung && <div style={{ fontSize:12, marginBottom:10, color: datevMeldung.startsWith("✓") ? "var(--green)" : "var(--ydark)" }}>{datevMeldung}</div>}
 
       {auftraege.length === 0 && (
         <div style={{ textAlign:"center", padding:"35px 20px", color:"var(--muted)" }}>

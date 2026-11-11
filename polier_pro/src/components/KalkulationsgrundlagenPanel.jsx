@@ -1,5 +1,6 @@
 import { Plus, X, TriangleAlert } from "lucide-react";
 import { mittellohnBerechnen, geraetekostenJeStunde } from "../lib/kalkulationsgrundlagen.js";
+import { STANDARD_DATEV } from "../lib/datev.js";
 
 const feld = { width:"100%", background:"var(--surface)", color:"var(--text)", border:"1.5px solid var(--border)",
   borderRadius:8, padding:"7px 9px", fontSize:12.5, boxSizing:"border-box", fontFamily:"inherit" };
@@ -105,6 +106,31 @@ export function KalkulationsgrundlagenPanel({ grundlagen, onChange, status }) {
           <Plus size={11} /> Gerät
         </button>
       </div>
+
+      {(() => {
+        const d = { ...STANDARD_DATEV, ...(grundlagen.datev || {}) };
+        const setD = (k, v) => onChange({ ...grundlagen, datev: { ...(grundlagen.datev || {}), [k]: v } });
+        const textFeld = (label, k, ph) => (
+          <div><div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>{label}</div>
+            <input value={d[k] ?? ""} placeholder={ph} onChange={e => setD(k, e.target.value.trim())} style={feld} /></div>
+        );
+        return (
+          <div style={karte}>
+            <div style={titel}>DATEV-Export (Rechnungen)</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+              {textFeld("Beraternummer", "beraternummer", "vom Steuerberater")}
+              {textFeld("Mandantennummer", "mandantennummer", "vom Steuerberater")}
+              {textFeld("Debitorenkonto", "debitorenkonto", "10000")}
+              {textFeld("Erlöskonto", "erloeskonto", "8400")}
+              {textFeld("Kontenrahmen (03/04)", "kontenrahmen", "03")}
+              {textFeld("Beginn Wirtschaftsjahr", "wjBeginn", "2026-01-01")}
+            </div>
+            <div style={{ color:"var(--muted)", fontSize:11, marginTop:6, lineHeight:1.4 }}>
+              Bauleistungen an Bauunternehmer (§ 13b UStG) brauchen ein eigenes Erlöskonto — mit dem Steuerberater abstimmen.
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
