@@ -21,8 +21,10 @@ export const STANDARD_REGELN = {
 
 const euro = n => (n || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+import { nettoSumme } from "./lv.js";
+
 export function angebotNetto(angebot) {
-  const netto = (angebot?.positionen || []).reduce((s, p) => s + (p.menge || 0) * (p.ep || 0) * (1 - (p.rabatt || 0) / 100), 0);
+  const netto = nettoSumme(angebot?.positionen);
   return netto * (1 - (angebot?.rabatt || 0) / 100);
 }
 

@@ -17,6 +17,7 @@
 // EP) bleiben Festpreise und tragen keine Umlage.
 
 import { kalkulationAufschluesselung, kalkulationEp, ZUSCHLAG_FELD } from "./kalkulation.js";
+import { inSumme } from "./lv.js";
 
 export const LEERE_ENDSUMME = { bgk: [], agkProzent: 0, wgProzent: 0, umlageAuf: "lohn" };
 
@@ -26,7 +27,7 @@ export function endsummeBerechnen(positionen, endsumme, kalkulationspreise) {
   const ekt = { lohn: 0, material: 0, geraet: 0, fremdleistung: 0 };
   let festpreise = 0;
   for (const p of positionen || []) {
-    if (!p?.bez || p.bez.startsWith("──")) continue;
+    if (!p?.bez || p.bez.startsWith("──") || !inSumme(p)) continue;
     if (!p.kalk) { festpreise += (Number(p.menge) || 0) * (Number(p.ep) || 0); continue; }
     const a = kalkulationAufschluesselung(p.kalk, kalkulationspreise);
     for (const k of KOSTENARTEN) ekt[k] += a[k];

@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { parseGaebXml } from "./gaebXml.js";
 import { gaeb90ZuPositionen } from "./gaeb90.js";
 import { gaebX84Schreiben } from "./gaebX84.js";
+import { inSumme } from "./lv.js";
 
 const hier = dirname(fileURLToPath(import.meta.url));
 const x83 = readFileSync(join(hier, "__fixtures__", "gaeb-xml-sample.X83"), "utf-8");
@@ -29,7 +30,7 @@ test("X83 importieren, bepreisen, als X84 schreiben: gleiche OZ, Mengen und Text
   assert.deepEqual(neu.map(p => p.stlk), orig.map(p => p.stlk));
 
   // Summe = Σ Menge × EP, und die Titelbezeichnungen kommen aus den Kopfzeilen
-  const erwartet = positionen.filter(p => p.oz).reduce((s, p) => s + Math.round(p.menge * p.ep * 100) / 100, 0);
+  const erwartet = positionen.filter(p => p.oz && inSumme(p)).reduce((s, p) => s + Math.round(p.menge * p.ep * 100) / 100, 0);
   assert.equal(summe, Math.round(erwartet * 100) / 100);
   assert.match(text, /<LblTx><p><span>Baustelleneinrichtung<\/span><\/p><\/LblTx>/);
 });

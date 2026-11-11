@@ -15,6 +15,7 @@ import { angebotPruefen, vergleichswerteAusAngeboten, AMPEL_FARBE } from "../lib
 import { freigabePflicht } from "../lib/angebotRegeln.js";
 import { mittellohnBerechnen } from "../lib/kalkulationsgrundlagen.js";
 import { endsummeBerechnen, endsummeAnwenden, LEERE_ENDSUMME } from "../lib/endsumme.js";
+import { nettoSumme, istTitel, positionsart, inSumme, POSITIONSARTEN, ART_LABEL, titelName, titelSummen } from "../lib/lv.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
@@ -82,7 +83,8 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   // eine Zeile den Überblick verliert: gpOf() ist die einzige Stelle, die
   // beide Zahlenwerte (Position + PDF/CSV/Summen-Banner) berechnet.
   const gpOf = p => (p.menge||0) * (p.ep||0) * (1 - (p.rabatt||0)/100);
-  const netto   = a.positionen.reduce((s,p)=>s+gpOf(p),0);
+  const netto   = nettoSumme(a.positionen); // ohne Bedarf ohne GB / Alternativen (lib/lv.js)
+  const tSummen = titelSummen(a.positionen);
   const rabattBetrag = netto * (a.rabatt||0)/100;
   const nettoNachRabatt = netto - rabattBetrag;
   const mwstBetrag = nettoNachRabatt * (a.mwst||19)/100;
@@ -572,10 +574,12 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
     </tr>
   </thead>
   <tbody>
-    ${a.positionen.map((p,i) => `
+    ${a.positionen.map((p,i) => istTitel(p) ? `
+    <tr><td colspan="6" style="background:#f3f3f3;font-weight:bold">${escapeHtml(titelName(p))}</td>
+      <td style="background:#f3f3f3"><strong>${(tSummen[p.id]||0).toLocaleString("de-DE",{minimumFractionDigits:2})}</strong></td></tr>` : `
     <tr>
-      <td>${i+1}</td>
-      <td>${escapeHtml(p.bez)}</td>
+      <td>${a.positionen.slice(0, i + 1).filter(x => !istTitel(x)).length}</td>
+      <td>${positionsart(p) !== "normal" ? `<em>[${ART_LABEL[positionsart(p)]}${inSumme(p) ? "" : ", nicht in Summe"}]</em> ` : ""}${escapeHtml(String(p.bez).replace(/^\[[^\]]+\]\s*/, ""))}${p.langtext ? `<div style="font-size:8.5pt;color:#555;margin-top:2px">${escapeHtml(p.langtext)}</div>` : ""}</td>
       <td>${(p.menge||0).toLocaleString("de-DE")}</td>
       <td>${escapeHtml(p.einheit)}</td>
       <td>${(p.ep||0).toLocaleString("de-DE",{minimumFractionDigits:2})}</td>
@@ -1047,6 +1051,17 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               </div>
             )}
 
+            {!gesperrt && (
+              <div style={{ display:"flex", gap:6, marginBottom:8 }}>
+                <button onClick={() => addPosition({ bez:"── Neuer Titel ──", einheit:"", menge:0, ep:0 })}
+                  style={{ flex:1, background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)", borderRadius:10,
+                    padding:"8px 0", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit" }}>+ Titel</button>
+                <button onClick={() => addPosition({ bez:"", einheit:"m²", menge:0, ep:0 })}
+                  style={{ flex:1, background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)", borderRadius:10,
+                    padding:"8px 0", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit" }}>+ Position</button>
+              </div>
+            )}
+
             {/* Positionen */}
             {a.positionen.length === 0 && (
               <div style={{ textAlign:"center", padding:"23px 20px", color:"var(--muted)",
@@ -1054,7 +1069,21 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 Noch keine Positionen · Aus Vorlage oder Aufgaben importieren
               </div>
             )}
-            {a.positionen.map((pos, i) => (
+            {a.positionen.map((pos, i) => istTitel(pos) ? (
+              <div key={pos.id} style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 12px", marginBottom:6,
+                border:"1.5px solid var(--border)", display:"flex", alignItems:"center", gap:8 }}>
+                <input value={titelName(pos)} disabled={gesperrt}
+                  onChange={e => updatePos(pos.id, "bez", `── ${e.target.value} ──`)}
+                  style={{ ...inputStyle(), flex:1, fontWeight:800, fontSize:13, padding:"7px 9px" }} />
+                <div style={{ color:"var(--text)", fontWeight:800, fontSize:13, whiteSpace:"nowrap" }}>
+                  {(tSummen[pos.id] || 0).toLocaleString("de-DE", { minimumFractionDigits:2 })} €
+                </div>
+                {!gesperrt && (
+                  <button onClick={() => removePos(pos.id)} style={{ background:"var(--rbg)", color:"var(--red)", border:"none",
+                    borderRadius:6, padding:"4px 8px", cursor:"pointer", display:"flex" }}><X size={12} /></button>
+                )}
+              </div>
+            ) : (
               <div key={pos.id} style={{ background:"var(--surface)", borderRadius:12,
                 padding:"9px 14px", marginBottom:6,
                 border:"1.5px solid var(--border)" }}>
@@ -1067,7 +1096,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                         style={{ width:9, height:9, borderRadius:"50%", display:"inline-block",
                           background: AMPEL_FARBE[pruefung.jePosition[pos.id].ampel] }} />
                     )}
-                    Pos. {i+1}
+                    Pos. {pos.oz || a.positionen.slice(0, i + 1).filter(x => !istTitel(x)).length}
                     {pos.preisquelle && (
                       <span style={{ fontWeight:400 }}>· {QUELLEN_LABEL[pos.preisquelle.art] || pos.preisquelle.art}</span>
                     )}
@@ -1081,8 +1110,20 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 </div>
                 <input value={pos.bez} disabled={gesperrt}
                   onChange={e=>updatePos(pos.id,"bez",e.target.value)}
-                  placeholder="Bezeichnung"
-                  style={{ ...inputStyle(), marginBottom:8, fontSize:13 }} />
+                  placeholder="Kurztext"
+                  style={{ ...inputStyle(), marginBottom:6, fontSize:13 }} />
+                <textarea value={pos.langtext || ""} disabled={gesperrt} rows={pos.langtext ? 3 : 1}
+                  onChange={e=>updatePos(pos.id,"langtext",e.target.value)}
+                  placeholder="Langtext (optional)"
+                  style={{ ...inputStyle(), marginBottom:6, fontSize:12, resize:"vertical" }} />
+                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+                  <select value={positionsart(pos)} disabled={gesperrt}
+                    onChange={e=>updatePos(pos.id,"art",e.target.value)}
+                    style={{ ...inputStyle(), padding:"6px 8px", fontSize:12, width:"auto" }}>
+                    {POSITIONSARTEN.map(([k,l]) => <option key={k} value={k}>{l}</option>)}
+                  </select>
+                  {!inSumme(pos) && <span style={{ color:"var(--muted)", fontSize:11 }}>nicht in der Angebotssumme</span>}
+                </div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
                   <div>
                     <div style={{ color:"var(--muted)", fontSize:10,
@@ -1147,7 +1188,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                     onChange={neueKalk => kalkAendern(pos.id, neueKalk)} />
                 )}
                 <div style={{ textAlign:"right", marginTop:6,
-                  color:"var(--yellow)", fontWeight:800, fontSize:14 }}>
+                  color: inSumme(pos) ? "var(--yellow)" : "var(--muted)", fontWeight:800, fontSize:14 }}>
                   {pos.rabatt > 0 && (
                     <span style={{ color:"var(--muted)", fontWeight:600, fontSize:12, marginRight:7,
                       textDecoration:"line-through" }}>

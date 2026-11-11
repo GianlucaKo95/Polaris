@@ -21,6 +21,8 @@
 // Rabatt)), weil X84 je Position nur einen Preis kennt. Gruppen-
 // Kopfzeilen ("── … ──") liefern die Titelbezeichnungen (LblTx).
 
+import { positionsart, inSumme } from "./lv.js";
+
 function xmlEscape(s) {
   return String(s ?? "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -86,16 +88,24 @@ function ebenenLaengen(knoten, tiefe = 0, laengen = []) {
   return laengen;
 }
 
+// Bedarfs- und Alternativpositionen ohne Gesamtbetrag als Provis
+// "WithoutTotal" (Alternativen ohne Gruppenbezug, da Polaris keine
+// Grundposition-Zuordnung führt), Bedarf mit GB als "WithTotal".
+const PROVIS = { bedarf: "WithoutTotal", alternativ: "WithoutTotal", bedarf_mit: "WithTotal" };
+
 function itemXml({ rnopart, p }, id) {
   const up = (Number(p.ep) || 0) * (1 - (Number(p.rabatt) || 0) / 100);
   const it = up * (Number(p.menge) || 0);
   const langtext = p.langtext ? textXml(p.langtext) : "";
+  const provis = PROVIS[positionsart(p)];
+  const bez = String(p.bez).replace(/^\[[^\]]+\]\s*/, "");
   return `<Item ID="I${id}" RNoPart="${xmlEscape(rnopart)}">`
     + `<Qty>${zahl(p.menge, 3)}</Qty><QU>${xmlEscape(p.einheit || "")}</QU>`
+    + (provis ? `<Provis>${provis}</Provis>` : "")
     + `<UP>${zahl(up, 2)}</UP><IT>${zahl(it, 2)}</IT>`
     + `<Description>${p.stlk ? `<StLNo Type="StLK">${xmlEscape(p.stlk)}</StLNo>` : ""}`
-    + `<CompleteText><DetailTxt><Text>${textXml(p.bez)}${langtext}</Text></DetailTxt>`
-    + `<OutlineText><OutlTxt><TextOutlTxt>${textXml(p.bez.slice(0, 70))}</TextOutlTxt></OutlTxt></OutlineText>`
+    + `<CompleteText><DetailTxt><Text>${textXml(bez)}${langtext}</Text></DetailTxt>`
+    + `<OutlineText><OutlTxt><TextOutlTxt>${textXml(bez.slice(0, 70))}</TextOutlTxt></OutlTxt></OutlineText>`
     + `</CompleteText></Description></Item>`;
 }
 
@@ -112,7 +122,7 @@ function bodyXml(knoten, zaehler) {
     xml += "<Itemlist>";
     for (const item of knoten.items) {
       const up = (Number(item.p.ep) || 0) * (1 - (Number(item.p.rabatt) || 0) / 100);
-      summe += Math.round(up * (Number(item.p.menge) || 0) * 100) / 100;
+      if (inSumme(item.p)) summe += Math.round(up * (Number(item.p.menge) || 0) * 100) / 100;
       zaehler.items++;
       xml += itemXml(item, zaehler.n++);
     }

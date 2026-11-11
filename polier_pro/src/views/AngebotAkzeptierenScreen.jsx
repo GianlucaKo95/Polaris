@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { nettoSumme } from "../lib/lv.js";
 import { Building2, FileText, CircleCheckBig, Ban, PenLine, X, Check, TriangleAlert } from "lucide-react";
 import { sbAngebotFreigabeDaten, sbAngebotEntscheiden } from "../lib/supabase.js";
 import { UnterschriftPad } from "../components/UnterschriftPad.jsx";
@@ -54,7 +55,7 @@ export function AngebotAkzeptierenScreen({ token }) {
     );
   }
 
-  const netto   = (daten.positionen||[]).reduce((s,p)=>s+(p.menge||0)*(p.ep||0)*(1-(p.rabatt||0)/100),0);
+  const netto   = nettoSumme(daten.positionen);
   const nettoNachRabatt = netto * (1 - (daten.rabatt||0)/100);
   const mwstBetrag = nettoNachRabatt * (daten.mwst ?? 19)/100;
   const bruttoGesamt = nettoNachRabatt + mwstBetrag;

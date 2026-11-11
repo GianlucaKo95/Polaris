@@ -1,4 +1,5 @@
 import { dataUrlZuBild } from "./docxUtils.js";
+import { gp, nettoSumme, positionsart, istTitel, ART_LABEL } from "./lv.js";
 
 const GELB = "F5C400";
 const DUNKEL = "1A1A1A";
@@ -19,8 +20,8 @@ export async function erzeugeAngebotDocx({ angebot: a, projekt, eigeneFirma, ang
   const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
     WidthType, AlignmentType, ImageRun, BorderStyle } = await import("docx");
 
-  const gpOf = p => (p.menge||0) * (p.ep||0) * (1 - (p.rabatt||0)/100);
-  const netto = a.positionen.reduce((s,p)=>s+gpOf(p),0);
+  const gpOf = gp;
+  const netto = nettoSumme(a.positionen);
   const rabattBetrag = netto * (a.rabatt||0)/100;
   const nettoNachRabatt = netto - rabattBetrag;
   const mwstBetrag = nettoNachRabatt * (a.mwst||19)/100;
@@ -79,7 +80,7 @@ export async function erzeugeAngebotDocx({ angebot: a, projekt, eigeneFirma, ang
       }),
       ...a.positionen.map(p => new TableRow({
         children: [
-          zelle(p.bez),
+          zelle((positionsart(p) !== "normal" && !istTitel(p) ? `[${ART_LABEL[positionsart(p)]}] ` : "") + String(p.bez).replace(/^\[[^\]]+\]\s*/, "") + (p.langtext ? `\n${p.langtext}` : "")),
           zelle((p.menge||0).toLocaleString("de-DE")),
           zelle(p.einheit),
           zelle((p.ep||0).toLocaleString("de-DE",{minimumFractionDigits:2})),

@@ -28,6 +28,7 @@ export function aufteilungGueltig(aufteilung) {
 
 import { kalkulationAufschluesselung, kalkulationZuschlagProzentJeKostenart } from "./kalkulation.js";
 import { escapeHtmlText as esc } from "./efbHtml.js";
+import { inSumme } from "./lv.js";
 
 const KOSTENARTEN = ["lohn", "material", "geraet", "fremdleistung"];
 
@@ -52,10 +53,13 @@ export function efbAuswerten(positionen, kalkulationspreise) {
     const menge = Number(p.menge) || 0;
     const faktor = 1 - (Number(p.rabatt) || 0) / 100;
     if (!menge) continue;
+    // Bedarf ohne GB / Alternativen: EP wird in 223 aufgegliedert, zählt
+    // aber nicht zur Angebotssumme in 221/222.
+    const zaehlt = inSumme(p);
 
     if (!p.kalk) {
       const ep = (Number(p.ep) || 0) * faktor;
-      summe.gesamt.sonstiges += ep * menge;
+      if (zaehlt) summe.gesamt.sonstiges += ep * menge;
       warnungen.push(`${p.oz ? p.oz + " " : ""}„${p.bez}“ ist nicht kalkuliert — EP steht vollständig unter Sonstiges.`);
       zeilen.push({ oz: p.oz || "", bez: p.bez, menge, einheit: p.einheit, zeitansatz: null,
         lohn: 0, material: 0, geraet: 0, fremdleistung: 0, sonstiges: ep, ep, kalkuliert: false });
@@ -67,12 +71,11 @@ export function efbAuswerten(positionen, kalkulationspreise) {
     for (const k of KOSTENARTEN) {
       const satz = kalkulationZuschlagProzentJeKostenart(p.kalk, k);
       const gesamt = a[k] * (1 + satz / 100) * faktor;
-      summe.ek[k] += a[k] * faktor;
-      summe.gesamt[k] += gesamt;
+      if (zaehlt) { summe.ek[k] += a[k] * faktor; summe.gesamt[k] += gesamt; }
       je[k] = gesamt / menge;
     }
     const std = lohnstunden(p.kalk, kalkulationspreise);
-    summe.stunden += std * faktor;
+    if (zaehlt) summe.stunden += std * faktor;
     zeilen.push({ oz: p.oz || "", bez: p.bez, menge, einheit: p.einheit, zeitansatz: std / menge,
       ...je, sonstiges: 0, ep: KOSTENARTEN.reduce((s, k) => s + je[k], 0), kalkuliert: true });
   }

@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { FileText, Plus, Link2, Upload, FilePlus2 } from "lucide-react";
 import { AngebotEditor } from "./AngebotEditor.jsx";
+import { nettoSumme } from "../lib/lv.js";
 import { useBackButton } from "../hooks/useBackButton.js";
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
@@ -219,7 +220,7 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
       )}
 
       {angebote.map(a => {
-        const netto   = a.positionen.reduce((s,p)=>s+(p.menge||0)*(p.ep||0),0);
+        const netto   = nettoSumme(a.positionen);
         const gesamt  = netto * (1 - (a.rabatt||0)/100) * (1 + (a.mwst||19)/100);
         const STATUS  = {
           entwurf:    { label:"📝 Entwurf",    farbe:"var(--muted)", bg:"var(--surface2)" },
