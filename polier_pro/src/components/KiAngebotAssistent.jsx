@@ -27,7 +27,15 @@ async function anhangAusDatei(datei) {
     const url = await new Promise((ok, fehler) => {
       const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = fehler; r.readAsDataURL(datei);
     });
-    return { name: datei.name, block: { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64AusDataUrl(url) } } };
+    const block = { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64AusDataUrl(url) } };
+    // Pläne: Raumstempel (Name + m²) zusätzlich als exakten Text mitgeben,
+    // damit die KI Flächen nicht aus dem Bild schätzt (lib/pdfPlan.js).
+    try {
+      const { pdfPlanLesen, raumstempelAlsText } = await import("../lib/pdfPlan.js");
+      const plan = await pdfPlanLesen(datei);
+      if (plan.raeume.length) return { name: datei.name, bloecke: [block, { type: "text", text: raumstempelAlsText(plan.raeume, datei.name) }] };
+    } catch { /* kein auswertbarer Vektorplan */ }
+    return { name: datei.name, block };
   }
   if (!datei.type.startsWith("image/")) throw new Error(`${datei.name}: nur Fotos und PDFs möglich.`);
   const bild = await createImageBitmap(datei);
@@ -93,7 +101,7 @@ export function KiAngebotAssistent({ projekt, eigeneFirma, stammpositionen = [],
     if (!anfrage.trim() && !anhaenge.length) return;
     setFehler(""); setPhase("laeuft");
     try {
-      verarbeiten(await agentStarten({ anfrage, anhaenge: anhaenge.map(a => a.block), katalog, kontext, rufeKi }));
+      verarbeiten(await agentStarten({ anfrage, anhaenge: anhaenge.flatMap(a => a.bloecke || [a.block]), katalog, kontext, rufeKi }));
     } catch (e) {
       setFehler(e.message || "KI-Anfrage fehlgeschlagen."); setPhase("eingabe");
     }

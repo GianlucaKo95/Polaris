@@ -362,32 +362,47 @@ export function abschnittAlsText(ergebnis) {
 // Namen. Beschriftung: TEXT/MTEXT oder Block-Attribut (Achsblase) nahe einem
 // Linienende, Inhalt wie "A", "B'", "1", "12a". Flächen: geschlossene
 // Polylinien/Hatches auf allen anderen Layern → Bauteil = Layername, Menge = m².
-export function dxfRasterAuswerten(objekte) {
-  // objekte: { linien: [{layer, p1, p2}], texte: [{text, x, y}], flaechen: [{layer, punkte}] } (Zeicheneinheiten)
+export function dxfRasterAuswerten(objekte, optionen = {}) {
+  // objekte: { linien: [{layer, p1, p2}], texte: [{text, x, y}], flaechen: [{layer, punkte}] }
+  // optionen.skala: Faktor auf Meter (sonst geraten); optionen.alleLinien: Linien
+  // ohne Layer (PDF) — dann zählen nur lange Linien als mögliche Achsen.
   const achsLayer = /achs|raster|grid|axis|axe/i;
-  const linien = objekte.linien.filter(l => achsLayer.test(l.layer || ""));
+  let linien = optionen.alleLinien ? objekte.linien : objekte.linien.filter(l => achsLayer.test(l.layer || ""));
+  const laenge = l => Math.hypot(l.p2.x - l.p1.x, l.p2.y - l.p1.y);
+  if (optionen.alleLinien && linien.length) {
+    const max = Math.max(...linien.map(laenge));
+    linien = linien.filter(l => laenge(l) >= max * 0.3);
+  }
   const texte = objekte.texte.map(t => ({ ...t, text: String(t.text || "").replace(/\\[A-Za-z][^;]*;|[{}]/g, "").trim() }))
     .filter(t => /^([A-Z]{1,2}['’]?|\d{1,3}[a-z]?['’]?)$/i.test(t.text));
-  // Zeicheneinheit raten: Ausdehnung > 1000 → mm
-  const xs = [...linien.flatMap(l => [l.p1.x, l.p2.x]), ...objekte.flaechen.flatMap(f => f.punkte.map(p => p.x))];
-  const ys = [...linien.flatMap(l => [l.p1.y, l.p2.y]), ...objekte.flaechen.flatMap(f => f.punkte.map(p => p.y))];
-  const ausdehnung = xs.length ? Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) : 0;
-  const s = ausdehnung > 2000 ? 0.001 : ausdehnung > 200 ? 0.01 : 1;
-  const achsen = [];
-  for (const l of linien) {
-    let best = null, bestD = Infinity;
-    for (const t of texte) for (const e of [l.p1, l.p2]) {
-      const d = Math.hypot(t.x - e.x, t.y - e.y);
-      if (d < bestD) { bestD = d; best = t; }
-    }
-    if (best && bestD * s <= 4) // Beschriftung höchstens 4 m vom Linienende
-      achsen.push({ tag: best.text, p1: { x: l.p1.x * s, y: l.p1.y * s }, p2: { x: l.p2.x * s, y: l.p2.y * s } });
+  let s = optionen.skala;
+  if (!s) {
+    // Zeicheneinheit raten: Ausdehnung > 2000 → mm, > 200 → cm
+    const xs = [...linien.flatMap(l => [l.p1.x, l.p2.x]), ...objekte.flaechen.flatMap(f => f.punkte.map(p => p.x))];
+    const ys = [...linien.flatMap(l => [l.p1.y, l.p2.y]), ...objekte.flaechen.flatMap(f => f.punkte.map(p => p.y))];
+    const ausdehnung = xs.length ? Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) : 0;
+    s = ausdehnung > 2000 ? 0.001 : ausdehnung > 200 ? 0.01 : 1;
   }
-  const elemente = objekte.flaechen.filter(f => !achsLayer.test(f.layer || "") && f.punkte.length >= 3).map((f, i) => {
+  // Je Beschriftung die Linie mit dem nächsten Ende (höchstens 4 m entfernt);
+  // jede Linie bekommt höchstens eine Beschriftung, die nächste gewinnt.
+  const paare = [];
+  for (const t of texte) for (const [i, l] of linien.entries()) {
+    const d = Math.min(Math.hypot(t.x - l.p1.x, t.y - l.p1.y), Math.hypot(t.x - l.p2.x, t.y - l.p2.y)) * s;
+    if (d <= 4) paare.push({ t, i, d });
+  }
+  paare.sort((a, b) => a.d - b.d);
+  const linieVergeben = new Set(), textVergeben = new Set(), achsen = [];
+  for (const { t, i } of paare) {
+    if (linieVergeben.has(i) || textVergeben.has(t)) continue;
+    linieVergeben.add(i); textVergeben.add(t);
+    const l = linien[i];
+    achsen.push({ tag: t.text, p1: { x: l.p1.x * s, y: l.p1.y * s }, p2: { x: l.p2.x * s, y: l.p2.y * s } });
+  }
+  const elemente = objekte.flaechen.filter(f => !achsLayer.test(f.layer || "") && f.punkte.length >= 3 && !/#fff(fff)?$/i.test(f.farbe || "")).map((f, i) => {
     const punkte = f.punkte.map(p => ({ x: p.x * s, y: p.y * s }));
     const bauteil = (BAUTEIL_WOERTER.find(([re]) => re.test(String(f.layer || "").replace(/[_-]/g, " "))) || [null, f.layer || "Fläche"])[1];
     return { id: `dxf${i}`, typ: "DXF", bauteil, material: bauteil === f.layer ? "" : f.layer, geschoss: null, name: f.layer,
       flaeche: Math.round(polygonFlaeche(punkte) * 100) / 100, volumen: 0, laenge: 0, mengenQuelle: "geometrie", umriss: punkte };
   }).filter(e => e.flaeche > 0.05);
-  return { achsen, elemente, geschosse: [], einheit: s === 1 ? "m" : s === 0.01 ? "cm" : "mm" };
+  return { achsen, elemente, geschosse: [], einheit: s === 1 ? "m" : s === 0.01 ? "cm" : s === 0.001 ? "mm" : "Maßstab" };
 }

@@ -1,6 +1,6 @@
 {
   "name": "polier-pro",
-  "version": "1.61.0",
+  "version": "1.62.0",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -21,6 +21,7 @@
     "jspdf": "^4.2.1",
     "lucide-react": "^0.462.0",
     "mammoth": "^1.13.0",
+    "pdfjs-dist": "^5.7.284",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "web-ifc": "^0.0.79",

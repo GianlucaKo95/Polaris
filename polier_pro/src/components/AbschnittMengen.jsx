@@ -57,6 +57,22 @@ export function AbschnittMengen({ projekt, auftraege, baufortschritt, onBauforts
       if (/\.ifc$/i.test(datei.name)) {
         const { ifcRasterAusDatei } = await import("../lib/ifcLaden.js");
         m = await ifcRasterAusDatei(datei);
+      } else if (/\.pdf$/i.test(datei.name)) {
+        const { pdfPlanLesen, pdfObjekteInMeter } = await import("../lib/pdfPlan.js");
+        const { dxfRasterAuswerten } = await import("../lib/achsraster.js");
+        const plan = await pdfPlanLesen(datei);
+        let massstab = plan.massstab;
+        if (!massstab) {
+          const eingabe = window.prompt("Maßstab des Plans nicht gefunden. Maßstab 1 : …", "100");
+          massstab = Number(String(eingabe || "").replace(/^1\s*:\s*/, ""));
+          if (!(massstab > 0)) throw new Error("Ohne Maßstab lassen sich keine Mengen messen.");
+        }
+        m = dxfRasterAuswerten(pdfObjekteInMeter(plan, massstab), { skala: 1, alleLinien: true });
+        m.raeume = plan.raeume; m.massstab = massstab;
+        m.warnungen = [];
+        if (!plan.linien.length && !plan.flaechen.length) m.warnungen.push("Keine Vektorgrafik gefunden — vermutlich ein Scan. Bitte den PDF-Export aus dem CAD verwenden.");
+        else if (!m.achsen.length) m.warnungen.push("Keine beschrifteten Achsen erkannt — Abschnitte gehen nur mit Achsraster. Raumstempel stehen trotzdem bereit.");
+        if (plan.seiten > 1) m.warnungen.push(`PDF hat ${plan.seiten} Seiten — ausgewertet wurde Seite 1.`);
       } else {
         const { dxfObjekteLesen } = await import("../lib/dxf.js");
         const { dxfRasterAuswerten } = await import("../lib/achsraster.js");
@@ -148,20 +164,21 @@ export function AbschnittMengen({ projekt, auftraege, baufortschritt, onBauforts
 
       {!modell ? (
         <div style={{ fontSize:12, color:"var(--muted)", marginBottom:8 }}>
-          IFC-Modell (mit Achsraster) oder DXF-Plan (mit beschrifteten Achsen) dieser Baustelle wählen. Danach reicht ein Satz wie
+          IFC-Modell (mit Achsraster), DXF oder PDF-Plan aus dem CAD (mit beschrifteten Achsen) dieser Baustelle wählen. Danach reicht ein Satz wie
           „Abschnitt A–B / 1–2 im EG fertig“.
         </div>
       ) : (
         <div style={{ fontSize:12, color:"var(--muted)", marginBottom:8 }}>
           {stand.modellName} · Achsen {familienText || "—"} · {modell.elemente.length} Bauteile
           {modell.geschosse?.length ? ` · ${modell.geschosse.join(", ")}` : ""}
+          {modell.massstab ? ` · M 1:${modell.massstab}` : ""}
           {(modell.warnungen || []).map(w => <div key={w} style={{ color:"var(--ydark)", marginTop:4 }}>{w}</div>)}
         </div>
       )}
       <label style={{ ...knopf, marginBottom:10 }}>
         {laedt && !ergebnis ? <Loader2 size={13} style={{ animation: "polaris-spin 0.8s linear infinite" }} /> : <Upload size={13} />}
-        {modell ? "Anderes Modell wählen" : "IFC/DXF wählen"}
-        <input type="file" accept=".ifc,.dxf" style={{ display:"none" }} onChange={e => dateiGewaehlt(e.target.files?.[0])} />
+        {modell ? "Anderes Modell wählen" : "IFC, DXF oder PDF-Plan wählen"}
+        <input type="file" accept=".ifc,.dxf,.pdf,application/pdf" style={{ display:"none" }} onChange={e => dateiGewaehlt(e.target.files?.[0])} />
       </label>
       {fehlerDatei && <div style={{ color:"var(--red)", fontSize:12, marginBottom:8 }}>{fehlerDatei}</div>}
 
@@ -241,6 +258,22 @@ export function AbschnittMengen({ projekt, auftraege, baufortschritt, onBauforts
         </div>
       )}
       {meldung && <div style={{ fontSize:12, marginTop:6, color: meldung.startsWith("✓") ? "var(--green)" : "var(--ydark)" }}>{meldung}</div>}
+
+      {modell?.raeume?.length > 0 && (
+        <details style={{ marginTop:10, fontSize:12 }}>
+          <summary style={{ cursor:"pointer", color:"var(--muted)" }}>
+            Raumstempel aus dem Plan ({modell.raeume.length} Räume, {z(modell.raeume.reduce((s, r) => s + r.flaeche, 0))} m²)
+          </summary>
+          {modell.raeume.map((r, i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", borderTop:"1px solid var(--border)", padding:"4px 0" }}>
+              <span>{r.raum}</span><span style={{ color:"var(--muted)" }}>{z(r.flaeche)} m²{r.umfang ? ` · U ${z(r.umfang)} m` : ""}</span>
+            </div>
+          ))}
+          <button onClick={async () => { const { raumstempelAlsText } = await import("../lib/pdfPlan.js");
+            navigator.clipboard?.writeText(raumstempelAlsText(modell.raeume, stand.modellName)).then(() => setMeldung("✓ Raumflächen kopiert")); }}
+            style={{ ...knopf, marginTop:6 }}><Copy size={13} /> Raumflächen kopieren</button>
+        </details>
+      )}
 
       {stand.log?.length > 0 && (
         <details style={{ marginTop:10, fontSize:12 }}>
