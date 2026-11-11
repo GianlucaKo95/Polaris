@@ -56,6 +56,7 @@ const KiFrageView            = React.lazy(() => import("./views/KiFrageView.jsx"
 const BaustellenAbschlussView = React.lazy(() => import("./views/BaustellenAbschlussView.jsx").then(m => ({ default: m.BaustellenAbschlussView })));
 const SimulationView         = React.lazy(() => import("./views/SimulationView.jsx").then(m => ({ default: m.SimulationView })));
 const KostenView             = React.lazy(() => import("./views/KostenView.jsx").then(m => ({ default: m.KostenView })));
+const FinanzenView           = React.lazy(() => import("./views/FinanzenView.jsx").then(m => ({ default: m.FinanzenView })));
 const LohnView               = React.lazy(() => import("./views/LohnView.jsx").then(m => ({ default: m.LohnView })));
 const StundenExportView      = React.lazy(() => import("./views/StundenExportView.jsx").then(m => ({ default: m.StundenExportView })));
 const AngebotView            = React.lazy(() => import("./views/AngebotView.jsx").then(m => ({ default: m.AngebotView })));
@@ -1370,6 +1371,8 @@ export default function PolierApp() {
     // interne_freigabe in AngebotEditor.jsx).
     { id:"angebot",       icon:"📄",  label:"Angebot",     rollen:["administrator","geschaeftsfuehrer","polier"] },
     { id:"rechnungen",    icon:"🧾",  label:"Rechnungen",  rollen:["administrator","geschaeftsfuehrer"] },
+    // Offene Posten, Eingangsrechnungen, Mahnungen, DATEV (views/FinanzenView.jsx).
+    { id:"finanzen",      icon:"🏦",  label:"Finanzen",    rollen:["administrator","geschaeftsfuehrer"] },
     // Stunden je LV-Position, Leistungsstand, Soll-Ist und Prognose
     // (views/LeistungView.jsx, lib/arbeitskalkulation.js).
     { id:"leistung",      icon:"📊",  label:"Soll-Ist",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
@@ -1548,6 +1551,7 @@ export default function PolierApp() {
             // auf die eigene Kolonne begrenzt, "alle" heißt für ihn also
             // "alle aus seiner Kolonne", nicht firmenweit.
             darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
+        {tab === "finanzen"      && <FinanzenView session={auth.session} firmaId={firma?.id} projekte={projekte} eigeneFirma={eigeneFirma} datevEinstellungen={kalkulationsgrundlagen?.datev} />}
         {tab === "lohn"          && <LohnView session={auth.session} firmaId={firma?.id} projekte={projekte} einstellungen={lohnEinstellungen}
             setEinstellungen={setLohnEinstellungen} status={lohnEinstellungenStatus} darfEinstellen={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} />}
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}

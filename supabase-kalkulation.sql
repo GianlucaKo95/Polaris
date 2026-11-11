@@ -128,3 +128,43 @@ begin
     );
   end if;
 end $$;
+
+-- ── Finanz-Nebenbuch (Polaris 1.65, lib/fibu.js) ─────────────────────────
+alter table rechnungen add column if not exists zahlungen jsonb not null default '[]'::jsonb;
+alter table rechnungen add column if not exists mahnungen jsonb not null default '[]'::jsonb;
+alter table rechnungen add column if not exists faellig_am date;
+create table if not exists eingangsrechnungen (
+  id              bigserial primary key,
+  firma_id        int not null references firmen(id) on delete cascade,
+  projekt_id      bigint references projekte(id) on delete set null,
+  lieferant       text not null,
+  rechnungsnr     text default '',
+  datum           date not null,
+  faellig_am      date,
+  netto           numeric(12,2),
+  ust_satz        numeric(5,2) default 19,
+  brutto          numeric(12,2) not null,
+  konto           text,
+  kreditorenkonto text,
+  bauleistung     boolean default false,   -- Subunternehmer-Bauleistung (§ 48 EStG)
+  freistellung    boolean default false,   -- Freistellungsbescheinigung liegt vor
+  skonto_prozent  numeric(5,2),
+  skonto_tage     int,
+  status          text default 'offen',
+  zahlungen       jsonb not null default '[]'::jsonb,
+  notiz           text default '',
+  erfasst_von     uuid default auth.uid(),
+  created_at      timestamptz default now()
+);
+create index if not exists eingangsrechnungen_firma on eingangsrechnungen(firma_id, datum);
+alter table eingangsrechnungen enable row level security;
+do $$
+begin
+  if not exists (select 1 from pg_policies where tablename = 'eingangsrechnungen' and policyname = 'eingangsrechnungen_firma') then
+    create policy "eingangsrechnungen_firma" on eingangsrechnungen for all using (
+      firma_id = eigene_firma_id() and eigene_rolle() in ('administrator','geschaeftsfuehrer')
+    ) with check (
+      firma_id = eigene_firma_id() and eigene_rolle() in ('administrator','geschaeftsfuehrer')
+    );
+  end if;
+end $$;

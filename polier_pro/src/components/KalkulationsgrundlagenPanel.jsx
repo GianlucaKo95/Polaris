@@ -116,7 +116,7 @@ export function KalkulationsgrundlagenPanel({ grundlagen, onChange, status }) {
         );
         return (
           <div style={karte}>
-            <div style={titel}>DATEV-Export (Rechnungen)</div>
+            <div style={titel}>DATEV-Export (Rechnungen, Eingangsrechnungen, Zahlungen)</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
               {textFeld("Beraternummer", "beraternummer", "vom Steuerberater")}
               {textFeld("Mandantennummer", "mandantennummer", "vom Steuerberater")}
@@ -124,6 +124,10 @@ export function KalkulationsgrundlagenPanel({ grundlagen, onChange, status }) {
               {textFeld("Erlöskonto", "erloeskonto", "8400")}
               {textFeld("Kontenrahmen (03/04)", "kontenrahmen", "03")}
               {textFeld("Beginn Wirtschaftsjahr", "wjBeginn", "2026-01-01")}
+              {textFeld("Kreditorenkonto", "kreditorenkonto", "70000")}
+              {textFeld("Aufwand Material", "aufwandskonto", "3400")}
+              {textFeld("Aufwand Subunternehmer", "nuAufwandskonto", "3100")}
+              {textFeld("Bankkonto", "bankkonto", "1200")}
             </div>
             <div style={{ color:"var(--muted)", fontSize:11, marginTop:6, lineHeight:1.4 }}>
               Bauleistungen an Bauunternehmer (§ 13b UStG) brauchen ein eigenes Erlöskonto — mit dem Steuerberater abstimmen.
