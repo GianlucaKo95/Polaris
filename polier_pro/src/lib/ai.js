@@ -92,6 +92,13 @@ export async function kiToolAufruf({ system, messages, tools, maxTokens = 4000 }
     "Bitte die Anfrage umformulieren oder erneut versuchen.");
 }
 
+// Einfacher Textauftrag (z.B. Nachtragsbegründung, lib/nachtrag.js).
+export async function kiText(prompt, session, maxTokens = 1000) {
+  const data = await rufeKiProxyAuf({ messages: [{ role: "user", content: prompt }], maxTokens }, session,
+    "Bitte die Beschreibung umformulieren oder erneut versuchen.");
+  return data.content?.find(b => b.type === "text")?.text?.trim() || "";
+}
+
 // ── KI-Assistent: Fragen zu echten Projektdaten ─────────────────────────
 // Baut aus Aufgaben, Kolonnen, Wettervorhersage und Terminprognose einen
 // System-Prompt mit klaren Leitplanken gegen Halluzination — die KI

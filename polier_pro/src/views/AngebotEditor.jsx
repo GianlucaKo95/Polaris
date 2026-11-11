@@ -15,6 +15,8 @@ import { angebotPruefen, vergleichswerteAusAngeboten, AMPEL_FARBE } from "../lib
 import { freigabePflicht } from "../lib/angebotRegeln.js";
 import { mittellohnBerechnen } from "../lib/kalkulationsgrundlagen.js";
 import { endsummeBerechnen, endsummeAnwenden, LEERE_ENDSUMME } from "../lib/endsumme.js";
+import { NACHTRAG_GRUENDE, NACHTRAG_STATUS, begruendungPrompt, mehrkostenanzeigeHtml } from "../lib/nachtrag.js";
+import { kiText } from "../lib/ai.js";
 import { nettoSumme, istTitel, positionsart, inSumme, POSITIONSARTEN, ART_LABEL, titelName, titelSummen } from "../lib/lv.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
@@ -409,6 +411,25 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       kalkZelle(Number(summeGp.toFixed(2)), { fontWeight: "bold", type: Number }),
     ]);
     setKalkExportRows(rows);
+  }
+
+  // ── Nachtrag (lib/nachtrag.js) ──
+  const [nachtragKi, setNachtragKi] = useState(false);
+  const [nachtragFehler, setNachtragFehler] = useState("");
+  const nInfo = a.nachtrag_info || {};
+  const setNInfo = aend => setA(x => ({ ...x, nachtrag_info: { ...(x.nachtrag_info || {}), ...aend } }));
+  async function nachtragBegruendenKI() {
+    setNachtragKi(true); setNachtragFehler("");
+    try {
+      const text = await kiText(begruendungPrompt({ nachtrag: a, auftrag: nachtragZu, projekt, info: nInfo }), session);
+      if (text) setNInfo({ begruendung: text });
+    } catch (e) { setNachtragFehler(e.message); }
+    finally { setNachtragKi(false); }
+  }
+  async function mehrkostenanzeigeDrucken() {
+    await druckePDF(mehrkostenanzeigeHtml({ nachtrag: a, auftrag: nachtragZu, projekt, eigeneFirma, info: nInfo, esc: escapeHtml }),
+      "Mehrkostenanzeige_" + a.titel.replace(/ /g, "_") + ".pdf");
+    if (!nInfo.angekuendigt_am) setNInfo({ angekuendigt_am: new Date().toISOString().slice(0, 10), status: nInfo.status && nInfo.status !== "entwurf" ? nInfo.status : "angekuendigt" });
   }
 
   // ── Interne Freigabe (Polier → Geschäftsführung) ──
@@ -1276,6 +1297,44 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 </div>
               )}
             </div>
+
+            {(a.nachtrag_zu || nachtragZu) && (
+              <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:12, padding:"10px 12px", marginBottom:12 }}>
+                <div style={{ color:"var(--muted)", fontSize:11, fontWeight:700, textTransform:"uppercase", marginBottom:6 }}>
+                  Nachtrag{nachtragZu ? ` zu „${nachtragZu.titel}“` : ""}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:6 }}>
+                  <select value={nInfo.grund || ""} disabled={gesperrt} onChange={e => setNInfo({ grund: e.target.value })} style={{ ...inputStyle(), padding:"7px 9px", fontSize:12 }}>
+                    <option value="">Grund wählen …</option>
+                    {NACHTRAG_GRUENDE.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  </select>
+                  <select value={nInfo.status || "entwurf"} disabled={gesperrt} onChange={e => setNInfo({ status: e.target.value })} style={{ ...inputStyle(), padding:"7px 9px", fontSize:12 }}>
+                    {NACHTRAG_STATUS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  </select>
+                </div>
+                {nInfo.grund === "zusaetzlich" && !nInfo.angekuendigt_am && (
+                  <div style={{ color:"var(--red)", fontSize:11.5, marginBottom:6, lineHeight:1.4 }}>
+                    Zusätzliche Leistung: Mehrkosten VOR Ausführung schriftlich ankündigen (§ 2 Abs. 6 VOB/B), sonst droht der Verlust des Vergütungsanspruchs.
+                  </div>
+                )}
+                <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Angekündigt am</div>
+                <input type="date" value={nInfo.angekuendigt_am || ""} disabled={gesperrt} onChange={e => setNInfo({ angekuendigt_am: e.target.value })}
+                  style={{ ...inputStyle(), padding:"7px 9px", fontSize:12, marginBottom:6 }} />
+                <textarea value={nInfo.beschreibung || ""} disabled={gesperrt} rows={2} placeholder="Sachverhalt: Was ist anders als vereinbart, wer hat es angeordnet, seit wann?"
+                  onChange={e => setNInfo({ beschreibung: e.target.value })} style={{ ...inputStyle(), fontSize:12, marginBottom:6, resize:"vertical" }} />
+                <textarea value={nInfo.begruendung || ""} disabled={gesperrt} rows={5} placeholder="Begründung an den Auftraggeber"
+                  onChange={e => setNInfo({ begruendung: e.target.value })} style={{ ...inputStyle(), fontSize:12, marginBottom:6, resize:"vertical" }} />
+                {nachtragFehler && <div style={{ color:"var(--red)", fontSize:11.5, marginBottom:6 }}>{nachtragFehler}</div>}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                  <button onClick={nachtragBegruendenKI} disabled={nachtragKi || gesperrt || !nInfo.grund}
+                    style={{ background:"var(--surface)", border:"1.5px solid var(--border)", color:"var(--text)", borderRadius:10, padding:9,
+                      fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>{nachtragKi ? "KI schreibt …" : "Begründung per KI"}</button>
+                  <button onClick={mehrkostenanzeigeDrucken} disabled={!nInfo.grund}
+                    style={{ background:"var(--surface)", border:"1.5px solid var(--border)", color:"var(--text)", borderRadius:10, padding:9,
+                      fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>{nInfo.grund === "behinderung" ? "Behinderungsanzeige (PDF)" : "Mehrkostenanzeige (PDF)"}</button>
+                </div>
+              </div>
+            )}
 
             {/* Kalkulationsverfahren: Zuschlagskalkulation (Standard, Sätze
                 je Position) oder Endsumme (lib/endsumme.js, EFB 222). */}

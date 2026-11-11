@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { FileText, Plus, Link2, Upload, FilePlus2 } from "lucide-react";
 import { AngebotEditor } from "./AngebotEditor.jsx";
 import { nettoSumme } from "../lib/lv.js";
+import { nachtragUebersicht, nachtragStatus, STATUS_LABEL } from "../lib/nachtrag.js";
 import { useBackButton } from "../hooks/useBackButton.js";
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
@@ -267,6 +268,20 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
                 {a.interne_freigabe.status === "zurueckgewiesen" && `↩ Zurückgewiesen: ${a.interne_freigabe.notiz || "bitte überarbeiten"}`}
               </div>
             )}
+            {a.nachtrag_zu && (
+              <div style={{ fontSize:11.5, marginTop:4, color:"var(--muted)" }}>Nachtrag · {STATUS_LABEL[nachtragStatus(a)]}</div>
+            )}
+            {a.status === "angenommen" && !a.nachtrag_zu && (() => {
+              const u = nachtragUebersicht(a, angebote);
+              if (!u.anzahl) return null;
+              const eur = n => Math.round(n).toLocaleString("de-DE") + " €";
+              return (
+                <div style={{ fontSize:11.5, marginTop:6, color:"var(--text)", background:"var(--surface2)", borderRadius:8, padding:"6px 9px", lineHeight:1.5 }}>
+                  {u.anzahl} Nachträge: beauftragt {eur(u.beauftragt)} ({u.quote.toLocaleString("de-DE", { maximumFractionDigits: 1 })} %) · offen {eur(u.offen)} · abgelehnt {eur(u.abgelehnt)}
+                  {u.ohneAnkuendigung > 0 && <div style={{ color:"var(--red)" }}>{u.ohneAnkuendigung} zusätzliche Leistung(en) ohne Mehrkostenankündigung</div>}
+                </div>
+              );
+            })()}
             {a.status === "angenommen" && !a.nachtrag_zu && (
               <button onClick={e => { e.stopPropagation(); nachtragAnlegen(a); }}
                 style={{ marginTop:8, background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)",
