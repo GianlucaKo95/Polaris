@@ -143,7 +143,7 @@ export function StundenExportView({ profil, session, projekte, eigeneFirma, darf
 
   return (
     <div>
-      <div style={{ color:"var(--text)", fontWeight:800, fontSize:16, marginBottom:10,
+      <div className="seiten-kopf" style={{ color:"var(--text)", fontWeight:800, fontSize:16, marginBottom:10,
         display:"flex", alignItems:"center", gap:8 }}>
         <ChartColumn size={17} /> Stunden-Export
       </div>

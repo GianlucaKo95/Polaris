@@ -152,7 +152,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
 
   return (
     <div>
-      <div style={{ color:"var(--text)", fontWeight:700, fontSize:15, marginBottom:10,
+      <div className="seiten-kopf" style={{ color:"var(--text)", fontWeight:700, fontSize:15, marginBottom:10,
         display:"flex", alignItems:"center", gap:7 }}>
         <Settings size={16} /> Angebots-Parameter
       </div>

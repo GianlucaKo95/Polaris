@@ -12,9 +12,9 @@ const VORSCHLAEGE = [
   "Wie ist die Terminlage?",
 ];
 
-export function KiFrageView({ projekt, aufgaben = [], kolonnen = [], tagesberichte = [], kommentare = [], session }) {
+export function KiFrageView({ projekt, aufgaben = [], kolonnen = [], tagesberichte = [], kommentare = [], startFrage = "", session }) {
   const [verlauf,   setVerlauf]   = useState([]); // { rolle: "user"|"ki", text }
-  const [eingabe,   setEingabe]   = useState("");
+  const [eingabe,   setEingabe]   = useState(startFrage || "");
   const [laedt,     setLaedt]     = useState(false);
   const [fehler,    setFehler]    = useState("");
   const [wetterVorhersage, setWetterVorhersage] = useState(null);

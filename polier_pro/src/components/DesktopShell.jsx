@@ -1,29 +1,38 @@
-import { LayoutDashboard, LogOut, Moon, Sun, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { LogOut, Moon, Sun, Search, User, Palmtree } from "lucide-react";
 
-// Desktop-Rahmen (ab 1024 px): Seitenleiste mit Cockpit, Baustellenwahl,
-// Baustellen- und Firmenfunktionen; rechts der Inhalt mit Seitentitel.
-// Die Handy-App nutzt diesen Rahmen nicht (siehe App.jsx, istDesktop).
+// Desktop-Rahmen (ab 1024 px): Seitenleiste nach Arbeitsbereichen, Kopf mit
+// Titel, Reitern und Aktionen, Suche über ⌘K. Die Handy-App nutzt ihn nicht.
 //
-// gruppen: [{ titel, eintraege: [{ id, label, Icon, zahl? }] }]
+// nav: [{ id, label, Icon, zahl? }] · reiter: [{ id, label }] · befehle: [{ id, label, gruppe, hinweis?, suchtext?, immer?, aktion(text) }]
 export function DesktopShell({
-  titel, untertitel, aktiv, onWaehlen, gruppen, projekte = [], aktivProjektId, onProjektWaehlen, onNeuesProjekt,
-  firmenName, nutzerName, rolleLabel, dark, onThemeWechsel, onAbmelden, verbunden, aktionen, children,
+  nav, aktivNav, onNav, titel, untertitel, kopfzeile, aktionen, reiter, aktiverReiter, onReiter, befehle = [],
+  firmenName, nutzerName, rolleLabel, onProfil, onAbwesenheit, dark, onThemeWechsel, onAbmelden, verbunden, children,
 }) {
-  const zeile = istAktiv => ({
+  const [suche, setSuche] = useState(false);
+
+  useEffect(() => {
+    const taste = e => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSuche(s => !s); }
+    };
+    window.addEventListener("keydown", taste);
+    return () => window.removeEventListener("keydown", taste);
+  }, []);
+
+  const zeile = aktiv => ({
     display: "flex", alignItems: "center", gap: 8, height: 36, flexShrink: 0, padding: "0 8px", borderRadius: 8, width: "100%",
     border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 14, textAlign: "left",
-    background: istAktiv ? "var(--surface2)" : "transparent",
-    color: istAktiv ? "var(--text)" : "var(--text2)", fontWeight: istAktiv ? 500 : 400,
-    boxShadow: istAktiv ? "inset 0 0 0 1px var(--border)" : "none",
+    background: aktiv ? "var(--surface2)" : "transparent", color: aktiv ? "var(--text)" : "var(--text2)", fontWeight: aktiv ? 500 : 400,
+    boxShadow: aktiv ? "inset 0 0 0 1px var(--border)" : "none",
   });
-  const leiste = { flexShrink: 0, background: "none", border: "none", color: "var(--text2)", cursor: "pointer", width: 32, height: 32,
+  const symbol = { flexShrink: 0, background: "none", border: "none", color: "var(--text2)", cursor: "pointer", width: 32, height: 32,
     display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8 };
 
   return (
     <div style={{ height: "100dvh", display: "flex", background: "var(--bg)", color: "var(--text)", fontSize: 14, lineHeight: "20px" }}>
-      <nav aria-label="Hauptnavigation" style={{ width: 248, flexShrink: 0, boxSizing: "border-box", padding: "20px 12px 16px", background: "var(--surface)",
-        borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", overflowY: "auto" }} className="desk-leiste">
-        <div style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 8px", marginBottom: 24 }}>
+      <nav aria-label="Hauptnavigation" className="desk-leiste" style={{ width: 248, flexShrink: 0, boxSizing: "border-box", padding: "20px 12px 16px",
+        background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", overflowY: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 8px", marginBottom: 16 }}>
           <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
             <rect width="24" height="24" rx="6" fill="var(--text)" />
             <path d="M12 4.5 L13.6 10.4 L19.5 12 L13.6 13.6 L12 19.5 L10.4 13.6 L4.5 12 L10.4 10.4 Z" fill="var(--bg)" />
@@ -33,71 +42,122 @@ export function DesktopShell({
             style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: 4, background: verbunden ? "var(--green)" : "var(--muted)" }} />
         </div>
 
-        <button className="desk-nav" onClick={() => onWaehlen("cockpit")} style={zeile(aktiv === "cockpit")}>
-          <LayoutDashboard size={18} strokeWidth={1.5} /> Cockpit
+        <button onClick={() => setSuche(true)} className="desk-nav"
+          style={{ ...zeile(false), border: "1px solid var(--border2)", marginBottom: 16, color: "var(--muted)" }}>
+          <Search size={16} strokeWidth={1.5} aria-hidden="true" />
+          <span style={{ flexGrow: 1, whiteSpace: "nowrap" }}>Suchen</span>
+          <span style={{ fontFamily: "var(--font-zahl)", fontSize: 12, lineHeight: "16px", padding: "0 4px", border: "1px solid var(--border2)", borderBottomWidth: 2, borderRadius: 4 }}>⌘K</span>
         </button>
 
-        <div style={{ marginTop: 24, padding: "0 8px 8px", fontSize: 13, color: "var(--muted)" }}>Baustelle</div>
-        <div style={{ display: "flex", gap: 4, padding: "0 4px 8px" }}>
-          <label style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>Baustelle wählen</span>
-            <select value={aktivProjektId ?? ""} onChange={e => onProjektWaehlen(e.target.value || null)}
-              style={{ width: "100%", height: 36, padding: "0 8px", borderRadius: 8, border: "1px solid var(--border2)", background: "var(--surface)",
-                color: "var(--text)", fontSize: 14, fontFamily: "inherit" }}>
-              <option value="">Baustelle wählen</option>
-              {projekte.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </label>
-          {onNeuesProjekt && (
-            <button onClick={onNeuesProjekt} aria-label="Neue Baustelle" title="Neue Baustelle"
-              style={{ ...leiste, width: 36, height: 36, border: "1px solid var(--border2)" }}>
-              <Plus size={16} strokeWidth={1.5} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {nav.map(e => (
+            <button key={e.id} className="desk-nav" onClick={() => onNav(e.id)} aria-current={aktivNav === e.id ? "page" : undefined} style={zeile(aktivNav === e.id)}>
+              {e.Icon && <e.Icon size={18} strokeWidth={1.5} aria-hidden="true" />}
+              <span style={{ flexGrow: 1 }}>{e.label}</span>
+              {e.zahl != null && <span style={{ fontFamily: "var(--font-zahl)", fontSize: 12, color: "var(--muted)" }}>{e.zahl}</span>}
             </button>
-          )}
+          ))}
         </div>
 
-        {gruppen.map(g => (
-          <div key={g.titel} style={{ marginTop: g.erste ? 0 : 24 }}>
-            {!g.erste && <div style={{ padding: "0 8px 8px", fontSize: 13, color: "var(--muted)" }}>{g.titel}</div>}
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {g.eintraege.map(e => (
-                <button key={e.id} className="desk-nav" onClick={() => onWaehlen(e.id)} disabled={e.gesperrt}
-                  title={e.gesperrt ? "Zuerst eine Baustelle wählen" : undefined}
-                  style={{ ...zeile(aktiv === e.id), opacity: e.gesperrt ? 0.45 : 1, cursor: e.gesperrt ? "default" : "pointer" }}>
-                  {e.Icon ? <e.Icon size={18} strokeWidth={1.5} /> : <span style={{ width: 18 }} />}
-                  <span style={{ flexGrow: 1 }}>{e.label}</span>
-                  {e.zahl != null && <span style={{ fontFamily: "var(--font-zahl)", fontSize: 12, color: "var(--muted)" }}>{e.zahl}</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-
         <div style={{ flexGrow: 1, minHeight: 24 }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 4, padding: 12, borderRadius: 8, background: "var(--bg)" }}>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text2)" }}>
+        <div style={{ borderRadius: 8, background: "var(--bg)", padding: 4 }}>
+          <div style={{ padding: "8px 8px 4px", fontSize: 13, color: "var(--text2)" }}>
             <div style={{ fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{firmenName || "Polaris"}</div>
             <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[nutzerName, rolleLabel].filter(Boolean).join(" · ")}</div>
           </div>
-          <button onClick={onThemeWechsel} aria-label={dark ? "Helles Design" : "Dunkles Design"} title={dark ? "Helles Design" : "Dunkles Design"} style={leiste}>
-            {dark ? <Sun size={16} strokeWidth={1.5} /> : <Moon size={16} strokeWidth={1.5} />}
-          </button>
-          <button onClick={onAbmelden} aria-label="Abmelden" title="Abmelden" style={leiste}><LogOut size={16} strokeWidth={1.5} /></button>
+          <div style={{ display: "flex", gap: 2 }}>
+            {onProfil && <button onClick={onProfil} aria-label="Mein Profil" title="Mein Profil" style={symbol}><User size={16} strokeWidth={1.5} /></button>}
+            {onAbwesenheit && <button onClick={onAbwesenheit} aria-label="Abwesenheit" title="Abwesenheit" style={symbol}><Palmtree size={16} strokeWidth={1.5} /></button>}
+            <div style={{ flexGrow: 1 }} />
+            <button onClick={onThemeWechsel} aria-label={dark ? "Helles Design" : "Dunkles Design"} title={dark ? "Helles Design" : "Dunkles Design"} style={symbol}>
+              {dark ? <Sun size={16} strokeWidth={1.5} /> : <Moon size={16} strokeWidth={1.5} />}
+            </button>
+            <button onClick={onAbmelden} aria-label="Abmelden" title="Abmelden" style={symbol}><LogOut size={16} strokeWidth={1.5} /></button>
+          </div>
         </div>
       </nav>
 
       <main style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
-        <div style={{ maxWidth: 1360, boxSizing: "border-box", padding: "32px 32px 48px" }}>
-          <header style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 24 }}>
-            <div style={{ minWidth: 0 }}>
-              <h1 style={{ margin: 0, fontSize: 28, lineHeight: "36px", fontWeight: 500, letterSpacing: "-0.01em" }}>{titel}</h1>
-              {untertitel && <div style={{ color: "var(--text2)", marginTop: 4 }}>{untertitel}</div>}
+        <div className="desk-inhalt" style={{ maxWidth: 1360, boxSizing: "border-box", padding: "32px 32px 48px" }}>
+          <header style={{ marginBottom: reiter?.length ? 16 : 24 }}>
+            {kopfzeile && <div style={{ fontSize: 13, color: "var(--text2)", marginBottom: 4 }}>{kopfzeile}</div>}
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: 16 }}>
+              <div style={{ minWidth: 0 }}>
+                <h1 style={{ margin: 0, fontSize: 28, lineHeight: "36px", fontWeight: 500, letterSpacing: "-0.01em" }}>{titel}</h1>
+                {untertitel && <div style={{ color: "var(--text2)", marginTop: 4 }}>{untertitel}</div>}
+              </div>
+              {aktionen && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{aktionen}</div>}
             </div>
-            {aktionen && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{aktionen}</div>}
+            {reiter?.length > 0 && (
+              <div role="tablist" style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 20, borderBottom: "1px solid var(--border)" }}>
+                {reiter.map(r => {
+                  const aktiv = aktiverReiter === r.id;
+                  return (
+                    <button key={r.id} role="tab" aria-selected={aktiv} onClick={() => onReiter(r.id)} className="desk-reiter"
+                      style={{ height: 40, padding: "0 12px", border: "none", background: "none", fontFamily: "inherit", fontSize: 14, cursor: "pointer", marginBottom: -1,
+                        color: aktiv ? "var(--text)" : "var(--text2)", fontWeight: aktiv ? 500 : 400,
+                        boxShadow: aktiv ? "inset 0 -2px 0 var(--text)" : "none", borderRadius: 0 }}>{r.label}</button>
+                  );
+                })}
+              </div>
+            )}
           </header>
           {children}
         </div>
       </main>
+
+      {suche && <Befehlspalette befehle={befehle} onSchliessen={() => setSuche(false)} />}
+    </div>
+  );
+}
+
+// ⌘K: Baustellen, Seiten und "KI fragen" mit der Tastatur erreichen.
+function Befehlspalette({ befehle, onSchliessen }) {
+  const [text, setText] = useState("");
+  const [index, setIndex] = useState(0);
+  const eingabe = useRef(null);
+  useEffect(() => { eingabe.current?.focus(); }, []);
+  const q = text.trim().toLowerCase();
+  const treffer = useMemo(() => befehle
+    .filter(b => b.immer || !q || b.label.toLowerCase().includes(q) || (b.suchtext || "").toLowerCase().includes(q))
+    .slice(0, 12), [befehle, q]);
+  useEffect(() => { setIndex(0); }, [q]);
+  const ausfuehren = b => { onSchliessen(); b.aktion(text.trim()); };
+  const taste = e => {
+    if (e.key === "Escape") onSchliessen();
+    else if (e.key === "ArrowDown") { e.preventDefault(); setIndex(i => Math.min(treffer.length - 1, i + 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setIndex(i => Math.max(0, i - 1)); }
+    else if (e.key === "Enter" && treffer[index]) ausfuehren(treffer[index]);
+  };
+  let letzteGruppe = null;
+  return (
+    <div onClick={onSchliessen} style={{ position: "fixed", inset: 0, background: "rgba(22,24,29,0.32)", zIndex: 200, display: "flex", justifyContent: "center", paddingTop: "12vh" }}>
+      <div role="dialog" aria-label="Suchen" onClick={e => e.stopPropagation()}
+        style={{ width: 560, maxWidth: "calc(100vw - 32px)", alignSelf: "flex-start", background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: 12, boxShadow: "0 12px 32px rgba(22,24,29,0.16)", overflow: "hidden", animation: "desk-auf 140ms ease-out" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 16px", height: 52, borderBottom: "1px solid var(--border)", color: "var(--muted)" }}>
+          <Search size={18} strokeWidth={1.5} aria-hidden="true" />
+          <input ref={eingabe} value={text} onChange={e => setText(e.target.value)} onKeyDown={taste} placeholder="Baustelle, Seite oder Frage" aria-label="Suchen"
+            style={{ flex: 1, border: "none", outline: "none", background: "transparent", font: "inherit", fontSize: 16, color: "var(--text)" }} />
+        </label>
+        <div role="listbox" style={{ maxHeight: 400, overflowY: "auto", padding: 8 }}>
+          {treffer.map((b, i) => {
+            const kopf = b.gruppe !== letzteGruppe ? (letzteGruppe = b.gruppe) : null;
+            return (
+              <div key={b.id}>
+                {kopf && <div style={{ padding: "8px 8px 4px", fontSize: 12, color: "var(--muted)" }}>{kopf}</div>}
+                <button role="option" aria-selected={i === index} onMouseEnter={() => setIndex(i)} onClick={() => ausfuehren(b)}
+                  style={{ display: "flex", width: "100%", alignItems: "center", gap: 8, height: 36, padding: "0 8px", border: "none", borderRadius: 8, cursor: "pointer",
+                    fontFamily: "inherit", fontSize: 14, textAlign: "left", background: i === index ? "var(--surface2)" : "transparent", color: "var(--text)" }}>
+                  <span style={{ flexGrow: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.anzeige ? b.anzeige(text.trim()) : b.label}</span>
+                  {b.hinweis && <span style={{ fontSize: 12, color: "var(--muted)" }}>{b.hinweis}</span>}
+                </button>
+              </div>
+            );
+          })}
+          {!treffer.length && <div style={{ padding: 16, color: "var(--text2)" }}>Nichts gefunden</div>}
+        </div>
+      </div>
     </div>
   );
 }

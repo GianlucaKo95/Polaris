@@ -73,33 +73,17 @@ function StundenDiagramm({ verlauf, sollErbracht, sollGesamt, label }) {
   );
 }
 
-export function CockpitView({ session, projekte = [], kalkulationspreise = [], onProjektOeffnen }) {
-  const [daten, setDaten] = useState({ angebote: [], rechnungen: [], baufortschritt: [] });
-  const [laedt, setLaedt] = useState(true);
-  const [fehler, setFehler] = useState("");
+export function Achsblase(props) { return <Achsblasen {...props} />; }
+
+export function CockpitView({ session, projekte = [], firmenDaten, kalkulationspreise = [], onProjektOeffnen }) {
+  const firma = firmenDaten;
+  const daten = { angebote: firma.angebote, rechnungen: firma.rechnungen, baufortschritt: firma.baufortschritt };
+  const laedt = firma.laedt, fehler = firma.fehler;
   const [diagrammId, setDiagrammId] = useState(null);
   const [buchungen, setBuchungen] = useState([]);
   const heute = heuteIso();
-  const ids = projekte.map(p => p.id);
 
-  useEffect(() => {
-    if (!session?.access_token || !ids.length) { setLaedt(false); return; }
-    let aktiv = true;
-    const c = sbClientMitToken(session);
-    Promise.all([
-      c.from("angebote").select("id,projekt_id,titel,status,positionen,rabatt,interne_freigabe,nachtrag_zu,created_at").in("projekt_id", ids),
-      c.from("rechnungen").select("*").in("projekt_id", ids),
-      c.from("baufortschritt").select("*").in("projekt_id", ids),
-    ]).then(([a, r, b]) => {
-      if (!aktiv) return;
-      if (a.error) setFehler("Angebote konnten nicht geladen werden.");
-      setDaten({ angebote: a.data || [], rechnungen: r.data || [], baufortschritt: b.data || [] });
-      setLaedt(false);
-    });
-    return () => { aktiv = false; };
-  }, [session?.access_token, ids.join(",")]);
-
-  const k = useMemo(() => kennzahlen({ projekte, ...daten, heute }), [projekte, daten, heute]);
+  const k = useMemo(() => kennzahlen({ projekte, ...daten, heute }), [projekte, firma.angebote, firma.rechnungen, firma.baufortschritt, heute]);
   const laufend = k.baustellen.filter(b => !b.projekt.archiviert).sort((a, b) => b.auftragNetto - a.auftragNetto);
   const gewaehlt = diagrammId ?? laufend.find(b => b.auftragNetto > 0)?.projekt.id ?? laufend[0]?.projekt.id ?? null;
 
@@ -119,7 +103,7 @@ export function CockpitView({ session, projekte = [], kalkulationspreise = [], o
     const voll = Object.fromEntries(auftraege.map(a => [a.id, (a.positionen || []).map(p => ({ position_id: p.id, prozent: 100 }))]));
     const gesamt = leistungsfaktor({ angebote: auftraege, fortschritt: voll, zeitbuchungen: [], kalkulationspreise }).sollStunden;
     return { verlauf: stundenVerlauf(buchungen), soll: lf.sollStunden, ist: lf.istStunden, faktor: lf.faktor, hinweis: lf.hinweis, gesamt };
-  }, [daten, gewaehlt, buchungen, kalkulationspreise]);
+  }, [firma.angebote, firma.baufortschritt, gewaehlt, buchungen, kalkulationspreise]);
   const projektName = projekte.find(p => String(p.id) === String(gewaehlt))?.name || "";
 
   const kpis = [

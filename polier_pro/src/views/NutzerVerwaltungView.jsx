@@ -171,7 +171,7 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
       {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between",
         alignItems:"center", marginBottom:12 }}>
-        <div style={{ color:"var(--text)", fontWeight:800, fontSize:16,
+        <div className="seiten-kopf" style={{ color:"var(--text)", fontWeight:800, fontSize:16,
           display:"flex", alignItems:"center", gap:8 }}>
           <Users size={17} /> Nutzerverwaltung
         </div>

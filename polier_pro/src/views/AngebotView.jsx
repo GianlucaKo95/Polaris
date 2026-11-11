@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { FileText, Plus, Link2, Upload, FilePlus2 } from "lucide-react";
 import { AngebotEditor } from "./AngebotEditor.jsx";
 import { nettoSumme } from "../lib/lv.js";
@@ -8,8 +8,14 @@ import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen } from "../lib/gaeb90
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen, positionenMitKalkulationVorbereiten } from "../lib/mutterlv.js";
 
-export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, stammpositionen = [], eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen, co2Faktoren = [], session }) {
+export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, stammpositionen = [], eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen, co2Faktoren = [], oeffneAngebotId = null, onGeoeffnet = null, session }) {
   const [aktAngebot,  setAktAngebot]  = useState(null);
+  // Aus der Angebotsliste (Desktop) direkt ein bestimmtes Angebot öffnen
+  useEffect(() => {
+    if (oeffneAngebotId == null) return;
+    const a = angebote.find(x => String(x.id) === String(oeffneAngebotId));
+    if (a) { setAktAngebot(a); onGeoeffnet?.(); }
+  }, [oeffneAngebotId, angebote]);
   const [fehler,      setFehler]      = useState("");
   const [info,        setInfo]        = useState(null); // { titel, treffer, gesamt, fehlend } — letztes aus Ausschreibung generiertes Angebot
   const [generiertLaedt, setGeneriertLaedt] = useState(false);

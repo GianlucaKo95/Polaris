@@ -233,3 +233,8 @@ input, textarea, select {
 :root[data-layout="desktop"] .angebot-werkzeuge { display: flex !important; flex-wrap: wrap; gap: 8px !important; margin-bottom: 16px !important; }
 :root[data-layout="desktop"] .angebot-werkzeuge > * { grid-column: auto !important; flex: 0 0 auto; width: auto !important; padding: 8px 12px !important; border-radius: 8px !important; font-size: 13px !important; }
 :root[data-layout="desktop"][data-theme="dark"] [style*="background: var(--green)"] { color: #0D1A10 !important; }
+@keyframes desk-auf { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.desk-reiter { transition: color 120ms ease-out; }
+.desk-reiter:hover { color: var(--text) !important; }
+/* Seitenköpfe der älteren Ansichten: im Desktop-Rahmen übernimmt der Rahmen Titel und Aktion */
+:root[data-layout="desktop"] .desk-inhalt .seiten-kopf { display: none !important; }

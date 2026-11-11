@@ -64,7 +64,7 @@ export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, pro
           sichtbar — vorher stand der Bearbeiten-Stift nur ganz klein/grau
           oben in der dünnen ProjektInfoStrip, hier ist er prominenter. */}
       {onEdit && (
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+        <div className="seiten-kopf" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
           <div style={{ color:"var(--text)", fontWeight:800, fontSize:15 }}>{projekt?.name}</div>
           <button onClick={onEdit}
             style={{ background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)",

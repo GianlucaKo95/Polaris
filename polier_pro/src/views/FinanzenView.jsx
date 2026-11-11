@@ -144,7 +144,7 @@ export function FinanzenView({ session, firmaId, projekte = [], eigeneFirma, dat
 
   return (
     <div>
-      <div style={{ color:"var(--text)", fontWeight:700, fontSize:15, marginBottom:8, display:"flex", alignItems:"center", gap:7 }}>
+      <div className="seiten-kopf" style={{ color:"var(--text)", fontWeight:700, fontSize:15, marginBottom:8, display:"flex", alignItems:"center", gap:7 }}>
         <Landmark size={16} /> Finanzen
       </div>
       {status === "fehlt" && (

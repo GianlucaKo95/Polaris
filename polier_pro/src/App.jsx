@@ -3,9 +3,12 @@ import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
   CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight, ChevronLeft,
   Building2, Calendar, Euro, CloudSun, ChartColumn, FileText, Settings,
   UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree, Archive,
-  ChartLine, Receipt, Landmark, Wallet } from "lucide-react";
+  ChartLine, Receipt, Landmark, Wallet, Database } from "lucide-react";
 import { useIstDesktop } from "./hooks/useIstDesktop.js";
 import { DesktopShell } from "./components/DesktopShell.jsx";
+import { useFirmenUebersicht } from "./hooks/useFirmenUebersicht.js";
+import { BaustellenListeView } from "./views/BaustellenListeView.jsx";
+import { AngeboteListeView } from "./views/AngeboteListeView.jsx";
 import { useTheme } from "./hooks/useTheme.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { useBackButton } from "./hooks/useBackButton.js";
@@ -144,8 +147,13 @@ export default function PolierApp() {
   const istDesktop = useIstDesktop();
   // Desktop ohne gewählte Baustelle: "cockpit" oder eine Firmen-Seite (Finanzen, Lohn …)
   const [desktopSeite, setDesktopSeite] = useState("cockpit");
+  // Desktop: aus der Angebotsliste ein bestimmtes Angebot öffnen; Startfrage aus der ⌘K-Suche
+  const [angebotOeffnen, setAngebotOeffnen] = useState(null);
+  const [kiStartFrage, setKiStartFrage] = useState("");
   const [projekte,      setProjekte]    = useState([]);
   const [projekteLaden, setProjekteLaden] = useState(false);
+  // Firmenweite Angebote/Rechnungen für Cockpit und Listen — nur auf dem Desktop geladen
+  const firmenDaten = useFirmenUebersicht(istDesktop ? auth.session : null, projekte);
   const [projekteLadeFehler, setProjekteLadeFehler] = useState("");
   const [speicherFehler, setSpeicherFehler] = useState("");
 
@@ -1183,10 +1191,10 @@ export default function PolierApp() {
         {tab === "finanzen"      && <FinanzenView session={auth.session} firmaId={firma?.id} projekte={projekte} eigeneFirma={eigeneFirma} datevEinstellungen={kalkulationsgrundlagen?.datev} />}
         {tab === "lohn"          && <LohnView session={auth.session} firmaId={firma?.id} projekte={projekte} einstellungen={lohnEinstellungen}
             setEinstellungen={setLohnEinstellungen} status={lohnEinstellungenStatus} darfEinstellen={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} />}
-        {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
+        {tab === "ki_frage"      && <KiFrageView key={kiStartFrage} startFrage={kiStartFrage} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
         {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
-        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} stammpositionen={stammpositionen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} rolle={aktiveRolle} angebotRegeln={angebotRegeln} kalkulationsgrundlagen={kalkulationsgrundlagen} onTerminplanErzeugen={aufgabenAusKalkulationAnlegen} co2Faktoren={co2Faktoren || []} session={auth.session} />}
+        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} stammpositionen={stammpositionen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} rolle={aktiveRolle} angebotRegeln={angebotRegeln} kalkulationsgrundlagen={kalkulationsgrundlagen} onTerminplanErzeugen={aufgabenAusKalkulationAnlegen} co2Faktoren={co2Faktoren || []} oeffneAngebotId={angebotOeffnen} onGeoeffnet={() => setAngebotOeffnen(null)} session={auth.session} />}
         {tab === "leistung"      && <LeistungView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} zeitbuchungen={zeitbuchungen} kalkulationspreise={kalkulationspreise} onBaufortschrittSpeichern={baufortschrittSpeichern} stammpositionen={stammpositionen} setStammpositionen={stammpositionenStatus === "ok" ? setStammpositionen : null} istAdmin={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} session={auth.session} />}
         {tab === "rechnungen"    && <RechnungenView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} rechnungen={rechnungen} rechnungBestaetigungen={rechnungBestaetigungen} eigeneFirma={eigeneFirma} onBaufortschrittSpeichern={baufortschrittSpeichern} onRechnungSpeichern={rechnungSpeichern} onRechnungLoeschen={rechnungLoeschen} profil={aktiveProfil} datevEinstellungen={kalkulationsgrundlagen?.datev} />}
         {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} standardZuschlaege={standardZuschlaege} setStandardZuschlaege={setStandardZuschlaege} stammpositionen={stammpositionen} setStammpositionen={setStammpositionen} stammpositionenStatus={stammpositionenStatus} angebotRegeln={angebotRegeln} setAngebotRegeln={setAngebotRegeln} angebotRegelnStatus={angebotRegelnStatus} kalkulationsgrundlagen={kalkulationsgrundlagen || LEERE_GRUNDLAGEN} setKalkulationsgrundlagen={grundlagenAendern} kalkulationsgrundlagenStatus={kalkulationsgrundlagenStatus} co2Faktoren={co2Faktoren || []} setCo2Faktoren={setCo2Faktoren} co2FaktorenStatus={co2FaktorenStatus} session={auth.session} />}
@@ -1201,66 +1209,119 @@ export default function PolierApp() {
   }
 
   // ── Desktop-Rahmen (ab 1024 px) ──
-  // Seitenleiste statt Aktenregister und unterer Leiste. Ohne gewählte Baustelle
-  // zeigt der Inhalt das Cockpit oder eine Firmen-Seite (desktopSeite).
+  // Navigation nach Arbeitsbereichen; eine Baustelle ist eine Detailseite mit
+  // Reitern. Firmen-Seiten (Finanzen, Lohn …) nutzen die Ansichten aus
+  // tabInhalt() über den passenden tab-Wert.
   if (istDesktop && !editProjekt && !neuProjekt) {
-    const FIRMEN_IDS = ["finanzen", "lohn", "stunden", "admin_params", "nutzer", "firmen", "abwesenheiten", "profil"];
-    const BAUSTELLE_IDS = projekt?.archiviert ? ["abschluss"]
-      : ["dashboard", "aufgaben", "gantt", "tagebuch", "kolonnen", "wetter", "stempeln", "ki_frage", "simulation", "abschluss"];
-    const KAUF_IDS = projekt?.archiviert ? [] : ["angebot", "leistung", "kosten", "rechnungen"];
-    const LABEL = { dashboard: "Übersicht", admin_params: "Parameter", leistung: "Leistung & Soll-Ist" };
     const erlaubt = id => TABS.some(t => t.id === id);
-    const eintrag = id => ({ id, label: LABEL[id] || ALLE_TABS.find(t => t.id === id)?.label || id, Icon: TAB_ICONS[id],
-      gesperrt: !aktivId && !FIRMEN_IDS.includes(id) });
-    const gruppen = [
-      { titel: "Baustelle", erste: true, eintraege: BAUSTELLE_IDS.filter(erlaubt).map(eintrag) },
-      { titel: "Kaufmännisch", eintraege: KAUF_IDS.filter(erlaubt).map(eintrag) },
-      { titel: "Firma", eintraege: [...FIRMEN_IDS.filter(erlaubt).map(eintrag), { id: "archiv", label: "Archiv", Icon: Archive }] },
-    ].filter(g => g.eintraege.length);
-    const seite = aktivId ? tab : desktopSeite;
-    const waehlen = id => {
-      if (id === "cockpit" || id === "archiv") { setAktivId(null); setDesktopSeite(id); return; }
-      setTab(id);
-      if (!aktivId) setDesktopSeite(id);
+    const istBuero = ["administrator", "geschaeftsfuehrer", "bauleiter"].includes(aktiveRolle);
+    const UNTERSEITEN = {
+      finanzen: ["finanzen"], lohn: ["lohn", "stunden"], stammdaten: ["admin_params"],
+      einstellungen: ["firmen", "nutzer"], profil: ["profil"], abwesenheiten: ["abwesenheiten"],
     };
-    const projektWaehlen = id => {
-      if (!id) { setAktivId(null); setDesktopSeite("cockpit"); return; }
+    const LABEL = { lohn: "Lohnvorerfassung", stunden: "Stunden-Export", firmen: "Unternehmen", nutzer: "Nutzer", dashboard: "Übersicht",
+      gantt: "Zeitplan", leistung: "Leistung & Soll-Ist", angebot: "Angebote & Nachträge", ki_frage: "KI fragen", simulation: "Simulation", wetter: "Wetter" };
+    const label = id => LABEL[id] || ALLE_TABS.find(t => t.id === id)?.label || id;
+    const aktiveProjekte = projekte.filter(p => !p.archiviert);
+    const freigaben = firmenDaten.angebote.filter(a => a.interne_freigabe?.status === "angefragt").length;
+    const nav = [
+      istBuero && { id: "cockpit", label: "Cockpit", Icon: LayoutGrid },
+      { id: "baustellen", label: "Baustellen", Icon: Building2, zahl: aktiveProjekte.length || null },
+      erlaubt("angebot") && { id: "angebote", label: "Angebote", Icon: FileText, zahl: freigaben || null },
+      erlaubt("finanzen") && { id: "finanzen", label: "Finanzen", Icon: Landmark },
+      (erlaubt("lohn") || erlaubt("stunden")) && { id: "lohn", label: "Lohn & Zeiten", Icon: Wallet },
+      erlaubt("admin_params") && { id: "stammdaten", label: "Stammdaten", Icon: Database },
+      (erlaubt("firmen") || erlaubt("nutzer")) && { id: "einstellungen", label: "Einstellungen", Icon: Settings },
+    ].filter(Boolean);
+    const startSeite = istBuero ? "cockpit" : "baustellen";
+    const seite = aktivId ? "baustelle" : (nav.some(n => n.id === desktopSeite) || UNTERSEITEN[desktopSeite] ? desktopSeite : startSeite);
+
+    const geheZu = id => {
+      setAktivId(null);
+      setDesktopSeite(id);
+      const unter = (UNTERSEITEN[id] || []).filter(erlaubt);
+      if (unter.length) setTab(unter[0]);
+      if (id === "angebote" || id === "cockpit" || id === "baustellen") firmenDaten.neuLaden();
+    };
+    const baustelleOeffnen = (id, tabId = "dashboard") => {
       const p = projekte.find(x => String(x.id) === String(id));
       if (!p) return;
       setAktivId(p.id);
-      if (!tab || FIRMEN_IDS.includes(tab)) setTab("dashboard");
+      setTab(tabId);
     };
-    const oeffnen = (id, tabId) => {
-      if (id == null) { setTab(tabId); setDesktopSeite(tabId); setAktivId(null); return; }
-      const p = projekte.find(x => String(x.id) === String(id));
-      if (p) { setAktivId(p.id); setTab(tabId || "dashboard"); }
-    };
-    const jetzt = new Date();
-    const kw = (() => { const d = new Date(Date.UTC(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate())); const t = d.getUTCDay() || 7;
-      d.setUTCDate(d.getUTCDate() + 4 - t); return Math.ceil(((d - new Date(Date.UTC(d.getUTCFullYear(), 0, 1))) / 86400000 + 1) / 7); })();
-    const seitenLabel = seite === "cockpit" ? "Cockpit" : seite === "archiv" ? "Archiv" : eintrag(seite).label;
-    const untertitel = seite === "cockpit"
-      ? `${jetzt.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · KW ${kw}`
-      : aktivId && !FIRMEN_IDS.includes(seite) && projekt ? [projekt.name, projekt.projektnummer].filter(Boolean).join(" · ") : null;
+    const projektReiter = (projekt?.archiviert ? ["abschluss"]
+      : ["dashboard", "aufgaben", "gantt", "tagebuch", "kolonnen", ...(istBuero ? [] : ["stempeln"]), "leistung", "kosten", "angebot", "rechnungen", "abschluss"])
+      .filter(erlaubt).map(id => ({ id, label: label(id) }));
+
+    const knopf = (text, onClick, haupt = false) => (
+      <button onClick={onClick} style={{ height: 40, padding: "0 16px", borderRadius: 8, fontFamily: "inherit", fontSize: 14, fontWeight: 500, cursor: "pointer",
+        border: haupt ? "none" : "1px solid var(--border2)", background: haupt ? "var(--text)" : "var(--surface)", color: haupt ? "var(--surface)" : "var(--text)" }}>{text}</button>
+    );
+    const kannNeu = rolleConfig?.kannBearbeiten !== false;
+
+    let titel, untertitel = null, kopfzeile = null, aktionen = null, reiter = null, aktiverReiter = null, onReiter = null, inhalt;
+    if (seite === "baustelle") {
+      titel = projekt?.name || "Baustelle";
+      untertitel = [projekt?.projektnummer, [projekt?.plz, projekt?.ort].filter(Boolean).join(" "), projekt?.auftraggeber].filter(Boolean).join(" · ") || null;
+      kopfzeile = <button onClick={() => geheZu("baustellen")} style={{ all: "unset", cursor: "pointer", color: "var(--text2)" }}>Baustellen</button>;
+      reiter = projektReiter; aktiverReiter = tab; onReiter = setTab;
+      aktionen = <>
+        {tab === "dashboard" && erlaubt("ki_frage") && knopf("KI fragen", () => { setKiStartFrage(""); setTab("ki_frage"); })}
+        {tab === "gantt" && erlaubt("simulation") && knopf("Simulation", () => setTab("simulation"))}
+        {["ki_frage", "simulation", "wetter"].includes(tab) && knopf("Zurück zur Übersicht", () => setTab("dashboard"))}
+        {tab === "dashboard" && kannNeu && knopf("Baustelle bearbeiten", () => setEditProjekt(true))}
+      </>;
+      inhalt = tabInhalt();
+    } else if (seite === "cockpit") {
+      titel = "Cockpit";
+      const jetzt = new Date();
+      untertitel = jetzt.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      aktionen = kannNeu ? knopf("Neue Baustelle", () => setNeuProjekt(true), true) : null;
+      inhalt = <CockpitView session={auth.session} projekte={aktiveProjekte} firmenDaten={firmenDaten} kalkulationspreise={kalkulationspreise}
+        onProjektOeffnen={(id, tabId) => id == null ? geheZu(tabId) : baustelleOeffnen(id, tabId)} />;
+    } else if (seite === "baustellen") {
+      titel = "Baustellen";
+      aktionen = kannNeu ? knopf("Neue Baustelle", () => setNeuProjekt(true), true) : null;
+      inhalt = <BaustellenListeView projekte={projekte} firmenDaten={firmenDaten} onOeffnen={id => baustelleOeffnen(id)}
+        archiv={<ArchivView firmaId={firma?.id} session={auth.session} onOeffnen={archivProjektOeffnen} />} />;
+    } else if (seite === "angebote") {
+      titel = "Angebote";
+      untertitel = "Angebote und Nachträge aller Baustellen";
+      inhalt = <AngeboteListeView projekte={projekte} firmenDaten={firmenDaten}
+        onOeffnen={(projektId, angebotId) => { setAngebotOeffnen(angebotId); baustelleOeffnen(projektId, "angebot"); }} />;
+    } else {
+      const TITEL = { finanzen: "Finanzen", lohn: "Lohn & Zeiten", stammdaten: "Stammdaten", einstellungen: "Einstellungen", profil: "Mein Profil", abwesenheiten: "Abwesenheit" };
+      titel = TITEL[seite];
+      const unter = (UNTERSEITEN[seite] || []).filter(erlaubt);
+      if (unter.length > 1) { reiter = unter.map(id => ({ id, label: label(id) })); aktiverReiter = tab; onReiter = setTab; }
+      if (seite === "stammdaten") untertitel = "Stammpositionen, Preise, Vorlagen und Regeln für die Kalkulation";
+      inhalt = unter.includes(tab) ? tabInhalt() : null;
+    }
+
+    const befehle = [
+      { id: "ki", label: "KI fragen", gruppe: "KI", immer: true,
+        anzeige: t => aktivId ? (t ? `KI fragen: „${t}“` : `KI zu ${projekt?.name || "dieser Baustelle"} fragen`) : "KI fragen (zuerst eine Baustelle öffnen)",
+        aktion: t => { if (!aktivId) { geheZu("baustellen"); return; } setKiStartFrage(t); setTab("ki_frage"); } },
+      ...(aktivId ? projektReiter.map(r => ({ id: `r-${r.id}`, label: r.label, gruppe: projekt?.name || "Baustelle", aktion: () => setTab(r.id) })) : []),
+      ...nav.map(n => ({ id: `n-${n.id}`, label: n.label, gruppe: "Seiten", aktion: () => geheZu(n.id) })),
+      ...aktiveProjekte.map(p => ({ id: `p-${p.id}`, label: p.name, suchtext: [p.projektnummer, p.ort, p.auftraggeber].join(" "), gruppe: "Baustellen",
+        hinweis: p.projektnummer || p.ort || "", aktion: () => baustelleOeffnen(p.id) })),
+    ];
+
     return (
-      <>
-        <DesktopShell
-          titel={seitenLabel} untertitel={untertitel} aktiv={seite} onWaehlen={waehlen} gruppen={gruppen}
-          projekte={projekte.filter(p => !p.archiviert)} aktivProjektId={aktivId} onProjektWaehlen={projektWaehlen}
-          onNeuesProjekt={rolleConfig?.kannBearbeiten !== false ? () => setNeuProjekt(true) : null}
-          firmenName={eigeneFirma?.name || firma?.name} rolleLabel={ROLLEN[aktiveRolle]?.label}
-          nutzerName={[aktiveProfil?.vorname, aktiveProfil?.nachname].filter(Boolean).join(" ")}
-          dark={theme.dark} onThemeWechsel={theme.toggle} onAbmelden={abmelden} verbunden={sbConnected}
-          aktionen={null}>
-          <PlanGuard firma={firma} ressource="app" rolle={aktiveRolle} session={auth.session}>
-            <React.Suspense fallback={<TabLadeFallback />}>
-              {!aktivId && seite === "cockpit" && <CockpitView session={auth.session} projekte={projekte} kalkulationspreise={kalkulationspreise} onProjektOeffnen={oeffnen} />}
-              {!aktivId && seite === "archiv" && <ArchivView firmaId={firma?.id} session={auth.session} onOeffnen={archivProjektOeffnen} />}
-              {(aktivId || FIRMEN_IDS.includes(seite)) && tabInhalt()}
-            </React.Suspense>
-          </PlanGuard>
-        </DesktopShell>
-      </>
+      <DesktopShell
+        nav={nav} aktivNav={seite === "baustelle" ? "baustellen" : seite} onNav={geheZu}
+        titel={titel} untertitel={untertitel} kopfzeile={kopfzeile} aktionen={aktionen}
+        reiter={reiter} aktiverReiter={aktiverReiter} onReiter={onReiter} befehle={befehle}
+        firmenName={eigeneFirma?.name || firma?.name} rolleLabel={ROLLEN[aktiveRolle]?.label}
+        nutzerName={[aktiveProfil?.vorname, aktiveProfil?.nachname].filter(Boolean).join(" ")}
+        onProfil={erlaubt("profil") ? () => geheZu("profil") : null}
+        onAbwesenheit={erlaubt("abwesenheiten") ? () => geheZu("abwesenheiten") : null}
+        dark={theme.dark} onThemeWechsel={theme.toggle} onAbmelden={abmelden} verbunden={sbConnected}>
+        <PlanGuard firma={firma} ressource="app" rolle={aktiveRolle} session={auth.session}>
+          <React.Suspense fallback={<TabLadeFallback />}>{inhalt}</React.Suspense>
+        </PlanGuard>
+      </DesktopShell>
     );
   }
 

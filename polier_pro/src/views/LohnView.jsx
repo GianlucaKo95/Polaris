@@ -73,7 +73,7 @@ export function LohnView({ session, firmaId, projekte = [], einstellungen: gespe
 
   return (
     <div style={{ padding:"0 2px" }}>
-      <div style={{ color:"var(--text)", fontWeight:700, fontSize:15, marginBottom:4, display:"flex", alignItems:"center", gap:7 }}>
+      <div className="seiten-kopf" style={{ color:"var(--text)", fontWeight:700, fontSize:15, marginBottom:4, display:"flex", alignItems:"center", gap:7 }}>
         <Wallet size={16} /> Lohnvorerfassung
       </div>
       <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10, lineHeight:1.45 }}>
