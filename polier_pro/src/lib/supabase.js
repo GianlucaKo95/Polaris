@@ -894,6 +894,8 @@ export async function sbAngebotSpeichern(a, projektId, session, istNeu) {
   const optional = {};
   if (a.nachtrag_zu !== undefined) optional.nachtrag_zu = a.nachtrag_zu;
   if (a.interne_freigabe !== undefined) optional.interne_freigabe = a.interne_freigabe;
+  if (a.endsumme !== undefined) optional.endsumme = a.endsumme;
+  if (a.nachtrag_info !== undefined) optional.nachtrag_info = a.nachtrag_info;
   try {
     const client = sbClientMitToken(session);
     const schreiben = p => istNeu

@@ -377,8 +377,8 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
                     {sp.gewerk ? `${sp.gewerk} · ` : ""}{sp.bez}
                   </div>
                   <div style={{ color:"var(--muted)", fontSize:12, marginTop:2 }}>
-                    {stammpositionEp(sp, kalkulationspreise, standardZuschlaege).toLocaleString("de-DE", { minimumFractionDigits:2, maximumFractionDigits:2 })} €/{sp.einheit}
-                    {" · "}{stammpositionZeitansatz(sp, kalkulationspreise).toLocaleString("de-DE", { maximumFractionDigits:3 })} h/{sp.einheit}
+                    {stammpositionEp(sp, kalkulationspreise, standardZuschlaege, { stammpositionen }).toLocaleString("de-DE", { minimumFractionDigits:2, maximumFractionDigits:2 })} €/{sp.einheit}
+                    {" · "}{stammpositionZeitansatz(sp, kalkulationspreise, { stammpositionen }).toLocaleString("de-DE", { maximumFractionDigits:3 })} h/{sp.einheit}
                     {" · "}{(sp.rezeptur || []).length} Rezepturzeilen
                   </div>
                 </div>
@@ -616,6 +616,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
               initial={stammFormular.id ? stammFormular : null}
               kalkulationspreise={kalkulationspreise}
               standardZuschlaege={standardZuschlaege}
+              stammpositionen={stammpositionen}
               onSave={stammpositionSpeichern}
               onClose={() => setStammFormular(null)}
             />

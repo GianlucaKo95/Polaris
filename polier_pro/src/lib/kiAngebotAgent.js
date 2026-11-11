@@ -86,6 +86,7 @@ export const WERKZEUGE = [
               einheit: { type: "string" },
               ref: { type: ["string", "null"], description: "Referenz aus katalog_suchen, z.B. 'SP:12', oder null" },
               mengen_herleitung: { type: "string", description: "Wie die Menge zustande kommt, z.B. '40 m × 2,50 m = 100 m²'" },
+              variablen: { type: "object", description: "Nur bei Stammpositionen mit Variablen: Werte aus der Anfrage, z.B. {\"d\": 0.25} für 25 cm Dicke", additionalProperties: { type: "number" } },
             },
             required: ["bez", "menge", "einheit", "ref", "mengen_herleitung"],
           },
@@ -132,7 +133,8 @@ export function werkzeugAusfuehren(name, input, katalog) {
     const treffer = katalogSuchen(katalog, input?.suchbegriff || "", { einheit: input?.einheit || null, max: 6 });
     if (treffer.length === 0) return { treffer: [], hinweis: "Keine passenden Einträge. Andere Stichworte versuchen oder ref=null verwenden." };
     return {
-      treffer: treffer.map(t => ({ ref: t.ref, quelle: t.quelle, bez: t.bez, einheit: t.einheit, ep: t.ep, passung: t.score })),
+      treffer: treffer.map(t => ({ ref: t.ref, quelle: t.quelle, bez: t.bez, einheit: t.einheit, ep: t.ep, passung: t.score,
+        ...(t.variablen ? { variablen: t.variablen, hinweis: "Preis gilt für die Standardwerte; abweichende Werte (z.B. Dicke) in variablen der Position angeben." } : {}) })),
     };
   }
   return { fehler: `Unbekanntes Werkzeug: ${name}` };
@@ -287,7 +289,7 @@ export function vorschlagZuPositionen(vorschlag, { katalog, stammpositionen = []
     if (eintrag.quelle === "stammposition") {
       const sp = stammpositionen.find(s => `SP:${s.id}` === eintrag.ref);
       if (sp) {
-        return { ...positionAusStammposition(sp, menge, kalkulationspreise, standardZuschlaege),
+        return { ...positionAusStammposition(sp, menge, kalkulationspreise, standardZuschlaege, { stammpositionen, variablen: p.variablen }),
           bez: p.bez || sp.bez, preisquelle, ki };
       }
     }

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   stammpositionKalk, stammpositionEp, stammpositionZeitansatz,
-  positionAusStammposition, positionMengeAendern,
+  positionAusStammposition, positionMengeAendern, positionVariableAendern,
 } from "./stammpositionen.js";
 import { kalkulationGesamtkosten, kalkulationEp } from "./kalkulation.js";
 import { katalogBauen, katalogSuchen, aehnlichkeit, einheitNormalisieren } from "./katalog.js";
@@ -95,4 +95,27 @@ test("Katalog verbindet alle Quellen und sortiert Stammpositionen bei Gleichstan
   assert.equal(treffer[0].ref, "SP:10");
   assert.equal(treffer[0].ep, 40.13);
   assert.deepEqual(treffer.map(t => t.quelle).sort(), ["einheitspreis", "mutter_lv", "stammposition"]);
+});
+
+test("Formel mit Variable: Bodenplatte je m², Beton = d × 1,02", () => {
+  const kp = [{ id: 1, kategorie: "lohn", einheit: "h", preis: 50 }, { id: 2, kategorie: "material", einheit: "m³", preis: 150 }];
+  const platte = { id: 1, bez: "Bodenplatte", einheit: "m²", variablen: [{ name: "d", bez: "Dicke m", standard: 0.25 }],
+    rezeptur: [{ stammId: 1, formel: "0,4*d" }, { stammId: 2, formel: "d*1,02" }] };
+  assert.equal(stammpositionEp(platte, kp, null), 43.25); // 0,1 h × 50 + 0,255 m³ × 150
+  const pos = positionAusStammposition(platte, 100, kp, null, { variablen: { d: 0.3 } });
+  assert.deepEqual(pos.variablen, { d: 0.3 });
+  assert.equal(Math.round(pos.ep * 100) / 100, 51.9); // 0,12×50 + 0,306×150
+  const neu = positionVariableAendern(pos, "d", 0.2, [platte], kp);
+  assert.equal(Math.round(neu.ep * 100) / 100, 34.6);
+});
+
+test("Baustein: Stammposition in Stammposition, mit Zyklusschutz", () => {
+  const kp = [{ id: 1, kategorie: "lohn", einheit: "h", preis: 50 }, { id: 2, kategorie: "material", einheit: "m²", preis: 10 }];
+  const putz = { id: 2, bez: "Putz", einheit: "m²", rezeptur: [{ stammId: 1, mengeJeEinheit: 0.2 }, { stammId: 2, mengeJeEinheit: 1 }] };
+  const wand = { id: 3, bez: "Wand komplett", einheit: "m²", rezeptur: [{ stammId: 1, mengeJeEinheit: 1 }, { unterpositionId: 2, mengeJeEinheit: 2 }] };
+  const alle = [putz, wand];
+  assert.equal(stammpositionEp(wand, kp, null, { stammpositionen: alle }), 90); // 50 + 2 × (10 + 10)
+  assert.equal(stammpositionZeitansatz(wand, kp, { stammpositionen: alle }), 1.4);
+  const zyklus = { ...putz, rezeptur: [{ unterpositionId: 3, mengeJeEinheit: 1 }] };
+  assert.doesNotThrow(() => stammpositionEp(wand, kp, null, { stammpositionen: [zyklus, wand] }));
 });

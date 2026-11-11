@@ -94,7 +94,7 @@ const pct = n => (n || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, ma
 
 // HTML für druckePDF() (lib/pdf.jsx): 221 und 223 untereinander in einer
 // .page (A4-Breite), druckePDF teilt auf Seiten auf.
-export function efbHtml(auswertung, { angebot, eigeneFirma, projekt, aufteilung = null, mittellohn: mlGrundlage = null } = {}) {
+export function efbHtml(auswertung, { angebot, eigeneFirma, projekt, aufteilung = null, mittellohn: mlGrundlage = null, endsumme = null } = {}) {
   const auf = aufteilungGueltig(aufteilung) ? aufteilung : null;
   const ml = mlGrundlage?.koepfe > 0 ? mlGrundlage : null;
   const teil = (z, k) => (z * (Number(auf[k]) || 0)) / 100;
@@ -120,7 +120,7 @@ th { background:#eee; font-size:8pt; text-align:left; }
 .warn { font-size:8pt; color:#a33; margin-top:6px; }
 .trenner { height:16mm; }
 </style></head><body><div class="page">
-${kopf("221", "Preisermittlung bei Zuschlagskalkulation")}
+${endsumme ? kopf("222", "Preisermittlung bei Kalkulation über die Endsumme") : kopf("221", "Preisermittlung bei Zuschlagskalkulation")}
 <h3>1. Angaben über den Verrechnungslohn</h3>
 <table>
 ${ml ? `${zeile221("1.1 Mittellohn ML (inkl. Zulagen)", `${eur(ml.mittellohn)} €/h`)}
@@ -132,7 +132,22 @@ ${zeile221("1.2 Lohnstunden gesamt", `${summe.stunden.toLocaleString("de-DE", { 
 ${zeile221("1.3 Zuschlag auf Lohn (BGK, AGK, Wagnis und Gewinn)", `${pct(zuschlagProzent.lohn)} %`)}
 ${zeile221("1.4 Verrechnungslohn VL", `${eur(verrechnungslohn)} €/h`, true)}
 </table>
-<h3>2. Zuschläge auf die Einzelkosten der Teilleistungen</h3>
+${endsumme ? `<h3>2. Ermittlung der Angebotssumme</h3>
+<table>
+${zeile221("Lohnkosten (Einzelkosten)", `${eur(endsumme.ekt.lohn)} €`)}
+${zeile221("Stoffkosten", `${eur(endsumme.ekt.material)} €`)}
+${zeile221("Gerätekosten", `${eur(endsumme.ekt.geraet)} €`)}
+${zeile221("Nachunternehmerleistungen", `${eur(endsumme.ekt.fremdleistung)} €`)}
+${zeile221("Summe Einzelkosten der Teilleistungen", `${eur(endsumme.ektSumme)} €`, true)}
+${zeile221("Baustellengemeinkosten", `${eur(endsumme.bgk)} €`)}
+${zeile221("Herstellkosten", `${eur(endsumme.hk)} €`, true)}
+${zeile221("Allgemeine Geschäftskosten", `${eur(endsumme.agk)} €`)}
+${zeile221("Wagnis und Gewinn", `${eur(endsumme.wg)} €`)}
+${endsumme.festpreise ? zeile221("Positionen ohne Aufgliederung (Festpreise)", `${eur(endsumme.festpreise)} €`) : ""}
+${zeile221("3. Angebotssumme ohne Umsatzsteuer", `${eur(endsumme.gesamt)} €`, true)}
+${zeile221(`Umlage auf ${endsumme.umlageAuf === "alle" ? "alle Einzelkosten" : "Lohn"}`, `${pct(endsumme.umlageSatz)} %`)}
+</table>
+<div style="display:none">` : ""}<h3>2. Zuschläge auf die Einzelkosten der Teilleistungen</h3>
 <table><tr><th>Kostenart</th><th class="r">Einzelkosten €</th>${auf ? '<th class="r">BGK %</th><th class="r">AGK %</th><th class="r">W&amp;G %</th>' : ""}<th class="r">Zuschlag %</th><th class="r">Zuschlag €</th><th class="r">Gesamt €</th></tr>
 ${[["Lohn", "lohn"], ["Stoffkosten", "material"], ["Gerätekosten", "geraet"], ["Nachunternehmerleistungen", "fremdleistung"]].map(([l, k]) =>
   `<tr><td>${l}</td><td class="r">${eur(summe.ek[k])}</td>${auf ? `<td class="r">${pct(teil(zuschlagProzent[k], "bgk"))}</td><td class="r">${pct(teil(zuschlagProzent[k], "agk"))}</td><td class="r">${pct(teil(zuschlagProzent[k], "wg"))}</td>` : ""}<td class="r">${pct(zuschlagProzent[k])}</td><td class="r">${eur(summe.gesamt[k] - summe.ek[k])}</td><td class="r">${eur(summe.gesamt[k])}</td></tr>`).join("")}
@@ -140,7 +155,7 @@ ${summe.gesamt.sonstiges ? `<tr><td>Sonstiges (nicht aufgegliedert)</td><td clas
 <tr class="fett"><td>3. Angebotssumme ohne Umsatzsteuer</td><td></td>${auf ? "<td></td><td></td><td></td>" : ""}<td></td><td></td><td class="r">${eur(angebotssumme)}</td></tr>
 </table>
 <div class="hinweis">${auf ? `Zuschläge aufgeteilt nach Baustellengemeinkosten (${pct(auf.bgk)} %), Allgemeinen Geschäftskosten (${pct(auf.agk)} %) sowie Wagnis und Gewinn (${pct(auf.wg)} %) des jeweiligen Gesamtzuschlags.` : "Die Zuschläge sind je Kostenart als Gesamtzuschlag für Baustellengemeinkosten, Allgemeine Geschäftskosten sowie Wagnis und Gewinn kalkuliert."} Positionsrabatte sind in den Beträgen berücksichtigt${angebot?.rabatt ? `, ein Gesamtnachlass von ${pct(angebot.rabatt)} % auf die Angebotssumme nicht` : ""}.</div>
-<div class="trenner"></div>
+${endsumme ? "</div>" : ""}<div class="trenner"></div>
 ${kopf("223", "Aufgliederung der Einheitspreise")}
 <table><tr><th>OZ</th><th>Kurztext</th><th class="r">Menge</th><th>ME</th><th class="r">Zeitansatz h/ME</th><th class="r">Lohn €</th><th class="r">Stoffe €</th><th class="r">Geräte €</th><th class="r">Sonstiges / NU €</th><th class="r">EP €</th></tr>
 ${zeilen.map(z => `<tr><td>${esc(z.oz)}</td><td>${esc(z.bez)}</td><td class="r">${z.menge.toLocaleString("de-DE")}</td><td>${esc(z.einheit || "")}</td>`

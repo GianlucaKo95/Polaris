@@ -62,3 +62,7 @@ alter table firmen add column if not exists angebot_regeln jsonb;
 -- ── Kalkulationsgrundlagen (Polaris 1.52) ─────────────────────────────────
 -- { mittellohn: {...}, geraete: [...] } — siehe src/lib/kalkulationsgrundlagen.js
 alter table firmen add column if not exists kalkulationsgrundlagen jsonb;
+
+-- ── Endsummenkalkulation und Nachtragsmanagement (Polaris 1.53) ───────────
+alter table angebote add column if not exists endsumme jsonb;
+alter table angebote add column if not exists nachtrag_info jsonb;

@@ -58,7 +58,9 @@ export function zeitansaetzeAnpassen(stammpositionen, ids, faktor, kalkulationsp
     if (!ziel.has(sp.id)) return sp;
     const rezeptur = (sp.rezeptur || []).map(z => {
       const stamm = (kalkulationspreise || []).find(k => k.id === z.stammId);
-      if (stamm?.kategorie !== "lohn" || stamm.einheit !== "h") return z;
+      if (z.unterpositionId != null || stamm?.kategorie !== "lohn" || stamm.einheit !== "h") return z;
+      const f = Math.round(faktor * 1000) / 1000;
+      if (z.formel && String(z.formel).trim()) return { ...z, formel: `(${z.formel})*${String(f).replace(".", ",")}` };
       return { ...z, mengeJeEinheit: Math.round((z.mengeJeEinheit || 0) * faktor * 10000) / 10000 };
     });
     const historie = [...(sp.nachkalkulation || []), { datum, projekt, faktor: Math.round(faktor * 1000) / 1000 }];

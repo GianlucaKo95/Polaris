@@ -98,7 +98,8 @@ export function katalogBauen({ stammpositionen = [], einheitspreise = [], lvVorl
     eintraege.push({
       ref: `SP:${sp.id}`, quelle: "stammposition", bez: sp.bez, langtext: sp.langtext || "",
       gewerk: sp.gewerk || "", einheit: sp.einheit || "",
-      ep: stammpositionEp(sp, kalkulationspreise, standardZuschlaege),
+      ep: stammpositionEp(sp, kalkulationspreise, standardZuschlaege, { stammpositionen }),
+      ...(sp.variablen?.length ? { variablen: sp.variablen.map(v => ({ name: v.name, bez: v.bez, standard: v.standard })) } : {}),
     });
   }
   for (const e of einheitspreise) {

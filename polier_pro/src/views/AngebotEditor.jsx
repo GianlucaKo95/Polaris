@@ -9,11 +9,12 @@ import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { KiAngebotAssistent } from "../components/KiAngebotAssistent.jsx";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
-import { positionMengeAendern } from "../lib/stammpositionen.js";
+import { positionMengeAendern, positionVariableAendern } from "../lib/stammpositionen.js";
 import { katalogBauen, QUELLEN_LABEL } from "../lib/katalog.js";
 import { angebotPruefen, vergleichswerteAusAngeboten, AMPEL_FARBE } from "../lib/plausibilitaet.js";
 import { freigabePflicht } from "../lib/angebotRegeln.js";
 import { mittellohnBerechnen } from "../lib/kalkulationsgrundlagen.js";
+import { endsummeBerechnen, endsummeAnwenden, LEERE_ENDSUMME } from "../lib/endsumme.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
@@ -345,7 +346,8 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   async function efbExportieren() {
     const auswertung = efbAuswerten(a.positionen, kalkulationspreise);
     setEfbInfo({ warnungen: auswertung.warnungen });
-    await druckePDF(efbHtml(auswertung, { angebot: a, eigeneFirma, projekt, aufteilung: standardZuschlaege?.aufteilung, mittellohn: mittellohnBerechnen(kalkulationsgrundlagen?.mittellohn) }),
+    await druckePDF(efbHtml(auswertung, { angebot: a, eigeneFirma, projekt, aufteilung: standardZuschlaege?.aufteilung, mittellohn: mittellohnBerechnen(kalkulationsgrundlagen?.mittellohn),
+      endsumme: a.endsumme ? endsummeBerechnen(a.positionen, a.endsumme, kalkulationspreise) : null }),
       "EFB_" + a.titel.replace(/ /g, "_") + ".pdf");
   }
 
@@ -1125,6 +1127,20 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                     </button>
                   )}
                 </div>
+                {pos.stammpositionId && (stammpositionen.find(s => s.id === pos.stammpositionId)?.variablen || []).length > 0 && (
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:6 }}>
+                    {stammpositionen.find(s => s.id === pos.stammpositionId).variablen.map(v => (
+                      <div key={v.name} style={{ minWidth:110 }}>
+                        <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>{v.bez || v.name}</div>
+                        <input type="number" step="0.01" disabled={gesperrt}
+                          value={pos.variablen?.[v.name] ?? v.standard ?? ""}
+                          onChange={e => setA(x => ({ ...x, positionen: x.positionen.map(p => p.id === pos.id
+                            ? positionVariableAendern(p, v.name, e.target.value, stammpositionen, kalkulationspreise) : p) }))}
+                          style={{ ...inputStyle(), padding:"7px 9px", fontSize:12 }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {pos.kalk && (
                   <PositionKalkulation kalk={pos.kalk} stammdaten={kalkulationspreise}
                     menge={pos.menge} gesperrt={gesperrt}
@@ -1219,6 +1235,66 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 </div>
               )}
             </div>
+
+            {/* Kalkulationsverfahren: Zuschlagskalkulation (Standard, Sätze
+                je Position) oder Endsumme (lib/endsumme.js, EFB 222). */}
+            {!gesperrt && (() => {
+              const es = a.endsumme;
+              const erg = es ? endsummeBerechnen(a.positionen, es, kalkulationspreise) : null;
+              const setEs = aend => setA(x => ({ ...x, endsumme: { ...(x.endsumme || LEERE_ENDSUMME), ...aend } }));
+              const eur = n => (n || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              return (
+                <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:12, padding:"10px 12px", marginBottom:12 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <div style={{ color:"var(--muted)", fontSize:11, fontWeight:700, textTransform:"uppercase" }}>Kalkulation über die Endsumme</div>
+                    <label style={{ fontSize:12, display:"flex", alignItems:"center", gap:5, cursor:"pointer" }}>
+                      <input type="checkbox" checked={!!es} onChange={e => setA(x => ({ ...x, endsumme: e.target.checked ? { ...LEERE_ENDSUMME } : null }))} /> aktiv
+                    </label>
+                  </div>
+                  {es && <>
+                    <div style={{ color:"var(--muted)", fontSize:11.5, margin:"6px 0 8px", lineHeight:1.4 }}>
+                      Baustellengemeinkosten dieses Projekts kalkulieren, AGK und Wagnis &amp; Gewinn festlegen — die Umlage wird auf die kalkulierten Positionen verteilt.
+                    </div>
+                    {(es.bgk || []).map((b, i) => (
+                      <div key={i} style={{ display:"grid", gridTemplateColumns:"1fr 100px 24px", gap:5, marginBottom:5 }}>
+                        <input value={b.bez} placeholder="z.B. Bauleitung, Container, Kran" onChange={e => setEs({ bgk: es.bgk.map((x, j) => j === i ? { ...x, bez: e.target.value } : x) })}
+                          style={{ ...inputStyle(), padding:"7px 9px", fontSize:12 }} />
+                        <input type="number" value={b.betrag || ""} placeholder="€" onChange={e => setEs({ bgk: es.bgk.map((x, j) => j === i ? { ...x, betrag: Number(e.target.value) } : x) })}
+                          style={{ ...inputStyle(), padding:"7px 9px", fontSize:12 }} />
+                        <button onClick={() => setEs({ bgk: es.bgk.filter((_, j) => j !== i) })}
+                          style={{ background:"var(--rbg)", color:"var(--red)", border:"none", borderRadius:6, cursor:"pointer" }}><X size={12} /></button>
+                      </div>
+                    ))}
+                    <button onClick={() => setEs({ bgk: [...(es.bgk || []), { bez: "", betrag: 0 }] })}
+                      style={{ background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text)", borderRadius:6, padding:"4px 10px",
+                        cursor:"pointer", fontSize:11.5, fontFamily:"inherit", display:"flex", alignItems:"center", gap:3, marginBottom:8 }}>
+                      <Plus size={11} /> BGK-Posten
+                    </button>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                      <div><div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>AGK %</div>
+                        <input type="number" value={es.agkProzent || ""} onChange={e => setEs({ agkProzent: Number(e.target.value) })} style={{ ...inputStyle(), padding:"7px 9px", fontSize:12 }} /></div>
+                      <div><div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>W&amp;G %</div>
+                        <input type="number" value={es.wgProzent || ""} onChange={e => setEs({ wgProzent: Number(e.target.value) })} style={{ ...inputStyle(), padding:"7px 9px", fontSize:12 }} /></div>
+                      <div><div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Umlage auf</div>
+                        <select value={es.umlageAuf} onChange={e => setEs({ umlageAuf: e.target.value })} style={{ ...inputStyle(), padding:"7px 9px", fontSize:12 }}>
+                          <option value="lohn">Lohn</option><option value="alle">alle Kosten</option>
+                        </select></div>
+                    </div>
+                    {erg && (
+                      <div style={{ fontSize:12, marginTop:8, lineHeight:1.6, color:"var(--text)" }}>
+                        EKT {eur(erg.ektSumme)} € + BGK {eur(erg.bgk)} € = HK {eur(erg.hk)} € · AGK {eur(erg.agk)} € · W&amp;G {eur(erg.wg)} €
+                        <div><b>Angebotssumme {eur(erg.gesamt)} €</b>{erg.umlageSatz != null && <> · Umlage {erg.umlageSatz.toLocaleString("de-DE", { maximumFractionDigits: 2 })} % auf {es.umlageAuf === "alle" ? "alle Kosten" : "Lohn"}</>}</div>
+                        {erg.fehler && <div style={{ color:"var(--red)" }}>{erg.fehler}</div>}
+                      </div>
+                    )}
+                    <button onClick={() => setA(x => ({ ...x, positionen: endsummeAnwenden(x.positionen, x.endsumme, kalkulationspreise) }))}
+                      disabled={!erg || erg.umlageSatz == null}
+                      style={{ width:"100%", marginTop:8, background:"var(--yellow)", color:"#1a1200", border:"none", borderRadius:10, padding:10,
+                        fontWeight:800, cursor:"pointer", fontFamily:"inherit" }}>Umlage auf die Positionen anwenden</button>
+                  </>}
+                </div>
+              );
+            })()}
 
             <AngebotNachweis angebot={a} nachweis={nachweis} />
 
