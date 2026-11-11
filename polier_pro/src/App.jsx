@@ -1315,7 +1315,10 @@ export default function PolierApp() {
     { id:"stunden",       icon:"📊",  label:"Stunden",     rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
     { id:"ki_frage",      icon:"💬",  label:"KI fragen",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     { id:"simulation",    icon:"🧪",  label:"Simulation",  rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
-    { id:"angebot",       icon:"📄",  label:"Angebot",     rollen:["administrator","geschaeftsfuehrer"] },
+    // Polier: erstellt Angebote (v.a. per KI-Assistent) und reicht sie zur
+    // internen Freigabe beim GF ein — versenden darf er erst danach (siehe
+    // interne_freigabe in AngebotEditor.jsx).
+    { id:"angebot",       icon:"📄",  label:"Angebot",     rollen:["administrator","geschaeftsfuehrer","polier"] },
     { id:"rechnungen",    icon:"🧾",  label:"Rechnungen",  rollen:["administrator","geschaeftsfuehrer"] },
     // Ein Vorarbeiter führt eine Kolonne, keine ganze Baustelle (siehe
     // Kommentar bei der vorarbeiter-Rolle weiter unten) — deshalb weder
@@ -1477,7 +1480,7 @@ export default function PolierApp() {
             Tab-Wechsel weg von "kosten") der Stand der vorherigen Baustelle
             stehen, "Speichern" hätte dann sogar das falsche Projekt
             überschrieben. Der key erzwingt einen frischen Mount pro Baustelle. */}
-        {tab === "kosten"        && <KostenView key={projekt?.id} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} angebote={angebote} kalkulationspreise={kalkulationspreise} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
+        {tab === "kosten"        && <KostenView key={projekt?.id} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} angebote={angebote} kalkulationspreise={kalkulationspreise} baufortschritt={baufortschritt} stammpositionen={stammpositionen} setStammpositionen={stammpositionenStatus === "ok" ? setStammpositionen : null} istAdmin={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "stempeln"      && <StempeluhrView profil={aktiveProfil}
             projekte={aktiveProfil?.kolonne_id
               ? projekte.filter(p => (p.kolonnen||[]).some(k => k.id === aktiveProfil.kolonne_id)).length > 0
@@ -1495,7 +1498,7 @@ export default function PolierApp() {
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
         {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
-        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} stammpositionen={stammpositionen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} session={auth.session} />}
+        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} stammpositionen={stammpositionen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} rolle={aktiveRolle} session={auth.session} />}
         {tab === "rechnungen"    && <RechnungenView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} rechnungen={rechnungen} rechnungBestaetigungen={rechnungBestaetigungen} eigeneFirma={eigeneFirma} onBaufortschrittSpeichern={baufortschrittSpeichern} onRechnungSpeichern={rechnungSpeichern} onRechnungLoeschen={rechnungLoeschen} profil={aktiveProfil} />}
         {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} standardZuschlaege={standardZuschlaege} setStandardZuschlaege={setStandardZuschlaege} stammpositionen={stammpositionen} setStammpositionen={setStammpositionen} stammpositionenStatus={stammpositionenStatus} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}

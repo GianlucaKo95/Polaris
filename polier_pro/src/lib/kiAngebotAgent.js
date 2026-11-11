@@ -77,20 +77,23 @@ export const WERKZEUGE = [
   },
 ];
 
-export function systemPrompt({ projekt, gewerke } = {}) {
+export function systemPrompt({ projekt, gewerke, nachtragZu } = {}) {
+  const nachtrag = nachtragZu ? `
+
+NACHTRAG: Dies ist ein Nachtragsangebot zum Auftrag „${nachtragZu.titel || ""}“. Nach VOB/B § 2 müssen Nachtragspreise auf der Urkalkulation aufbauen. Positionen mit Referenz UK:… stammen aus diesem Auftrag — nimm sie zuerst, wenn die Leistung gleich oder vergleichbar ist. Formuliere die Positionstexte als Nachtragsleistung (z.B. „Zulage für …“, „Mehrmenge …“, „Zusätzliche Leistung: …“) und nenne in annahmen den Anlass des Nachtrags.` : "";
   return `Du bist erfahrener Baukalkulator in einem deutschen Bauunternehmen und erstellst Angebote für Poliere, die selbst keine Kalkulationserfahrung haben.
 
 Regeln:
 1. Zerlege die Anfrage in die Leistungen, die ein vollständiges Angebot braucht. Denke an übliche Nebenleistungen (Baustelleneinrichtung, Erdarbeiten, Entsorgung, Gerüst, Schutzmaßnahmen), wenn sie zur Leistung gehören.
 2. Suche JEDE Leistung mit katalog_suchen, bevor du sie vorschlägst. Probiere bei keinem Treffer 1–2 andere Stichworte.
 3. Du nennst NIEMALS selbst einen Preis. Preise kommen ausschließlich aus dem Katalog über die Referenz (ref). Findest du nichts Passendes, setze ref=null — die Position wird dann ohne Preis zur manuellen Kalkulation markiert.
-4. Wähle die Referenz, deren Leistung und Einheit wirklich passt. Bevorzuge Stammpositionen (SP:…) vor Einheitspreisen (EP:…) vor früheren LV-Positionen (LV:…), wenn sie gleich gut passen.
+4. Wähle die Referenz, deren Leistung und Einheit wirklich passt. Bevorzuge Urkalkulation (UK:…, nur bei Nachträgen) vor Stammpositionen (SP:…) vor Einheitspreisen (EP:…) vor früheren LV-Positionen (LV:…), wenn sie gleich gut passen.
 5. Leite Mengen aus den Angaben nachvollziehbar her und schreibe die Rechnung in mengen_herleitung. Rechne Einheiten sauber um (z.B. Wandlänge × Höhe = m²).
 6. Fehlen preisrelevante Angaben, die du nicht sinnvoll annehmen kannst, stelle EINMAL mit rueckfragen_stellen bis zu 3 kurze Fragen. Sonst triff übliche Annahmen und liste sie unter annahmen.
 7. Schließe immer mit angebot_vorschlagen ab. Antworte auf Deutsch.
 
 Projekt: ${projekt?.name || "unbekannt"}${projekt?.ort ? `, ${projekt.ort}` : ""}${projekt?.typ ? ` (Bauart: ${projekt.typ})` : ""}
-${gewerke?.length ? `Gewerke der Firma: ${gewerke.join(", ")}` : ""}`.trim();
+${gewerke?.length ? `Gewerke der Firma: ${gewerke.join(", ")}` : ""}${nachtrag}`.trim();
 }
 
 // Führt ein Werkzeug aus. Nur katalog_suchen liefert ein echtes Ergebnis —
@@ -164,8 +167,14 @@ export async function agentAusfuehren({ messages, katalog, kontext, rufeKi, maxR
   return { status: "fehler", fehler: "Die KI ist nach zu vielen Schritten zu keinem Ergebnis gekommen. Bitte die Anfrage genauer beschreiben.", messages: verlauf };
 }
 
-export function agentStarten({ anfrage, katalog, kontext, rufeKi }) {
-  return agentAusfuehren({ messages: [{ role: "user", content: `Anfrage:\n${anfrage}` }], katalog, kontext, rufeKi });
+// anhaenge: Fotos/Pläne/PDFs als fertige Anthropic-Content-Blöcke
+// ({type:"image"|"document", source:{type:"base64", media_type, data}}),
+// siehe anhangAusDatei() in KiAngebotAssistent.jsx.
+export function agentStarten({ anfrage, anhaenge = [], katalog, kontext, rufeKi }) {
+  const text = `Anfrage:\n${anfrage || "(siehe Anhang)"}${anhaenge.length
+    ? `\n\n${anhaenge.length} Anhang/Anhänge (Fotos, Pläne oder Unterlagen): Lies Maße und Leistungsumfang daraus ab und nenne in mengen_herleitung, woher ein Maß stammt.` : ""}`;
+  const content = anhaenge.length ? [...anhaenge, { type: "text", text }] : text;
+  return agentAusfuehren({ messages: [{ role: "user", content }], katalog, kontext, rufeKi });
 }
 
 // Setzt nach einer Rückfrage fort: die Antworten des Nutzers gehen als

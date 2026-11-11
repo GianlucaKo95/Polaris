@@ -1,3 +1,12 @@
+// aufteilung (optional, standardZuschlaege.aufteilung): Anteile des
+// Gesamtzuschlags in % für BGK, AGK und Wagnis & Gewinn (Summe 100). Ist
+// sie gepflegt, schlüsselt Formblatt 221 jeden Zuschlag danach auf.
+export function aufteilungGueltig(aufteilung) {
+  if (!aufteilung) return false;
+  const s = (Number(aufteilung.bgk) || 0) + (Number(aufteilung.agk) || 0) + (Number(aufteilung.wg) || 0);
+  return Math.abs(s - 100) < 0.01;
+}
+
 // EFB-Preisblätter (Ergänzende Formblätter Preise nach VHB-Bund) aus der
 // Kalkulation eines Angebots:
 //   221  Angaben zur Kalkulation mit vorbestimmten Zuschlägen
@@ -85,7 +94,9 @@ const pct = n => (n || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, ma
 
 // HTML für druckePDF() (lib/pdf.jsx): 221 und 223 untereinander in einer
 // .page (A4-Breite), druckePDF teilt auf Seiten auf.
-export function efbHtml(auswertung, { angebot, eigeneFirma, projekt } = {}) {
+export function efbHtml(auswertung, { angebot, eigeneFirma, projekt, aufteilung = null } = {}) {
+  const auf = aufteilungGueltig(aufteilung) ? aufteilung : null;
+  const teil = (z, k) => (z * (Number(auf[k]) || 0)) / 100;
   const { zeilen, summe, zuschlagProzent, mittellohn, verrechnungslohn, angebotssumme, warnungen } = auswertung;
   const kopf = (nr, titel) => `
     <div class="kopf"><div><div class="nr">${nr}</div><div class="titel">${titel}</div></div>
@@ -117,13 +128,13 @@ ${zeile221("1.3 Zuschlag auf Lohn (BGK, AGK, Wagnis und Gewinn)", `${pct(zuschla
 ${zeile221("1.4 Verrechnungslohn VL", `${eur(verrechnungslohn)} €/h`, true)}
 </table>
 <h3>2. Zuschläge auf die Einzelkosten der Teilleistungen</h3>
-<table><tr><th>Kostenart</th><th class="r">Einzelkosten €</th><th class="r">Zuschlag %</th><th class="r">Zuschlag €</th><th class="r">Gesamt €</th></tr>
+<table><tr><th>Kostenart</th><th class="r">Einzelkosten €</th>${auf ? '<th class="r">BGK %</th><th class="r">AGK %</th><th class="r">W&amp;G %</th>' : ""}<th class="r">Zuschlag %</th><th class="r">Zuschlag €</th><th class="r">Gesamt €</th></tr>
 ${[["Lohn", "lohn"], ["Stoffkosten", "material"], ["Gerätekosten", "geraet"], ["Nachunternehmerleistungen", "fremdleistung"]].map(([l, k]) =>
-  `<tr><td>${l}</td><td class="r">${eur(summe.ek[k])}</td><td class="r">${pct(zuschlagProzent[k])}</td><td class="r">${eur(summe.gesamt[k] - summe.ek[k])}</td><td class="r">${eur(summe.gesamt[k])}</td></tr>`).join("")}
-${summe.gesamt.sonstiges ? `<tr><td>Sonstiges (nicht aufgegliedert)</td><td class="r">–</td><td class="r">–</td><td class="r">–</td><td class="r">${eur(summe.gesamt.sonstiges)}</td></tr>` : ""}
-<tr class="fett"><td>3. Angebotssumme ohne Umsatzsteuer</td><td></td><td></td><td></td><td class="r">${eur(angebotssumme)}</td></tr>
+  `<tr><td>${l}</td><td class="r">${eur(summe.ek[k])}</td>${auf ? `<td class="r">${pct(teil(zuschlagProzent[k], "bgk"))}</td><td class="r">${pct(teil(zuschlagProzent[k], "agk"))}</td><td class="r">${pct(teil(zuschlagProzent[k], "wg"))}</td>` : ""}<td class="r">${pct(zuschlagProzent[k])}</td><td class="r">${eur(summe.gesamt[k] - summe.ek[k])}</td><td class="r">${eur(summe.gesamt[k])}</td></tr>`).join("")}
+${summe.gesamt.sonstiges ? `<tr><td>Sonstiges (nicht aufgegliedert)</td><td class="r">–</td>${auf ? "<td></td><td></td><td></td>" : ""}<td class="r">–</td><td class="r">–</td><td class="r">${eur(summe.gesamt.sonstiges)}</td></tr>` : ""}
+<tr class="fett"><td>3. Angebotssumme ohne Umsatzsteuer</td><td></td>${auf ? "<td></td><td></td><td></td>" : ""}<td></td><td></td><td class="r">${eur(angebotssumme)}</td></tr>
 </table>
-<div class="hinweis">Die Zuschläge sind je Kostenart als Gesamtzuschlag für Baustellengemeinkosten, Allgemeine Geschäftskosten sowie Wagnis und Gewinn kalkuliert. Positionsrabatte sind in den Beträgen berücksichtigt${angebot?.rabatt ? `, ein Gesamtnachlass von ${pct(angebot.rabatt)} % auf die Angebotssumme nicht` : ""}.</div>
+<div class="hinweis">${auf ? `Zuschläge aufgeteilt nach Baustellengemeinkosten (${pct(auf.bgk)} %), Allgemeinen Geschäftskosten (${pct(auf.agk)} %) sowie Wagnis und Gewinn (${pct(auf.wg)} %) des jeweiligen Gesamtzuschlags.` : "Die Zuschläge sind je Kostenart als Gesamtzuschlag für Baustellengemeinkosten, Allgemeine Geschäftskosten sowie Wagnis und Gewinn kalkuliert."} Positionsrabatte sind in den Beträgen berücksichtigt${angebot?.rabatt ? `, ein Gesamtnachlass von ${pct(angebot.rabatt)} % auf die Angebotssumme nicht` : ""}.</div>
 <div class="trenner"></div>
 ${kopf("223", "Aufgliederung der Einheitspreise")}
 <table><tr><th>OZ</th><th>Kurztext</th><th class="r">Menge</th><th>ME</th><th class="r">Zeitansatz h/ME</th><th class="r">Lohn €</th><th class="r">Stoffe €</th><th class="r">Geräte €</th><th class="r">Sonstiges / NU €</th><th class="r">EP €</th></tr>

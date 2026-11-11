@@ -8,6 +8,7 @@ import { druckePDF } from "../lib/pdf.jsx";
 import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { KiAngebotAssistent } from "../components/KiAngebotAssistent.jsx";
+import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
 import { positionMengeAendern } from "../lib/stammpositionen.js";
 import { katalogBauen, QUELLEN_LABEL } from "../lib/katalog.js";
 import { angebotPruefen, vergleichswerteAusAngeboten, AMPEL_FARBE } from "../lib/plausibilitaet.js";
@@ -38,12 +39,13 @@ import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], projekt, eigeneFirma, firmaId, profil, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, projekt, eigeneFirma, firmaId, profil, session }) {
   const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
   const [vonAufgabe,setVonAufgabe]= useState(false);
   const [vonKI,     setVonKI]     = useState(false);
+  const [preisspiegelOffen, setPreisspiegelOffen] = useState(false);
   const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
   const [gaebFehler, setGaebFehler] = useState("");
   const [gaebInfo,   setGaebInfo]   = useState(null); // { anzahl, warnungen }
@@ -341,7 +343,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   async function efbExportieren() {
     const auswertung = efbAuswerten(a.positionen, kalkulationspreise);
     setEfbInfo({ warnungen: auswertung.warnungen });
-    await druckePDF(efbHtml(auswertung, { angebot: a, eigeneFirma, projekt }),
+    await druckePDF(efbHtml(auswertung, { angebot: a, eigeneFirma, projekt, aufteilung: standardZuschlaege?.aufteilung }),
       "EFB_" + a.titel.replace(/ /g, "_") + ".pdf");
   }
 
@@ -401,6 +403,32 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       kalkZelle(Number(summeGp.toFixed(2)), { fontWeight: "bold", type: Number }),
     ]);
     setKalkExportRows(rows);
+  }
+
+  // ── Interne Freigabe (Polier → Geschäftsführung) ──
+  // Ein Polier darf Angebote erstellen, aber erst nach Freigabe durch GF
+  // oder Administrator an den Kunden geben (Status/Kundenlink gesperrt).
+  // Jede inhaltliche Änderung nach der Freigabe setzt sie zurück, damit
+  // nie ein anderes Angebot rausgeht als das freigegebene.
+  const istPolier = rolle === "polier";
+  const darfFreigeben = rolle === "administrator" || rolle === "geschaeftsfuehrer";
+  const freigabe = a.interne_freigabe || null;
+  const versandErlaubt = !istPolier || freigabe?.status === "freigegeben";
+  const freigabeInhalt = useRef(JSON.stringify([a.positionen, a.rabatt, a.mwst, a.titel]));
+  useEffect(() => {
+    const jetzt = JSON.stringify([a.positionen, a.rabatt, a.mwst, a.titel]);
+    if (jetzt !== freigabeInhalt.current) {
+      freigabeInhalt.current = jetzt;
+      if (freigabe?.status === "freigegeben") setA(x => ({ ...x, interne_freigabe: { status: "geaendert", am: new Date().toISOString() } }));
+    }
+  }, [a.positionen, a.rabatt, a.mwst, a.titel]);
+  const [zurueckNotiz, setZurueckNotiz] = useState("");
+
+  async function freigabeSetzen(status, notiz = "") {
+    const neu = { ...a, interne_freigabe: { status, von: profil ? [profil.vorname, profil.nachname].filter(Boolean).join(" ") : "", am: new Date().toISOString(), ...(notiz ? { notiz } : {}) } };
+    setARoh(neu);
+    setSpeichertLaedt(true);
+    try { await onSave(neu); } finally { setSpeichertLaedt(false); }
   }
 
   async function speichernKlick() {
@@ -623,11 +651,18 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
     }
   }
 
+  if (preisspiegelOffen) {
+    return <NuPreisspiegel positionen={a.positionen}
+      zuschlagFremdleistung={standardZuschlaege?.zuschlagFremdleistung || 0}
+      onUebernehmen={neu => { setA(x => ({ ...x, positionen: neu })); setPreisspiegelOffen(false); }}
+      onClose={() => setPreisspiegelOffen(false)} />;
+  }
+
   // ── KI-Angebot (Agent mit Stammdatenzugriff, lib/kiAngebotAgent.js) ──
   if (vonKI) {
     return <KiAngebotAssistent projekt={projekt} eigeneFirma={eigeneFirma}
       stammpositionen={stammpositionen} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen}
-      kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} session={session}
+      kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} nachtragZu={nachtragZu} session={session}
       onUebernehmen={kiErgebnisUebernehmen} onClose={() => setVonKI(false)} />;
   }
 
@@ -843,10 +878,10 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
                   cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
                   display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
-                <Upload size={12} /> GAEB-XML importieren (X83)
+                <Upload size={12} /> GAEB-XML importieren (X83/X84/X86)
               </button>
               <input ref={gaebXmlInputRef} type="file" onChange={gaebXmlImportieren}
-                accept=".x83,.X83"
+                accept=".x83,.X83,.x84,.X84,.x86,.X86"
                 style={{ display:"none" }} />
               <button onClick={() => gaebPreisInputRef.current?.click()}
                 style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
@@ -874,6 +909,15 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                     cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
                     display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
                   <ChartColumn size={12} /> GAEB-Angebot exportieren (D84, bepreist)
+                </button>
+              )}
+              {a.positionen.length > 0 && !gesperrt && (
+                <button onClick={() => setPreisspiegelOffen(true)}
+                  style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <ChartColumn size={12} /> NU-Preisspiegel
                 </button>
               )}
               {a.positionen.length > 0 && (
@@ -1155,7 +1199,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
             </div>
             <div style={{ marginBottom:9 }}>
               <Label>Status</Label>
-              <select value={a.status} disabled={gesperrt}
+              <select value={a.status} disabled={gesperrt || !versandErlaubt}
                 onChange={e=>setA(x=>({...x,status:e.target.value}))}
                 style={{ ...inputStyle(), padding:"11px 12px" }}>
                 {[["entwurf","📝 Entwurf"],["versendet","📤 Versendet"],
@@ -1173,7 +1217,44 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 
             <AngebotNachweis angebot={a} nachweis={nachweis} />
 
-            {firmaId && <AngebotFreigabe angebotId={a.id} firmaId={firmaId} profil={profil} session={session} />}
+            {(istPolier || darfFreigeben) && !gesperrt && (
+              <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:12,
+                padding:"10px 12px", marginBottom:12 }}>
+                <div style={{ color:"var(--muted)", fontSize:11, fontWeight:700, textTransform:"uppercase", marginBottom:6 }}>
+                  Interne Freigabe
+                </div>
+                <div style={{ fontSize:12.5, color:"var(--text)", marginBottom:8 }}>
+                  {!freigabe?.status && (istPolier ? "Vor dem Versand muss die Geschäftsführung das Angebot freigeben." : "Keine Freigabe angefragt.")}
+                  {freigabe?.status === "angefragt" && "⏳ Freigabe angefragt."}
+                  {freigabe?.status === "freigegeben" && `✔ Freigegeben von ${freigabe.von || "GF"} am ${new Date(freigabe.am).toLocaleDateString("de-DE")}.`}
+                  {freigabe?.status === "zurueckgewiesen" && `↩ Zurückgewiesen${freigabe.notiz ? `: ${freigabe.notiz}` : ""}.`}
+                  {freigabe?.status === "geaendert" && "Nach der Freigabe geändert — bitte erneut freigeben lassen."}
+                </div>
+                {istPolier && freigabe?.status !== "angefragt" && freigabe?.status !== "freigegeben" && (
+                  <button onClick={() => freigabeSetzen("angefragt")} disabled={speichertLaedt || !a.positionen.length}
+                    style={{ width:"100%", background:"var(--yellow)", color:"#1a1200", border:"none", borderRadius:10,
+                      padding:11, fontWeight:800, cursor:"pointer", fontFamily:"inherit" }}>
+                    Zur Freigabe an die Geschäftsführung
+                  </button>
+                )}
+                {darfFreigeben && freigabe?.status !== "freigegeben" && (
+                  <div style={{ display:"grid", gap:6 }}>
+                    <button onClick={() => freigabeSetzen("freigegeben")} disabled={speichertLaedt}
+                      style={{ background:"var(--green)", color:"#fff", border:"none", borderRadius:10, padding:11,
+                        fontWeight:800, cursor:"pointer", fontFamily:"inherit" }}>Freigeben</button>
+                    {freigabe?.status === "angefragt" && <>
+                      <input value={zurueckNotiz} onChange={e => setZurueckNotiz(e.target.value)}
+                        placeholder="Begründung für Rückgabe" style={inputStyle()} />
+                      <button onClick={() => { freigabeSetzen("zurueckgewiesen", zurueckNotiz); setZurueckNotiz(""); }} disabled={speichertLaedt}
+                        style={{ background:"var(--rbg)", color:"var(--red)", border:"1px solid var(--red)", borderRadius:10, padding:10,
+                          fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Zurück an den Polier</button>
+                    </>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {firmaId && versandErlaubt && <AngebotFreigabe angebotId={a.id} firmaId={firmaId} profil={profil} session={session} />}
 
             <button onClick={speichernKlick} disabled={speichertLaedt || gesperrt}
               style={{ width:"100%", background: gesperrt ? "var(--surface2)" : "var(--yellow)",

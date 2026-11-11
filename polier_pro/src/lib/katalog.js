@@ -3,6 +3,8 @@
 // und die Vergleichsbasis der Plausibilitätsprüfung (plausibilitaet.js).
 //
 // Quellen, in Prioritätsreihenfolge (eigene Rezeptur vor fertigem Preis):
+//   UK  Urkalkulation — nur bei Nachträgen: die Positionen des Auftrags,
+//       auf dessen Preisen ein Nachtrag nach VOB/B § 2 aufbauen muss
 //   SP  Stammposition (stammpositionen.js) — EP aus Rezeptur + Zuschlägen
 //   EP  Einheitspreis-Katalog (fertiger Verkaufspreis je Gewerk)
 //   LV  Position aus einer Mutter-LV (lvVorlagen, aus GAEB-Import mit Preis)
@@ -59,8 +61,16 @@ export function aehnlichkeit(suchtext, kandidatText) {
   return treffer / such.length;
 }
 
-export function katalogBauen({ stammpositionen = [], einheitspreise = [], lvVorlagen = [], kalkulationspreise = [], standardZuschlaege = null } = {}) {
+export function katalogBauen({ stammpositionen = [], einheitspreise = [], lvVorlagen = [], kalkulationspreise = [], standardZuschlaege = null, urkalkulation = null } = {}) {
   const eintraege = [];
+  for (const p of urkalkulation?.positionen || []) {
+    if (!p?.bez || p.bez.startsWith("──") || !(Number(p.ep) > 0)) continue;
+    eintraege.push({
+      ref: `UK:${p.id}`, quelle: "urkalkulation", bez: p.bez, langtext: p.langtext || "",
+      gewerk: urkalkulation.titel || "", einheit: p.einheit || "", ep: Number(p.ep) || 0,
+      ...(p.oz ? { oz: p.oz } : {}), ...(p.stlk ? { stlk: p.stlk } : {}),
+    });
+  }
   for (const sp of stammpositionen) {
     if (!sp?.bez) continue;
     eintraege.push({
@@ -89,7 +99,7 @@ export function katalogBauen({ stammpositionen = [], einheitspreise = [], lvVorl
   return eintraege;
 }
 
-const QUELLEN_RANG = { stammposition: 0, einheitspreis: 1, mutter_lv: 2 };
+const QUELLEN_RANG = { urkalkulation: -1, stammposition: 0, einheitspreis: 1, mutter_lv: 2 };
 
 // Sucht im Katalog. einheit (optional) bevorzugt passende Einheiten, schließt
 // andere aber nicht aus — eine Leistung in "m" kann auch als "m²"-Position
@@ -115,6 +125,8 @@ export const QUELLEN_LABEL = {
   stammposition: "Stammposition",
   einheitspreis: "Einheitspreis-Katalog",
   mutter_lv: "Mutter-LV",
+  urkalkulation: "Urkalkulation",
+  nachunternehmer: "Nachunternehmer",
   manuell: "Manuell",
   ki_ohne_preis: "Ohne Preis",
 };

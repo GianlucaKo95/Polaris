@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Euro, Check, FileText, Calculator } from "lucide-react";
+import { Euro, Check, FileText, Calculator, Gauge } from "lucide-react";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { sbProjektKostenSpeichern } from "../lib/supabase.js";
 import { Spinner } from "../components/Spinner.jsx";
 import { kalkulationSollAufschluesselung } from "../lib/kalkulation.js";
+import { leistungsfaktor, zeitansaetzeAnpassen } from "../lib/nachkalkulation.js";
 
 const STANDARD_POSITIONEN = [
   { id:1, bezeichnung:"Betonarbeiten",    menge:0, einheitspreis:0, budget:0, einheit:"m²" },
@@ -56,7 +57,7 @@ function ausAngebotUebernehmen(angebot) {
   });
 }
 
-export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebote, kalkulationspreise = [], session, onKostenGespeichert }) {
+export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebote, kalkulationspreise = [], baufortschritt = [], stammpositionen = [], setStammpositionen = null, istAdmin = false, session, onKostenGespeichert }) {
   const [budgetPos, setBudgetPos] = useState(
     (projekt?.budget_positionen?.length ? projekt.budget_positionen : STANDARD_POSITIONEN)
       .map(positionNormalisieren)
@@ -101,6 +102,22 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
   // erfundene Ist-Zahl.
   const kalkSoll = kalkulationSollAufschluesselung(angenommeneAngebote, kalkulationspreise);
   const kalkSollGesamt = kalkSoll.lohn + kalkSoll.material + kalkSoll.geraet + kalkSoll.fremdleistung + kalkSoll.zuschlag;
+
+  // Nachkalkulation (lib/nachkalkulation.js): Ist-Stunden gegen die
+  // Soll-Stunden der bisher erbrachten Leistung → Leistungsfaktor, der auf
+  // Wunsch in die Zeitansätze der verwendeten Stammpositionen zurückfließt.
+  const fortschrittJeAngebot = (baufortschritt || []).reduce((m, e) => {
+    (m[e.angebot_id] ||= []).push(e); return m;
+  }, {});
+  const nk = leistungsfaktor({ angebote: angenommeneAngebote, fortschritt: fortschrittJeAngebot, zeitbuchungen, kalkulationspreise });
+  const nkStammpositionen = stammpositionen.filter(s => nk.stammpositionIds.includes(s.id));
+  const [nkUebernommen, setNkUebernommen] = useState(false);
+  function nkUebernehmen() {
+    if (!setStammpositionen || !nk.faktor) return;
+    if (!window.confirm(`Zeitansätze (Lohnstunden) von ${nkStammpositionen.length} Stammposition(en) mit Faktor ${nk.faktor.toLocaleString("de-DE", { maximumFractionDigits: 2 })} anpassen?`)) return;
+    setStammpositionen(prev => zeitansaetzeAnpassen(prev, nk.stammpositionIds, nk.faktor, kalkulationspreise, { projekt: projekt?.name || "" }));
+    setNkUebernommen(true);
+  }
 
   function positionAendern(i, feld, wert) {
     setBudgetPos(prev => prev.map((p,j) => {
@@ -199,6 +216,39 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
             <span>Summe Soll</span>
             <span style={{ color:"var(--yellow)" }}>{euro(kalkSollGesamt)}</span>
           </div>
+        </div>
+      )}
+
+      {nk.sollStunden > 0 && (
+        <div style={{ background:"var(--surface)", borderRadius:16, padding:13,
+          marginBottom:12, border:"1.5px solid var(--border)" }}>
+          <div style={{ color:"var(--text)", fontWeight:700, fontSize:15,
+            marginBottom:8, display:"flex", alignItems:"center", gap:7 }}>
+            <Gauge size={16} /> Nachkalkulation Stunden
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, fontSize:12 }}>
+            <div><div style={{ color:"var(--muted)" }}>Soll (erbracht)</div><div style={{ fontWeight:800 }}>{Math.round(nk.sollStunden).toLocaleString("de-DE")} h</div></div>
+            <div><div style={{ color:"var(--muted)" }}>Ist</div><div style={{ fontWeight:800 }}>{Math.round(nk.istStunden).toLocaleString("de-DE")} h</div></div>
+            <div><div style={{ color:"var(--muted)" }}>Leistungsfaktor</div>
+              <div style={{ fontWeight:800, color: nk.faktor == null ? "var(--muted)" : nk.faktor > 1.1 ? "var(--red)" : nk.faktor < 0.9 ? "var(--green)" : "var(--text)" }}>
+                {nk.faktor == null ? "—" : nk.faktor.toLocaleString("de-DE", { maximumFractionDigits: 2 })}
+              </div></div>
+          </div>
+          <div style={{ color:"var(--muted)", fontSize:11.5, marginTop:8, lineHeight:1.4 }}>
+            {nk.hinweis || (nk.faktor > 1
+              ? `${Math.round((nk.faktor - 1) * 100)} % mehr Stunden gebraucht als kalkuliert.`
+              : `${Math.round((1 - nk.faktor) * 100)} % weniger Stunden gebraucht als kalkuliert.`)}
+            {" "}Soll = Lohnstunden der Kalkulation × Leistungsstand je Position.
+          </div>
+          {istAdmin && nk.faktor != null && nkStammpositionen.length > 0 && setStammpositionen && (
+            <button onClick={nkUebernehmen} disabled={nkUebernommen}
+              style={{ width:"100%", marginTop:10, background: nkUebernommen ? "var(--gbg)" : "var(--surface2)",
+                color: nkUebernommen ? "var(--green)" : "var(--text)", border:"1.5px solid var(--border)", borderRadius:10,
+                padding:10, fontWeight:700, fontSize:12.5, cursor: nkUebernommen ? "default" : "pointer", fontFamily:"inherit" }}>
+              {nkUebernommen ? "✓ Zeitansätze angepasst"
+                : `Zeitansätze von ${nkStammpositionen.length} Stammposition(en) übernehmen`}
+            </button>
+          )}
         </div>
       )}
 

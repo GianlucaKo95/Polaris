@@ -228,7 +228,9 @@ export function gaeb90ZuPositionen({ positionen }) {
       bez: p.typ === "unterposition" ? `↳ ${p.bez}` : p.bez,
       einheit: p.einheit || "",
       menge: p.menge || 0,
-      ep: 0,
+      // ep nur aus bepreisten GAEB-XML-Phasen (X84/X86, siehe gaebXml.js) —
+      // GAEB90 D81/D83 und X83 liefern hier immer 0.
+      ep: p.ep || 0,
       rabatt: 0,
       // OZ wird mitgeführt (sonst ungenutzt), damit ein später hochgeladenes
       // bepreistes D84/D86 (siehe gaeb90PreiseEinspielen()) den EP dieser

@@ -56,3 +56,11 @@ test("HTML enthält beide Formblätter und escaped Texte", () => {
   assert.match(html, /A &lt;b&gt;&amp;/);
   assert.match(html, /48,00 €\/h/);
 });
+
+test("Zuschlagsaufteilung BGK/AGK/W&G erscheint nur bei Summe 100", () => {
+  const r = efbAuswerten([positionen[1]], kalkulationspreise);
+  const mit = efbHtml(r, { aufteilung: { bgk: 40, agk: 40, wg: 20 } });
+  assert.match(mit, /BGK %/);
+  assert.match(mit, /<td class="r">14,00<\/td><td class="r">14,00<\/td><td class="r">7,00<\/td>/); // 35 % Lohnzuschlag
+  assert.doesNotMatch(efbHtml(r, { aufteilung: { bgk: 40, agk: 40, wg: 10 } }), /BGK %/);
+});

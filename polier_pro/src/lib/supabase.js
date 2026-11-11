@@ -887,12 +887,23 @@ export async function sbAngebotSpeichern(a, projektId, session, istNeu) {
     mwst:        a.mwst ?? 19,
     status:      a.status || "entwurf",
   };
+  // Optionale Spalten aus supabase-kalkulation.sql (Nachtragsbezug, interne
+  // Freigabe durch den GF). Fehlen sie in einer Installation noch, wird ohne
+  // sie erneut gespeichert, damit das Angebot selbst nicht verloren geht —
+  // die beiden Angaben bleiben dann nur bis zum Neuladen erhalten.
+  const optional = {};
+  if (a.nachtrag_zu !== undefined) optional.nachtrag_zu = a.nachtrag_zu;
+  if (a.interne_freigabe !== undefined) optional.interne_freigabe = a.interne_freigabe;
   try {
     const client = sbClientMitToken(session);
-    const query = istNeu
-      ? client.from("angebote").insert(payload).select()
-      : client.from("angebote").update(payload).eq("id", a.id).select();
-    const { data, error } = await query;
+    const schreiben = p => istNeu
+      ? client.from("angebote").insert(p).select()
+      : client.from("angebote").update(p).eq("id", a.id).select();
+    let { data, error } = await schreiben({ ...payload, ...optional });
+    if (error && Object.keys(optional).length) {
+      ({ data, error } = await schreiben(payload));
+      if (!error && data?.[0]) return { ...data[0], ...optional };
+    }
     if (error) return null;
     return data?.[0] || null;
   } catch { return null; }

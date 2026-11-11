@@ -1,12 +1,12 @@
 import { useState, useRef } from "react";
-import { FileText, Plus, Link2, Upload } from "lucide-react";
+import { FileText, Plus, Link2, Upload, FilePlus2 } from "lucide-react";
 import { AngebotEditor } from "./AngebotEditor.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen, positionenMitKalkulationVorbereiten } from "../lib/mutterlv.js";
 
-export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, stammpositionen = [], eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, session }) {
+export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, stammpositionen = [], eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, rolle = null, session }) {
   const [aktAngebot,  setAktAngebot]  = useState(null);
   const [fehler,      setFehler]      = useState("");
   const [info,        setInfo]        = useState(null); // { titel, treffer, gesamt, fehlend } — letztes aus Ausschreibung generiertes Angebot
@@ -29,6 +29,25 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
     };
     const gespeichert = await onAngebotSpeichern?.(a, true);
     if (!gespeichert) { setFehler("Angebot konnte nicht angelegt werden."); return; }
+    setAktAngebot(gespeichert);
+  }
+
+  // Nachtrag zu einem angenommenen Angebot (Auftrag): neues Angebot mit
+  // Bezug (nachtrag_zu), dessen Positionen der KI-Assistent zuerst aus der
+  // Urkalkulation des Auftrags bepreist (lib/katalog.js, Quelle "UK").
+  async function nachtragAnlegen(auftrag) {
+    setFehler(""); setInfo(null);
+    const nr = angebote.filter(x => x.nachtrag_zu === auftrag.id).length + 1;
+    const a = {
+      titel:       `Nachtrag ${nr} zu ${auftrag.titel}`,
+      empfaenger:  auftrag.empfaenger || "",
+      datum:       new Date().toISOString().slice(0,10),
+      gueltig_bis: new Date(Date.now()+30*864e5).toISOString().slice(0,10),
+      positionen:  [], rabatt: 0, mwst: auftrag.mwst ?? 19, status: "entwurf",
+      nachtrag_zu: auftrag.id,
+    };
+    const gespeichert = await onAngebotSpeichern?.(a, true);
+    if (!gespeichert) { setFehler("Nachtrag konnte nicht angelegt werden."); return; }
     setAktAngebot(gespeichert);
   }
 
@@ -117,6 +136,8 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
       stammpositionen={stammpositionen}
       standardZuschlaege={standardZuschlaege}
       angebote={angebote}
+      nachtragZu={aktAngebot.nachtrag_zu ? angebote.find(x => x.id === aktAngebot.nachtrag_zu) || null : null}
+      rolle={rolle}
       projekt={projekt}
       eigeneFirma={eigeneFirma}
       firmaId={firmaId}
@@ -235,6 +256,22 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
               {a.positionen.length} Position{a.positionen.length!==1?"en":""}
               · Gültig bis {new Date(a.gueltig_bis).toLocaleDateString("de-DE")}
             </div>
+            {a.interne_freigabe?.status && (
+              <div style={{ fontSize:11.5, marginTop:4, fontWeight:700,
+                color: a.interne_freigabe.status === "freigegeben" ? "var(--green)" : a.interne_freigabe.status === "zurueckgewiesen" ? "var(--red)" : "var(--ydark)" }}>
+                {a.interne_freigabe.status === "angefragt" && "⏳ Wartet auf Freigabe durch die Geschäftsführung"}
+                {a.interne_freigabe.status === "freigegeben" && `✔ Intern freigegeben von ${a.interne_freigabe.von || "GF"}`}
+                {a.interne_freigabe.status === "zurueckgewiesen" && `↩ Zurückgewiesen: ${a.interne_freigabe.notiz || "bitte überarbeiten"}`}
+              </div>
+            )}
+            {a.status === "angenommen" && !a.nachtrag_zu && (
+              <button onClick={e => { e.stopPropagation(); nachtragAnlegen(a); }}
+                style={{ marginTop:8, background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)",
+                  borderRadius:8, padding:"6px 10px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                  display:"flex", alignItems:"center", gap:5 }}>
+                <FilePlus2 size={12} /> Nachtrag anlegen
+              </button>
+            )}
             {/* entschieden_am wird nur von der angebot_freigabe_entscheiden-RPC
                 gesetzt (nie vom internen Status-Dropdown) — zeigt also
                 zuverlässig "Kunde hat online über den Link entschieden" an. */}

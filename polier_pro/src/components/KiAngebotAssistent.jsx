@@ -1,12 +1,35 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Sparkles, X, TriangleAlert, CircleHelp, Check } from "lucide-react";
+import { Sparkles, X, TriangleAlert, CircleHelp, Check, Paperclip, FileText } from "lucide-react";
 import { DiktierFeld } from "./DiktierFeld.jsx";
 import { Spinner } from "./Spinner.jsx";
 import { inputStyle } from "./Label.jsx";
 import { kiToolAufruf } from "../lib/ai.js";
 import { katalogBauen, QUELLEN_LABEL } from "../lib/katalog.js";
 import { agentStarten, agentFortsetzen, vorschlagZuPositionen } from "../lib/kiAngebotAgent.js";
+
+// Datei → Anthropic-Content-Block. Fotos werden auf max. 1600 px verkleinert
+// und als JPEG gesendet (Handyfotos haben sonst 5–10 MB und werden in jeder
+// Agenten-Runde erneut übertragen); PDFs gehen unverändert als Dokument.
+const MAX_PDF_BYTES = 8 * 1024 * 1024;
+function base64AusDataUrl(url) { return url.slice(url.indexOf(",") + 1); }
+async function anhangAusDatei(datei) {
+  if (datei.type === "application/pdf") {
+    if (datei.size > MAX_PDF_BYTES) throw new Error(`${datei.name} ist größer als 8 MB.`);
+    const url = await new Promise((ok, fehler) => {
+      const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = fehler; r.readAsDataURL(datei);
+    });
+    return { name: datei.name, block: { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64AusDataUrl(url) } } };
+  }
+  if (!datei.type.startsWith("image/")) throw new Error(`${datei.name}: nur Fotos und PDFs möglich.`);
+  const bild = await createImageBitmap(datei);
+  const faktor = Math.min(1, 1600 / Math.max(bild.width, bild.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bild.width * faktor); canvas.height = Math.round(bild.height * faktor);
+  canvas.getContext("2d").drawImage(bild, 0, 0, canvas.width, canvas.height);
+  const url = canvas.toDataURL("image/jpeg", 0.85);
+  return { name: datei.name, vorschau: url, block: { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64AusDataUrl(url) } } };
+}
 
 const euro = n => (n || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -15,19 +38,33 @@ const euro = n => (n || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, m
 // Die Vorschau zeigt bewusst VOR der Übernahme, welche Positionen ohne
 // Preis bleiben, damit der Polier weiß, was er noch klären muss.
 export function KiAngebotAssistent({ projekt, eigeneFirma, stammpositionen = [], einheitspreise = [], lvVorlagen = [],
-  kalkulationspreise = [], standardZuschlaege, session, onUebernehmen, onClose }) {
+  kalkulationspreise = [], standardZuschlaege, nachtragZu = null, session, onUebernehmen, onClose }) {
   const [anfrage, setAnfrage] = useState("");
   const [phase, setPhase] = useState("eingabe"); // eingabe | laeuft | rueckfrage | vorschau
   const [fehler, setFehler] = useState("");
   const [zwischenstand, setZwischenstand] = useState(null); // { messages, offen, fragen }
   const [antworten, setAntworten] = useState([]);
   const [ergebnis, setErgebnis] = useState(null);
+  const [anhaenge, setAnhaenge] = useState([]); // [{ name, vorschau?, block }]
+  const dateiRef = useRef(null);
+
+  async function dateienGewaehlt(e) {
+    const dateien = [...(e.target.files || [])];
+    e.target.value = "";
+    setFehler("");
+    for (const d of dateien) {
+      try {
+        const a = await anhangAusDatei(d);
+        setAnhaenge(x => [...x, a].slice(0, 5));
+      } catch (err) { setFehler(err.message || "Datei konnte nicht gelesen werden."); }
+    }
+  }
 
   const katalog = useMemo(
-    () => katalogBauen({ stammpositionen, einheitspreise, lvVorlagen, kalkulationspreise, standardZuschlaege }),
-    [stammpositionen, einheitspreise, lvVorlagen, kalkulationspreise, standardZuschlaege],
+    () => katalogBauen({ stammpositionen, einheitspreise, lvVorlagen, kalkulationspreise, standardZuschlaege, urkalkulation: nachtragZu }),
+    [stammpositionen, einheitspreise, lvVorlagen, kalkulationspreise, standardZuschlaege, nachtragZu],
   );
-  const kontext = { projekt, gewerke: eigeneFirma?.gewerke };
+  const kontext = { projekt, gewerke: eigeneFirma?.gewerke, nachtragZu };
   const rufeKi = async (system, messages, tools) => kiToolAufruf({ system, messages, tools }, session);
 
   function verarbeiten(r) {
@@ -45,10 +82,10 @@ export function KiAngebotAssistent({ projekt, eigeneFirma, stammpositionen = [],
   }
 
   async function starten() {
-    if (!anfrage.trim()) return;
+    if (!anfrage.trim() && !anhaenge.length) return;
     setFehler(""); setPhase("laeuft");
     try {
-      verarbeiten(await agentStarten({ anfrage, katalog, kontext, rufeKi }));
+      verarbeiten(await agentStarten({ anfrage, anhaenge: anhaenge.map(a => a.block), katalog, kontext, rufeKi }));
     } catch (e) {
       setFehler(e.message || "KI-Anfrage fehlgeschlagen."); setPhase("eingabe");
     }
@@ -79,7 +116,7 @@ export function KiAngebotAssistent({ projekt, eigeneFirma, stammpositionen = [],
         borderBottom:"3px solid var(--yellow)", position:"sticky", top:0, zIndex:2,
         display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <div style={{ color:"var(--yellow)", fontWeight:700, fontSize:16, display:"flex", alignItems:"center", gap:8 }}>
-          <Sparkles size={15} /> KI-Angebot
+          <Sparkles size={15} /> {nachtragZu ? "KI-Nachtrag" : "KI-Angebot"}
         </div>
         <button onClick={onClose} style={{ background:"var(--surface2)", border:"1px solid var(--border)",
           color:"var(--text)", borderRadius:8, padding:"6px 14px", cursor:"pointer", fontFamily:"inherit", display:"flex" }}>
@@ -107,9 +144,38 @@ export function KiAngebotAssistent({ projekt, eigeneFirma, stammpositionen = [],
               Unter Angebots-Parameter Stammpositionen oder Einheitspreise anlegen.
             </div>
           )}
-          <DiktierFeld label="Anfrage des Kunden" value={anfrage} onChange={setAnfrage} rows={6} />
-          <button onClick={starten} disabled={!anfrage.trim()} style={knopf(!!anfrage.trim())}>
-            <Sparkles size={14} /> Angebot erstellen
+          {nachtragZu && (
+            <div style={{ background:"var(--bbg)", color:"var(--blue)", borderRadius:10, padding:"8px 12px", fontSize:12, marginBottom:10, lineHeight:1.4 }}>
+              Nachtrag zu „{nachtragZu.titel}“: Die KI nimmt zuerst die Preise aus diesem Auftrag (Urkalkulation, VOB/B § 2).
+            </div>
+          )}
+          <DiktierFeld label={nachtragZu ? "Was ist zusätzlich oder anders?" : "Anfrage des Kunden"} value={anfrage} onChange={setAnfrage} rows={6} />
+          <input ref={dateiRef} type="file" accept="image/*,application/pdf" multiple onChange={dateienGewaehlt} style={{ display:"none" }} />
+          <button onClick={() => dateiRef.current?.click()} disabled={anhaenge.length >= 5}
+            style={{ marginTop:8, background:"var(--surface2)", color:"var(--text)", border:"1.5px dashed var(--border)",
+              borderRadius:10, padding:"9px 12px", width:"100%", cursor:"pointer", fontSize:12.5, fontFamily:"inherit",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+            <Paperclip size={13} /> Foto, Plan oder PDF anhängen (max. 5)
+          </button>
+          {anhaenge.length > 0 && (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
+              {anhaenge.map((a, i) => (
+                <div key={i} style={{ position:"relative", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden",
+                  width:72, height:72, background:"var(--surface)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {a.vorschau
+                    ? <img src={a.vorschau} alt={a.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                    : <div style={{ fontSize:10, color:"var(--muted)", textAlign:"center", padding:4 }}><FileText size={18} /><div style={{ wordBreak:"break-all" }}>{a.name.slice(0, 18)}</div></div>}
+                  <button onClick={() => setAnhaenge(x => x.filter((_, j) => j !== i))}
+                    style={{ position:"absolute", top:2, right:2, background:"rgba(0,0,0,.6)", color:"#fff", border:"none",
+                      borderRadius:"50%", width:18, height:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", padding:0 }}>
+                    <X size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button onClick={starten} disabled={!anfrage.trim() && !anhaenge.length} style={knopf(!!anfrage.trim() || anhaenge.length > 0)}>
+            <Sparkles size={14} /> {nachtragZu ? "Nachtrag erstellen" : "Angebot erstellen"}
           </button>
         </>}
 

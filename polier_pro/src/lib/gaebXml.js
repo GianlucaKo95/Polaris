@@ -152,6 +152,9 @@ function itemVerarbeiten(itemKind, titelPfad, ozPfad, positionen, warnungen) {
   const qtyM = inhalt.match(/<Qty>([^<]*)<\/Qty>/);
   const quM = inhalt.match(/<QU>([^<]*)<\/QU>/);
   const provisM = inhalt.match(/<Provis>([^<]*)<\/Provis>/);
+  // Einheitspreis nur in bepreisten Phasen (X84 Angebot, X86 Auftrag, NU-
+  // Angebote für den Preisspiegel) — in X83 fehlt <UP>, ep bleibt 0.
+  const upM = inhalt.match(/<UP>([^<]*)<\/UP>/);
   const descKind = direkteKinder(inhalt, ["Description"])[0];
   const bez = descKind ? beschreibungsTextAus(descKind.inhalt) : "";
   const stlk = descKind ? stlkAus(descKind.inhalt) : null;
@@ -166,7 +169,7 @@ function itemVerarbeiten(itemKind, titelPfad, ozPfad, positionen, warnungen) {
     bez: art ? `[${art}] ${bez}` : bez,
     menge: qtyM ? Number(qtyM[1]) || 0 : 0,
     einheit: (quM ? quM[1] : "").trim(),
-    ep: 0,
+    ep: upM ? Number(upM[1]) || 0 : 0,
   });
 }
 

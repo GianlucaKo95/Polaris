@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator, Upload, Coins, Layers, TriangleAlert } from "lucide-react";
 import { StammpositionFormular } from "./StammpositionFormular.jsx";
 import { stammpositionEp, stammpositionZeitansatz } from "../lib/stammpositionen.js";
+import { aufteilungGueltig } from "../lib/efb.js";
 import { PreisFormular } from "./PreisFormular.jsx";
 import { KalkulationspreisFormular, KALKULATIONSPREIS_KATEGORIEN } from "./KalkulationspreisFormular.jsx";
 import { VorlageFormular } from "./VorlageFormular.jsx";
@@ -82,7 +83,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
       const geparst = parseGaebXml(text);
       const positionen = gaeb90ZuPositionen(geparst);
       if (positionen.length === 0) {
-        setMutterLvFehler("Keine Positionen erkannt — ist das eine GAEB-DA-XML-Datei (.x83)?");
+        setMutterLvFehler("Keine Positionen erkannt — ist das eine GAEB-DA-XML-Datei (.x83/.x84)?");
         return;
       }
       const name = geparst.projektTitel || datei.name.replace(/\.[^.]+$/, "");
@@ -246,6 +247,24 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
                 </div>
               ))}
             </div>
+            <div style={{ color:"var(--muted)", fontSize:11, fontWeight:700, textTransform:"uppercase", margin:"10px 0 5px" }}>
+              Aufteilung des Zuschlags für EFB 221 (% vom Zuschlag, Summe 100)
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+              {[["BGK","bgk"],["AGK","agk"],["Wagnis & Gewinn","wg"]].map(([l,feld]) => (
+                <div key={feld}>
+                  <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>{l}</div>
+                  <input type="number" min="0" max="100" value={standardZuschlaege?.aufteilung?.[feld] ?? ""}
+                    onChange={e => setStandardZuschlaege(x => ({ ...x, aufteilung: { ...(x?.aufteilung || {}), [feld]: Number(e.target.value) } }))}
+                    placeholder="0" style={{ width:"100%", background:"var(--surface)", color:"var(--text)",
+                      border:"1.5px solid var(--border)", borderRadius:8, padding:"7px 9px",
+                      fontSize:12.5, boxSizing:"border-box", fontFamily:"inherit" }} />
+                </div>
+              ))}
+            </div>
+            {standardZuschlaege?.aufteilung && !aufteilungGueltig(standardZuschlaege.aufteilung) && (
+              <div style={{ color:"var(--red)", fontSize:11, marginTop:5 }}>Die drei Anteile müssen zusammen 100 ergeben — bis dahin weist EFB 221 nur den Gesamtzuschlag aus.</div>
+            )}
             <div style={{ color:"var(--muted)", fontSize:11, marginTop:7, lineHeight:1.4 }}>
               Der Fremdleistungs-Satz wird automatisch auf den Mutter-LV-Preis angewendet, wenn aus einer Ausschreibung ein Angebot generiert wird.
             </div>
@@ -409,13 +428,13 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
                   border:"1.5px solid var(--border)", borderRadius:10, padding:"8px 0",
                   cursor:"pointer", fontSize:11.5, fontWeight:700, fontFamily:"inherit",
                   display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
-                <Upload size={12} /> GAEB-XML (X83)
+                <Upload size={12} /> GAEB-XML (X83/X84)
               </button>
             </div>
             <input ref={mutterLvStructInputRef} type="file" onChange={mutterLvStrukturImportieren}
               accept=".d81,.d83,.d85,.d86,.D81,.D83,.D85,.D86,.p81,.p83,.p85,.p86" style={{ display:"none" }} />
             <input ref={mutterLvXmlInputRef} type="file" onChange={mutterLvXmlImportieren}
-              accept=".x83,.X83" style={{ display:"none" }} />
+              accept=".x83,.X83,.x84,.X84,.x86,.X86" style={{ display:"none" }} />
             <input ref={mutterLvPreiseInputRef} type="file" onChange={mutterLvPreiseImportieren}
               accept=".d84,.d86,.D84,.D86,.p84,.p86" style={{ display:"none" }} />
             {mutterLvFehler && (

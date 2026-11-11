@@ -125,3 +125,14 @@ test("Zweimal ohne Werkzeug bricht sofort mit Hinweis auf den ki-proxy ab", asyn
   assert.match(r.fehler, /ki-proxy/);
   assert.equal(gesehen.length, 2);
 });
+
+test("Anhänge gehen als Content-Blöcke vor dem Text an die KI", async () => {
+  const { rufeKi, gesehen } = fakeKi([{ stop_reason: "tool_use", content: [tu("v", "angebot_vorschlagen", { titel: "T", positionen: [] })] }]);
+  const bild = { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "AAAA" } };
+  await agentStarten({ anfrage: "Keller", anhaenge: [bild], katalog, kontext: { nachtragZu: { titel: "Rohbau EFH" } }, rufeKi });
+  const content = gesehen[0].messages[0].content;
+  assert.equal(content[0].type, "image");
+  assert.match(content[1].text, /Anhang/);
+  assert.match(gesehen[0].system, /NACHTRAG/);
+  assert.match(gesehen[0].system, /Rohbau EFH/);
+});
