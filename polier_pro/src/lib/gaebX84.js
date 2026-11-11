@@ -44,7 +44,7 @@ function textXml(text) {
 }
 
 // Baum aus Positionen: { kinder: Map<rnopart, knoten>, label, items: [] }
-function baumBauen(positionen, warnungen) {
+export function baumBauen(positionen, warnungen) {
   const mitOz = positionen.filter(p => !istKopfzeile(p) && p.oz);
   const autoNummer = mitOz.length === 0;
   const wurzel = { kinder: new Map(), items: [] };
@@ -79,7 +79,7 @@ function baumBauen(positionen, warnungen) {
   return { wurzel, autoNummer };
 }
 
-function ebenenLaengen(knoten, tiefe = 0, laengen = []) {
+export function ebenenLaengen(knoten, tiefe = 0, laengen = []) {
   for (const [teil, kind] of knoten.kinder) {
     laengen[tiefe] = Math.max(laengen[tiefe] || 0, teil.length);
     ebenenLaengen(kind, tiefe + 1, laengen);

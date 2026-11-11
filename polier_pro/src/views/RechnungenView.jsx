@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { datevBuchungsstapel } from "../lib/datev.js";
+import { gaebX31Schreiben } from "../lib/gaebX31.js";
 import { FileText, ChevronLeft, TrendingUp, Printer, Trash2, Receipt } from "lucide-react";
 import { useBackButton } from "../hooks/useBackButton.js";
 import { escapeHtml } from "../lib/utils.js";
@@ -254,6 +255,16 @@ function AuftragDetail({ auftrag, projekt, eigeneFirma, baufortschritt, rechnung
       <div style={{ color:"var(--text)", fontWeight:700, fontSize:13, marginBottom:8,
         display:"flex", alignItems:"center", gap:6 }}>
         <TrendingUp size={14} /> Leistungsstand erfassen
+        <button onClick={() => {
+          const { text } = gaebX31Schreiben({ auftrag, fortschritt: baufortschritt, projekt, bieter: eigeneFirma });
+          const blob = new Blob([text], { type: "application/xml" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a"); link.href = url;
+          link.download = `Aufmass_${(auftrag.titel || "Auftrag").replace(/ /g, "_")}.x31`; link.click(); URL.revokeObjectURL(url);
+        }} style={{ marginLeft:"auto", background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)",
+          borderRadius:8, padding:"4px 9px", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+          Aufmaß als GAEB X31
+        </button>
       </div>
       <div style={{ background:"var(--surface)", border:"1.5px solid var(--border)", borderRadius:14,
         marginBottom:16, overflow:"hidden" }}>
