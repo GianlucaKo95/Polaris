@@ -58,6 +58,7 @@ const SimulationView         = React.lazy(() => import("./views/SimulationView.j
 const KostenView             = React.lazy(() => import("./views/KostenView.jsx").then(m => ({ default: m.KostenView })));
 const StundenExportView      = React.lazy(() => import("./views/StundenExportView.jsx").then(m => ({ default: m.StundenExportView })));
 const AngebotView            = React.lazy(() => import("./views/AngebotView.jsx").then(m => ({ default: m.AngebotView })));
+const LeistungView           = React.lazy(() => import("./views/LeistungView.jsx").then(m => ({ default: m.LeistungView })));
 const RechnungenView         = React.lazy(() => import("./views/RechnungenView.jsx").then(m => ({ default: m.RechnungenView })));
 const AdminParameterView     = React.lazy(() => import("./views/AdminParameterView.jsx").then(m => ({ default: m.AdminParameterView })));
 const NutzerVerwaltungView   = React.lazy(() => import("./views/NutzerVerwaltungView.jsx").then(m => ({ default: m.NutzerVerwaltungView })));
@@ -1347,6 +1348,9 @@ export default function PolierApp() {
     // interne_freigabe in AngebotEditor.jsx).
     { id:"angebot",       icon:"📄",  label:"Angebot",     rollen:["administrator","geschaeftsfuehrer","polier"] },
     { id:"rechnungen",    icon:"🧾",  label:"Rechnungen",  rollen:["administrator","geschaeftsfuehrer"] },
+    // Stunden je LV-Position, Leistungsstand, Soll-Ist und Prognose
+    // (views/LeistungView.jsx, lib/arbeitskalkulation.js).
+    { id:"leistung",      icon:"📊",  label:"Soll-Ist",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     // Ein Vorarbeiter führt eine Kolonne, keine ganze Baustelle (siehe
     // Kommentar bei der vorarbeiter-Rolle weiter unten) — deshalb weder
     // Abschluss-Button noch Lese-Zugriff auf die Abschlussakte für ihn.
@@ -1526,6 +1530,7 @@ export default function PolierApp() {
         {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
         {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} stammpositionen={stammpositionen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} rolle={aktiveRolle} angebotRegeln={angebotRegeln} kalkulationsgrundlagen={kalkulationsgrundlagen} session={auth.session} />}
+        {tab === "leistung"      && <LeistungView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} zeitbuchungen={zeitbuchungen} kalkulationspreise={kalkulationspreise} onBaufortschrittSpeichern={baufortschrittSpeichern} stammpositionen={stammpositionen} setStammpositionen={stammpositionenStatus === "ok" ? setStammpositionen : null} istAdmin={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} session={auth.session} />}
         {tab === "rechnungen"    && <RechnungenView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} rechnungen={rechnungen} rechnungBestaetigungen={rechnungBestaetigungen} eigeneFirma={eigeneFirma} onBaufortschrittSpeichern={baufortschrittSpeichern} onRechnungSpeichern={rechnungSpeichern} onRechnungLoeschen={rechnungLoeschen} profil={aktiveProfil} />}
         {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} standardZuschlaege={standardZuschlaege} setStandardZuschlaege={setStandardZuschlaege} stammpositionen={stammpositionen} setStammpositionen={setStammpositionen} stammpositionenStatus={stammpositionenStatus} angebotRegeln={angebotRegeln} setAngebotRegeln={setAngebotRegeln} angebotRegelnStatus={angebotRegelnStatus} kalkulationsgrundlagen={kalkulationsgrundlagen || LEERE_GRUNDLAGEN} setKalkulationsgrundlagen={grundlagenAendern} kalkulationsgrundlagenStatus={kalkulationsgrundlagenStatus} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
