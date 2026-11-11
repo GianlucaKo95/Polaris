@@ -116,19 +116,19 @@ export function PositionKalkulation({ kalk, stammdaten, menge, gesperrt, onChang
       <div style={{ borderTop:"1px solid var(--border)", paddingTop:8, fontSize:12 }}>
         <div style={{ display:"flex", justifyContent:"space-between", color:"var(--muted)", marginBottom:2 }}>
           <span>Einzelkosten (Selbstkosten)</span>
-          <span>{einzelkosten.toLocaleString("de-DE",{minimumFractionDigits:2})} €</span>
+          <span>{einzelkosten.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span>
         </div>
         <div style={{ display:"flex", justifyContent:"space-between", color:"var(--muted)", marginBottom:2 }}>
           <span>+ Zuschlag ({zuschlagProzent.toLocaleString("de-DE")} %)</span>
-          <span>{(gesamtkosten - einzelkosten).toLocaleString("de-DE",{minimumFractionDigits:2})} €</span>
+          <span>{(gesamtkosten - einzelkosten).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span>
         </div>
         <div style={{ display:"flex", justifyContent:"space-between", fontWeight:700, color:"var(--text)" }}>
           <span>= Gesamtkosten Position</span>
-          <span>{gesamtkosten.toLocaleString("de-DE",{minimumFractionDigits:2})} €</span>
+          <span>{gesamtkosten.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span>
         </div>
         <div style={{ display:"flex", justifyContent:"space-between", fontWeight:800, color:"var(--yellow)", marginTop:4 }}>
           <span>→ EP (€/Einheit)</span>
-          <span>{ep.toLocaleString("de-DE",{minimumFractionDigits:2})} €</span>
+          <span>{ep.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span>
         </div>
       </div>
     </div>

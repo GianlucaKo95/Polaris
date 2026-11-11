@@ -158,7 +158,7 @@ export function AngebotAkzeptierenScreen({ token }) {
             <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}>
               <div style={{ fontSize:13, color:"var(--text)" }}>{p.bez}</div>
               <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", flexShrink:0 }}>
-                {((p.menge||0)*(p.ep||0)*(1-(p.rabatt||0)/100)).toLocaleString("de-DE",{minimumFractionDigits:2})} €
+                {((p.menge||0)*(p.ep||0)*(1-(p.rabatt||0)/100)).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €
               </div>
             </div>
             <div style={{ color:"var(--muted)", fontSize:11.5, marginTop:2 }}>
@@ -171,15 +171,15 @@ export function AngebotAkzeptierenScreen({ token }) {
         {/* Summen */}
         <div style={{ background:"#1a1a1a", borderRadius:14, padding:"12px 18px", marginTop:12, marginBottom:18 }}>
           <div style={{ display:"flex", justifyContent:"space-between", color:"#888", fontSize:12.5, marginBottom:4 }}>
-            <span>Netto</span><span>{nettoNachRabatt.toLocaleString("de-DE",{minimumFractionDigits:2})} €</span>
+            <span>Netto</span><span>{nettoNachRabatt.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span>
           </div>
           <div style={{ display:"flex", justifyContent:"space-between", color:"#888", fontSize:12.5, marginBottom:8 }}>
-            <span>MwSt. {daten.mwst ?? 19}%</span><span>{mwstBetrag.toLocaleString("de-DE",{minimumFractionDigits:2})} €</span>
+            <span>MwSt. {daten.mwst ?? 19}%</span><span>{mwstBetrag.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span>
           </div>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
             <span style={{ color:"#fff", fontWeight:700, fontSize:13 }}>Gesamt (brutto)</span>
             <span style={{ color:"var(--yellow)", fontWeight:900, fontSize:22 }}>
-              {bruttoGesamt.toLocaleString("de-DE",{minimumFractionDigits:2})} €
+              {bruttoGesamt.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €
             </span>
           </div>
         </div>

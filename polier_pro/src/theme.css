@@ -158,3 +158,78 @@ input, textarea, select {
 @keyframes polaris-spin {
   to { transform: rotate(360deg); }
 }
+
+/* ─── Desktop (Werkplan), ab 1024 px — siehe hooks/useIstDesktop.js ───
+   Neutrale Grau-Rampe, ein Akzent (Signalorange, dunkel genug für Text),
+   IBM Plex. Die Handy-App behält ihre Farben. Ältere Ansichten nutzen
+   --yellow als Hintergrund für Haupt-Buttons mit dunkler Schrift: auf dem
+   Desktop werden diese Flächen schwarz mit weißer Schrift (Regel unten). */
+:root[data-layout="desktop"] {
+  --bg:      #F5F5F2;
+  --surface: #FFFFFF;
+  --surface2:#EEEEEA;
+  --border:  rgba(22,24,29,0.08);
+  --border2: rgba(22,24,29,0.14);
+  --text:    #16181D;
+  --text2:   #4A4D55;
+  --muted:   #6B6E76;
+  --yellow:  #16181D;
+  --ydark:   #9A3412;
+  --ybg:     #FBF1EA;
+  --green:   #2F6B3A;
+  --gbg:     #E8F2EA;
+  --red:     #B42318;
+  --rbg:     #FBEAE7;
+  --blue:    #1F4E8C;
+  --bbg:     #E8EFF8;
+  --orange:  #C2410C;
+  --obg:     #FBF1EA;
+  --akzent:  #C2410C;
+  --radius:  8px;
+  --radius-sm: 6px;
+  --radius-lg: 12px;
+  --ink:     #16181D;
+  --ink-text2: #B8BBC2;
+  --font-ui: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-zahl: 'IBM Plex Mono', ui-monospace, monospace;
+}
+:root[data-layout="desktop"][data-theme="dark"] {
+  --bg:      #121315;
+  --surface: #1A1B1E;
+  --surface2:#232428;
+  --border:  rgba(236,237,240,0.08);
+  --border2: rgba(236,237,240,0.14);
+  --text:    #ECEDF0;
+  --text2:   #B3B5BB;
+  --muted:   #8C8F96;
+  --yellow:  #ECEDF0;
+  --ydark:   #F4A26B;
+  --ybg:     #2A1F18;
+  --green:   #7CC48A;
+  --gbg:     #18261B;
+  --red:     #F08A7E;
+  --rbg:     #2C1916;
+  --blue:    #8DB4E8;
+  --bbg:     #182231;
+  --akzent:  #F08A4B;
+  --ink:     #0D0E10;
+}
+:root[data-layout="desktop"] body { font-size: 14px; }
+:root[data-layout="desktop"] body::before,
+:root[data-layout="desktop"] body::after { display: none; }
+/* Haupt-Buttons der älteren Ansichten: Schrift passend zur neuen Fläche */
+:root[data-layout="desktop"] [style*="background: var(--yellow)"] { color: #FFFFFF !important; }
+:root[data-layout="desktop"][data-theme="dark"] [style*="background: var(--yellow)"] { color: #16181D !important; }
+:root[data-layout="desktop"] button { border-radius: var(--radius-sm); }
+:root[data-layout="desktop"] :focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
+.desk-nav { transition: background-color 120ms ease-out, color 120ms ease-out; }
+.desk-nav:hover { background: var(--surface2); color: var(--text); }
+.desk-zeile { transition: background-color 120ms ease-out; }
+.desk-zeile:hover { background: var(--bg); }
+.desk-leiste > * { flex-shrink: 0; }
+/* Desktop: keine gesperrten Großbuchstaben-Labels aus den älteren Ansichten */
+:root[data-layout="desktop"] [style*="text-transform: uppercase"] { text-transform: none !important; letter-spacing: normal !important; }
+/* Angebotseditor auf dem Desktop: Import-/Export-Knöpfe als kompakte Werkzeugleiste */
+:root[data-layout="desktop"] .angebot-werkzeuge { display: flex !important; flex-wrap: wrap; gap: 8px !important; margin-bottom: 16px !important; }
+:root[data-layout="desktop"] .angebot-werkzeuge > * { grid-column: auto !important; flex: 0 0 auto; width: auto !important; padding: 8px 12px !important; border-radius: 8px !important; font-size: 13px !important; }
+:root[data-layout="desktop"][data-theme="dark"] [style*="background: var(--green)"] { color: #0D1A10 !important; }

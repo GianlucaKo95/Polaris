@@ -31,6 +31,7 @@ import { PositionKalkulation } from "../components/PositionKalkulation.jsx";
 import { gaebX84Schreiben } from "../lib/gaebX84.js";
 import { efbAuswerten, efbHtml } from "../lib/efb.js";
 import { Co2Panel } from "../components/Co2Panel.jsx";
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
 import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
@@ -46,8 +47,8 @@ import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 // der die für Beton erfasste Menge passt — Bewehrung braucht hier keinen
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
-
 export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen = null, co2Faktoren = [], projekt, eigeneFirma, firmaId, profil, session }) {
+  const istDesktop = useIstDesktop();
   const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
@@ -582,7 +583,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 <div class="betrag-banner">
   <div>
     <div class="betrag-label">Angebotssumme (brutto)</div>
-    <div class="betrag-val">${bruttoGesamt.toLocaleString("de-DE",{minimumFractionDigits:2})} €</div>
+    <div class="betrag-val">${bruttoGesamt.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</div>
   </div>
   <div class="betrag-meta">
     <div>${a.positionen.length} Position${a.positionen.length===1?"":"en"}</div>
@@ -610,25 +611,25 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
   <tbody>
     ${a.positionen.map((p,i) => istTitel(p) ? `
     <tr><td colspan="6" style="background:#f3f3f3;font-weight:bold">${escapeHtml(titelName(p))}</td>
-      <td style="background:#f3f3f3"><strong>${(tSummen[p.id]||0).toLocaleString("de-DE",{minimumFractionDigits:2})}</strong></td></tr>` : `
+      <td style="background:#f3f3f3"><strong>${(tSummen[p.id]||0).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></td></tr>` : `
     <tr>
       <td>${a.positionen.slice(0, i + 1).filter(x => !istTitel(x)).length}</td>
       <td>${positionsart(p) !== "normal" ? `<em>[${ART_LABEL[positionsart(p)]}${inSumme(p) ? "" : ", nicht in Summe"}]</em> ` : ""}${escapeHtml(String(p.bez).replace(/^\[[^\]]+\]\s*/, ""))}${p.langtext ? `<div style="font-size:8.5pt;color:#555;margin-top:2px">${escapeHtml(p.langtext)}</div>` : ""}</td>
       <td>${(p.menge||0).toLocaleString("de-DE")}</td>
       <td>${escapeHtml(p.einheit)}</td>
-      <td>${(p.ep||0).toLocaleString("de-DE",{minimumFractionDigits:2})}</td>
+      <td>${(p.ep||0).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td>${p.rabatt > 0 ? p.rabatt+"%" : "–"}</td>
-      <td><strong>${gpOf(p).toLocaleString("de-DE",{minimumFractionDigits:2})}</strong></td>
+      <td><strong>${gpOf(p).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></td>
     </tr>`).join("")}
   </tbody>
 </table>
 
 <div class="summen">
-  <div class="summen-row"><span>Nettobetrag</span><span>${netto.toLocaleString("de-DE",{minimumFractionDigits:2})} €</span></div>
-  ${a.rabatt > 0 ? `<div class="summen-row"><span>Rabatt ${a.rabatt}%</span><span>- ${rabattBetrag.toLocaleString("de-DE",{minimumFractionDigits:2})} €</span></div>` : ""}
-  <div class="summen-row"><span>Netto nach Rabatt</span><span>${nettoNachRabatt.toLocaleString("de-DE",{minimumFractionDigits:2})} €</span></div>
-  <div class="summen-row"><span>MwSt. ${a.mwst}%</span><span>${mwstBetrag.toLocaleString("de-DE",{minimumFractionDigits:2})} €</span></div>
-  <div class="summen-row gesamt"><span>Gesamtbetrag</span><span>${bruttoGesamt.toLocaleString("de-DE",{minimumFractionDigits:2})} €</span></div>
+  <div class="summen-row"><span>Nettobetrag</span><span>${netto.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span></div>
+  ${a.rabatt > 0 ? `<div class="summen-row"><span>Rabatt ${a.rabatt}%</span><span>- ${rabattBetrag.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span></div>` : ""}
+  <div class="summen-row"><span>Netto nach Rabatt</span><span>${nettoNachRabatt.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span></div>
+  <div class="summen-row"><span>MwSt. ${a.mwst}%</span><span>${mwstBetrag.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span></div>
+  <div class="summen-row gesamt"><span>Gesamtbetrag</span><span>${bruttoGesamt.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span></div>
 </div>
 
 <div class="footer-text">
@@ -837,27 +838,29 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
         </div>
       </div>
 
-      <div style={{ padding:"16px 14px 100px" }}>
+      <div style={istDesktop ? { padding:"24px 0 48px" } : { padding:"16px 14px 100px" }}>
         {/* Summen-Banner */}
-        <div style={{ background:"#1a1a1a", borderRadius:14, padding:"10px 18px",
-          marginBottom:12, display:"flex", justifyContent:"space-between",
-          alignItems:"center" }}>
-          <div>
-            <div style={{ color:"#888", fontSize:11 }}>Angebotssumme (brutto)</div>
-            <div style={{ color:"#F5C400", fontWeight:900, fontSize:26, marginTop:2 }}>
-              {bruttoGesamt.toLocaleString("de-DE",{minimumFractionDigits:2})} €
+        {(() => {
+          const f = n => n.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          // Desktop: ruhige Summenzeile im Werkplan-Stil; Handy: dunkles Banner wie bisher
+          const d = istDesktop;
+          return (
+            <div style={d ? { background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 20px",
+                marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"flex-end", gap:24 }
+              : { background:"#1a1a1a", borderRadius:14, padding:"10px 18px", marginBottom:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ color: d ? "var(--text2)" : "#888", fontSize: d ? 13 : 11 }}>Angebotssumme (brutto)</div>
+                <div style={d ? { color:"var(--text)", fontFamily:"var(--font-zahl)", fontWeight:500, fontSize:28, lineHeight:"36px", marginTop:4, fontVariantNumeric:"tabular-nums" }
+                  : { color:"#F5C400", fontWeight:900, fontSize:26, marginTop:2 }}>{f(bruttoGesamt)} €</div>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ color: d ? "var(--text2)" : "#888", fontSize: d ? 13 : 11 }}>Netto</div>
+                <div style={{ color: d ? "var(--text)" : "#fff", fontWeight: d ? 500 : 700, fontSize: d ? 16 : 14, fontFamily: d ? "var(--font-zahl)" : undefined }}>{f(netto)} €</div>
+                <div style={{ color: d ? "var(--text2)" : "#888", fontSize: d ? 13 : 11, marginTop:2 }}>MwSt. {f(mwstBetrag)} €</div>
+              </div>
             </div>
-          </div>
-          <div style={{ textAlign:"right" }}>
-            <div style={{ color:"#888", fontSize:11 }}>Netto</div>
-            <div style={{ color:"#fff", fontWeight:700, fontSize:14 }}>
-              {netto.toLocaleString("de-DE",{minimumFractionDigits:2})} €
-            </div>
-            <div style={{ color:"#888", fontSize:11, marginTop:2 }}>
-              MwSt. {mwstBetrag.toLocaleString("de-DE",{minimumFractionDigits:2})} €
-            </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {gesperrt && (
           <div style={{ background:"var(--gbg)", border:"1.5px solid var(--green)", borderRadius:10,
@@ -867,8 +870,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
           </div>
         )}
 
-        {/* Tab-Toggle */}
-        <div style={{ display:"flex", gap:6, marginBottom:10 }}>
+        {/* Tab-Toggle — auf dem Desktop stehen Positionen und Einstellungen nebeneinander */}
+        <div style={{ display: istDesktop ? "none" : "flex", gap:6, marginBottom:10 }}>
           {[["positionen",ClipboardList,"Positionen"],["einstellungen",Settings,"Einstellungen"]].map(([k,Icon,l]) => (
             <button key={k} onClick={() => setAnsicht(k)}
               style={{ flex:1, background: ansicht===k ? "var(--yellow)" : "var(--surface2)",
@@ -880,11 +883,12 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
           ))}
         </div>
 
+        <div style={istDesktop ? { display:"flex", gap:24, alignItems:"flex-start" } : undefined}>
         {/* POSITIONEN */}
-        {ansicht === "positionen" && (
-          <div>
+        {(istDesktop || ansicht === "positionen") && (
+          <div style={istDesktop ? { flex:"2 1 0", minWidth:0 } : undefined}>
             {/* Import-Buttons */}
-            {!gesperrt && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:9 }}>
+            {!gesperrt && <div className="angebot-werkzeuge" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:9 }}>
               <button onClick={() => setVonKI(true)}
                 style={{ background:"var(--ybg)", color:"var(--ydark)",
                   border:"1.5px solid var(--yellow)", borderRadius:10, padding:"9px 0",
@@ -1110,7 +1114,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   onChange={e => updatePos(pos.id, "bez", `── ${e.target.value} ──`)}
                   style={{ ...inputStyle(), flex:1, fontWeight:800, fontSize:13, padding:"7px 9px" }} />
                 <div style={{ color:"var(--text)", fontWeight:800, fontSize:13, whiteSpace:"nowrap" }}>
-                  {(tSummen[pos.id] || 0).toLocaleString("de-DE", { minimumFractionDigits:2 })} €
+                  {(tSummen[pos.id] || 0).toLocaleString("de-DE", { minimumFractionDigits:2, maximumFractionDigits:2 })} €
                 </div>
                 {!gesperrt && (
                   <button onClick={() => removePos(pos.id)} style={{ background:"var(--rbg)", color:"var(--red)", border:"none",
@@ -1226,10 +1230,10 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   {pos.rabatt > 0 && (
                     <span style={{ color:"var(--muted)", fontWeight:600, fontSize:12, marginRight:7,
                       textDecoration:"line-through" }}>
-                      {((pos.menge||0)*(pos.ep||0)).toLocaleString("de-DE",{minimumFractionDigits:2})} €
+                      {((pos.menge||0)*(pos.ep||0)).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €
                     </span>
                   )}
-                  {gpOf(pos).toLocaleString("de-DE", {minimumFractionDigits:2})} €
+                  {gpOf(pos).toLocaleString("de-DE", {minimumFractionDigits:2,maximumFractionDigits:2})} €
                 </div>
                 {(pruefung.jePosition[pos.id]?.ampel === "rot" || pruefung.jePosition[pos.id]?.ampel === "gelb" || pos.ki?.herleitung || pos.ki?.hinweis) && (
                   <div style={{ marginTop:5, fontSize:11.5, lineHeight:1.45 }}>
@@ -1248,8 +1252,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
         )}
 
         {/* EINSTELLUNGEN */}
-        {ansicht === "einstellungen" && (
-          <div>
+        {(istDesktop || ansicht === "einstellungen") && (
+          <div style={istDesktop ? { flex:"1 1 360px", minWidth:320, maxWidth:440, background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:20 } : undefined}>
             {[
               ["Titel","titel","Angebot Bodenplatte"],
               ["Empfänger","empfaenger","Auftraggeber GmbH"],
@@ -1495,6 +1499,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
             </button>
           </div>
         )}
+        </div>
       </div>
 
       <DocxVorschauModal blob={wordBlob} dateiname={("Angebot_"+a.titel.replace(/ /g,"_")+".docx")} eigeneFirma={eigeneFirma} onClose={() => setWordBlob(null)} />

@@ -2,7 +2,10 @@ import React, { useState, useEffect, useRef } from "react";
 import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
   CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight, ChevronLeft,
   Building2, Calendar, Euro, CloudSun, ChartColumn, FileText, Settings,
-  UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree, Archive } from "lucide-react";
+  UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree, Archive,
+  ChartLine, Receipt, Landmark, Wallet } from "lucide-react";
+import { useIstDesktop } from "./hooks/useIstDesktop.js";
+import { DesktopShell } from "./components/DesktopShell.jsx";
 import { useTheme } from "./hooks/useTheme.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { useBackButton } from "./hooks/useBackButton.js";
@@ -57,6 +60,7 @@ const BaustellenAbschlussView = React.lazy(() => import("./views/BaustellenAbsch
 const SimulationView         = React.lazy(() => import("./views/SimulationView.jsx").then(m => ({ default: m.SimulationView })));
 const KostenView             = React.lazy(() => import("./views/KostenView.jsx").then(m => ({ default: m.KostenView })));
 const FinanzenView           = React.lazy(() => import("./views/FinanzenView.jsx").then(m => ({ default: m.FinanzenView })));
+const CockpitView            = React.lazy(() => import("./views/CockpitView.jsx").then(m => ({ default: m.CockpitView })));
 const LohnView               = React.lazy(() => import("./views/LohnView.jsx").then(m => ({ default: m.LohnView })));
 const StundenExportView      = React.lazy(() => import("./views/StundenExportView.jsx").then(m => ({ default: m.StundenExportView })));
 const AngebotView            = React.lazy(() => import("./views/AngebotView.jsx").then(m => ({ default: m.AngebotView })));
@@ -136,6 +140,10 @@ const PROJEKT_SORT_OPTIONEN = [
 export default function PolierApp() {
   const theme   = useTheme();
   const auth    = useAuth();
+  // Ab 1024 px: Desktop-Layout mit Seitenleiste (components/DesktopShell.jsx).
+  const istDesktop = useIstDesktop();
+  // Desktop ohne gewählte Baustelle: "cockpit" oder eine Firmen-Seite (Finanzen, Lohn …)
+  const [desktopSeite, setDesktopSeite] = useState("cockpit");
   const [projekte,      setProjekte]    = useState([]);
   const [projekteLaden, setProjekteLaden] = useState(false);
   const [projekteLadeFehler, setProjekteLadeFehler] = useState("");
@@ -1033,6 +1041,229 @@ export default function PolierApp() {
   }
 
   // ── Home Screen (Baustellen + Firmen) ──
+  // ── Baustellen-Ansicht ──
+  // Rollenbasierte Tabs
+  const ALLE_TABS = [
+    { id:"dashboard",     icon:"📊",  label:"Übersicht",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
+    { id:"aufgaben",      icon:"✅",  label:"Aufgaben",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter","facharbeiter"] },
+    { id:"gantt",         icon:"📅",  label:"Zeitplan",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
+    { id:"kosten",        icon:"💰",  label:"Kosten",      rollen:["administrator","geschaeftsfuehrer"] },
+    { id:"wetter",        icon:"🌤️", label:"Wetter",      rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
+    { id:"kolonnen",      icon:"👷",  label:"Kolonnen",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
+    { id:"tagebuch",      icon:"📋",  label:"Tagebuch",    rollen:["administrator","geschaeftsfuehrer","polier"] },
+    { id:"stempeln",      icon:"⏱️",  label:"Stempeln",    rollen:["administrator","polier","vorarbeiter","facharbeiter"] },
+    { id:"stunden",       icon:"📊",  label:"Stunden",     rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
+    // Monatliche Lohnvorerfassung für das Lohnbüro (views/LohnView.jsx).
+    { id:"lohn",          icon:"💶",  label:"Lohn",        rollen:["administrator","geschaeftsfuehrer","bauleiter"] },
+    { id:"ki_frage",      icon:"💬",  label:"KI fragen",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
+    { id:"simulation",    icon:"🧪",  label:"Simulation",  rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
+    // Polier: erstellt Angebote (v.a. per KI-Assistent) und reicht sie zur
+    // internen Freigabe beim GF ein — versenden darf er erst danach (siehe
+    // interne_freigabe in AngebotEditor.jsx).
+    { id:"angebot",       icon:"📄",  label:"Angebot",     rollen:["administrator","geschaeftsfuehrer","polier"] },
+    { id:"rechnungen",    icon:"🧾",  label:"Rechnungen",  rollen:["administrator","geschaeftsfuehrer"] },
+    // Offene Posten, Eingangsrechnungen, Mahnungen, DATEV (views/FinanzenView.jsx).
+    { id:"finanzen",      icon:"🏦",  label:"Finanzen",    rollen:["administrator","geschaeftsfuehrer"] },
+    // Stunden je LV-Position, Leistungsstand, Soll-Ist und Prognose
+    // (views/LeistungView.jsx, lib/arbeitskalkulation.js).
+    { id:"leistung",      icon:"📊",  label:"Soll-Ist",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
+    // Ein Vorarbeiter führt eine Kolonne, keine ganze Baustelle (siehe
+    // Kommentar bei der vorarbeiter-Rolle weiter unten) — deshalb weder
+    // Abschluss-Button noch Lese-Zugriff auf die Abschlussakte für ihn.
+    { id:"abschluss",     icon:"🗂️",  label:"Abschluss",   rollen:["administrator","geschaeftsfuehrer","polier"] },
+    { id:"admin_params",  icon:"⚙️",  label:"Parameter",   rollen:["administrator"] },
+    { id:"nutzer",        icon:"👥",  label:"Nutzer",      rollen:["administrator"] },
+    // Fehlte bisher komplett in dieser Liste, obwohl ROLLEN.administrator.tabs
+    // (konstanten.js) "firmen" längst als vorgesehenen Tab führt — dadurch
+    // gab es innerhalb einer Baustelle überhaupt keinen Weg zu "Unternehmen"
+    // mehr: homeTab==="firmen" (FirmenView) ist nur auf dem Übersicht-Screen
+    // sichtbar (!aktivId), und nirgends in der App wird aktivId je wieder auf
+    // null gesetzt, um dorthin zurückzukommen — nur der native Zurück-Button
+    // (Browser/Android) tat das zufällig mit, in einer installierten iOS-PWA
+    // ganz ohne Browser-Chrome also faktisch nie.
+    { id:"firmen",        icon:"🏢",  label:"Unternehmen", rollen:["administrator"] },
+    { id:"abwesenheiten", icon:"🌴",  label:"Abwesenheit", rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter","facharbeiter"] },
+    { id:"profil",        icon:"👤",  label:"Mein Profil", rollen:["geschaeftsfuehrer","bauleiter","polier","vorarbeiter","facharbeiter"] },
+  ];
+  const TABS = ALLE_TABS.filter(t => !aktiveRolle || t.rollen.includes(aktiveRolle));
+
+  // ── Navigation gruppieren: Hauptfunktionen sichtbar, Rest unter "Mehr" ──
+  const HAUPT_TAB_IDS = ["dashboard", "aufgaben", "tagebuch", "kolonnen", "stempeln"];
+  let hauptTabs = TABS.filter(t => HAUPT_TAB_IDS.includes(t.id))
+    .sort((a,b) => HAUPT_TAB_IDS.indexOf(a.id) - HAUPT_TAB_IDS.indexOf(b.id));
+  let mehrTabs  = TABS.filter(t => !HAUPT_TAB_IDS.includes(t.id));
+  // Ein "Mehr"-Menü mit nur einem Eintrag ist ein unnötiger Umweg (z.B.
+  // Facharbeiter: dahinter versteckte sich bislang nur "Mein Profil") —
+  // dann direkt in die Hauptleiste zeigen statt hinter einem Tippschritt.
+  if (mehrTabs.length === 1) {
+    hauptTabs = [...hauptTabs, ...mehrTabs];
+    mehrTabs = [];
+  }
+  const aktivInMehr = mehrTabs.some(t => t.id === tab);
+  const TAB_ICONS = { dashboard:LayoutGrid, aufgaben:CircleCheckBig, tagebuch:NotebookPen,
+    kolonnen:Users, stempeln:Clock, gantt:Calendar, kosten:Euro, wetter:CloudSun,
+    stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, firmen:Building2, profil:User, ki_frage:Sparkles, simulation:FlaskConical, abwesenheiten:Palmtree, abschluss:Archive,
+    leistung:ChartLine, rechnungen:Receipt, finanzen:Landmark, lohn:Wallet };
+
+  // Inhalt des aktiven Tabs — von der Handy-Ansicht und vom Desktop-Rahmen genutzt.
+  function tabInhalt() {
+    return (
+      <>
+        {tab === "dashboard" && (
+          <PushBanner erlaubt={push.erlaubt} berechtigung={() => push.berechtigung(auth.session)} />
+        )}
+        {speicherFehler && (
+          <div style={{ background:"var(--rbg)", color:"var(--red)",
+            padding:"9px 16px", marginBottom:10, fontSize:12,
+            border:"1px solid var(--red)", display:"flex",
+            justifyContent:"space-between", alignItems:"center", gap:10 }}>
+            <span>{speicherFehler}</span>
+            <button onClick={() => setSpeicherFehler("")}
+              style={{ background:"none", border:"none", color:"var(--red)",
+                cursor:"pointer", fontSize:15, fontFamily:"inherit", flexShrink:0 }}>✕</button>
+          </div>
+        )}
+        {tab === "dashboard" && <DashboardView aufgaben={felder} kolonnen={kolonnen} sbConnected={sbConnected} projekt={projekt}
+            onEdit={rolleConfig?.kannBearbeiten !== false ? () => setEditProjekt(true) : undefined}
+            onNavigate={(tabId, filter) => {
+              if (filter) setAufgabenFilter(filter);
+              else setAufgabenFilter("alle");
+              setTab(tabId);
+            }} />}
+        <React.Suspense fallback={<TabLadeFallback />}>
+        {tab === "gantt"     && <GanttView felder={felder}
+            onAufgabeKlick={id => { setAufgabenEditId(id); setAufgabenFilter("alle"); setTab("aufgaben"); }} />}
+        {tab === "wetter"    && <WeatherView ort={projekt?.ort} plz={projekt?.plz} projektId={projekt?.id} />}
+        {tab === "kolonnen"  && <KolonnenView kolonnen={kolonnen} projekt={projekt} subs={subs} setKolonnen={setKolonnen}
+            darfBearbeiten={rolleConfig?.kannBearbeiten !== false}
+            kannKolonneLoeschen={rolleConfig?.kannKolonneLoeschen === true}
+            profil={aktiveProfil} session={auth.session} />}
+        {tab === "tagebuch"  && <TagesbuchView
+            berichte={berichte} setBerichte={setBerichte} sbConnected={sbConnected}
+            projekt={projekt} eigeneFirma={eigeneFirma} kolonnen={kolonnen}
+            zeitbuchungen={zeitbuchungen}
+            tagebuchVorlage={tagebuchVorlage}
+            offlineSpeichern={offline.speichereOffline}
+            aufgaben={felder} setAufgaben={setFelder}
+            session={auth.session}
+            onNavigate={(tabId, filter) => {
+              if (filter) setAufgabenFilter(filter);
+              else setAufgabenFilter("alle");
+              setTab(tabId);
+            }}
+          />}
+        {tab === "aufgaben"      && <AufgabenView aufgaben={felder} setAufgaben={setFelder} kolonnen={kolonnen} sbConnected={sbConnected} darfBearbeiten={rolleConfig?.kannAufgabenBearbeiten !== false} initialFilter={aufgabenFilter}
+            initialEditId={aufgabenEditId}
+            kannVorschlagen={["facharbeiter","vorarbeiter"].includes(aktiveRolle)}
+            darfEntscheiden={["administrator","polier","bauleiter"].includes(aktiveRolle)}
+            onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}
+            zeitbuchungen={zeitbuchungen} projekt={projekt}
+            session={auth.session} firmaId={firma?.id} profil={aktiveProfil} />}
+        {/* key={projekt?.id}: KostenView hält Budget-Positionen/Stundensatz
+            in lokalem State, initialisiert nur aus dem projekt-Prop beim
+            ersten Mount — ohne key blieb beim Wechsel der Baustelle (ohne
+            Tab-Wechsel weg von "kosten") der Stand der vorherigen Baustelle
+            stehen, "Speichern" hätte dann sogar das falsche Projekt
+            überschrieben. Der key erzwingt einen frischen Mount pro Baustelle. */}
+        {tab === "kosten"        && <KostenView key={projekt?.id} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} angebote={angebote} kalkulationspreise={kalkulationspreise} baufortschritt={baufortschritt} stammpositionen={stammpositionen} setStammpositionen={stammpositionenStatus === "ok" ? setStammpositionen : null} istAdmin={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
+        {tab === "stempeln"      && <StempeluhrView profil={aktiveProfil}
+            projekte={aktiveProfil?.kolonne_id
+              ? projekte.filter(p => (p.kolonnen||[]).some(k => k.id === aktiveProfil.kolonne_id)).length > 0
+                ? projekte.filter(p => (p.kolonnen||[]).some(k => k.id === aktiveProfil.kolonne_id))
+                : projekte
+              : projekte}
+            session={auth.session} kolonnen={kolonnen} aufgaben={felder} />}
+        {tab === "stunden"       && <StundenExportView profil={aktiveProfil} session={auth.session} projekte={projekte} eigeneFirma={eigeneFirma}
+            // darfAlleSehen steuert hier nur die Mitarbeiter-Filter-Anzeige
+            // innerhalb der bereits per RLS eingeschränkten Treffermenge —
+            // bei Vorarbeiter ist das durch die zeitbuchungen-Policy schon
+            // auf die eigene Kolonne begrenzt, "alle" heißt für ihn also
+            // "alle aus seiner Kolonne", nicht firmenweit.
+            darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
+        {tab === "finanzen"      && <FinanzenView session={auth.session} firmaId={firma?.id} projekte={projekte} eigeneFirma={eigeneFirma} datevEinstellungen={kalkulationsgrundlagen?.datev} />}
+        {tab === "lohn"          && <LohnView session={auth.session} firmaId={firma?.id} projekte={projekte} einstellungen={lohnEinstellungen}
+            setEinstellungen={setLohnEinstellungen} status={lohnEinstellungenStatus} darfEinstellen={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} />}
+        {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
+        {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
+        {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
+        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} stammpositionen={stammpositionen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} rolle={aktiveRolle} angebotRegeln={angebotRegeln} kalkulationsgrundlagen={kalkulationsgrundlagen} onTerminplanErzeugen={aufgabenAusKalkulationAnlegen} co2Faktoren={co2Faktoren || []} session={auth.session} />}
+        {tab === "leistung"      && <LeistungView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} zeitbuchungen={zeitbuchungen} kalkulationspreise={kalkulationspreise} onBaufortschrittSpeichern={baufortschrittSpeichern} stammpositionen={stammpositionen} setStammpositionen={stammpositionenStatus === "ok" ? setStammpositionen : null} istAdmin={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} session={auth.session} />}
+        {tab === "rechnungen"    && <RechnungenView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} rechnungen={rechnungen} rechnungBestaetigungen={rechnungBestaetigungen} eigeneFirma={eigeneFirma} onBaufortschrittSpeichern={baufortschrittSpeichern} onRechnungSpeichern={rechnungSpeichern} onRechnungLoeschen={rechnungLoeschen} profil={aktiveProfil} datevEinstellungen={kalkulationsgrundlagen?.datev} />}
+        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} standardZuschlaege={standardZuschlaege} setStandardZuschlaege={setStandardZuschlaege} stammpositionen={stammpositionen} setStammpositionen={setStammpositionen} stammpositionenStatus={stammpositionenStatus} angebotRegeln={angebotRegeln} setAngebotRegeln={setAngebotRegeln} angebotRegelnStatus={angebotRegelnStatus} kalkulationsgrundlagen={kalkulationsgrundlagen || LEERE_GRUNDLAGEN} setKalkulationsgrundlagen={grundlagenAendern} kalkulationsgrundlagenStatus={kalkulationsgrundlagenStatus} co2Faktoren={co2Faktoren || []} setCo2Faktoren={setCo2Faktoren} co2FaktorenStatus={co2FaktorenStatus} session={auth.session} />}
+        {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
+        {tab === "firmen"       && <FirmenView owneFirma={eigeneFirma} setEigeneFirma={setEigeneFirma} subs={subs} setSubs={setSubs}
+            onOnboardingReset={() => setOnboardingDone(false)} session={auth.session} firmaId={firma?.id} firma={firma} projekte={projekte} />}
+        {tab === "profil"       && <MeinProfilView profil={aktiveProfil} session={auth.session} onProfilAktualisiert={auth.profilAktualisieren} pinPflicht={!!firma?.pin_pflicht} />}
+        {tab === "abwesenheiten" && <AbwesenheitenView session={auth.session} profil={aktiveProfil} />}
+        </React.Suspense>
+      </>
+    );
+  }
+
+  // ── Desktop-Rahmen (ab 1024 px) ──
+  // Seitenleiste statt Aktenregister und unterer Leiste. Ohne gewählte Baustelle
+  // zeigt der Inhalt das Cockpit oder eine Firmen-Seite (desktopSeite).
+  if (istDesktop && !editProjekt && !neuProjekt) {
+    const FIRMEN_IDS = ["finanzen", "lohn", "stunden", "admin_params", "nutzer", "firmen", "abwesenheiten", "profil"];
+    const BAUSTELLE_IDS = projekt?.archiviert ? ["abschluss"]
+      : ["dashboard", "aufgaben", "gantt", "tagebuch", "kolonnen", "wetter", "stempeln", "ki_frage", "simulation", "abschluss"];
+    const KAUF_IDS = projekt?.archiviert ? [] : ["angebot", "leistung", "kosten", "rechnungen"];
+    const LABEL = { dashboard: "Übersicht", admin_params: "Parameter", leistung: "Leistung & Soll-Ist" };
+    const erlaubt = id => TABS.some(t => t.id === id);
+    const eintrag = id => ({ id, label: LABEL[id] || ALLE_TABS.find(t => t.id === id)?.label || id, Icon: TAB_ICONS[id],
+      gesperrt: !aktivId && !FIRMEN_IDS.includes(id) });
+    const gruppen = [
+      { titel: "Baustelle", erste: true, eintraege: BAUSTELLE_IDS.filter(erlaubt).map(eintrag) },
+      { titel: "Kaufmännisch", eintraege: KAUF_IDS.filter(erlaubt).map(eintrag) },
+      { titel: "Firma", eintraege: [...FIRMEN_IDS.filter(erlaubt).map(eintrag), { id: "archiv", label: "Archiv", Icon: Archive }] },
+    ].filter(g => g.eintraege.length);
+    const seite = aktivId ? tab : desktopSeite;
+    const waehlen = id => {
+      if (id === "cockpit" || id === "archiv") { setAktivId(null); setDesktopSeite(id); return; }
+      setTab(id);
+      if (!aktivId) setDesktopSeite(id);
+    };
+    const projektWaehlen = id => {
+      if (!id) { setAktivId(null); setDesktopSeite("cockpit"); return; }
+      const p = projekte.find(x => String(x.id) === String(id));
+      if (!p) return;
+      setAktivId(p.id);
+      if (!tab || FIRMEN_IDS.includes(tab)) setTab("dashboard");
+    };
+    const oeffnen = (id, tabId) => {
+      if (id == null) { setTab(tabId); setDesktopSeite(tabId); setAktivId(null); return; }
+      const p = projekte.find(x => String(x.id) === String(id));
+      if (p) { setAktivId(p.id); setTab(tabId || "dashboard"); }
+    };
+    const jetzt = new Date();
+    const kw = (() => { const d = new Date(Date.UTC(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate())); const t = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - t); return Math.ceil(((d - new Date(Date.UTC(d.getUTCFullYear(), 0, 1))) / 86400000 + 1) / 7); })();
+    const seitenLabel = seite === "cockpit" ? "Cockpit" : seite === "archiv" ? "Archiv" : eintrag(seite).label;
+    const untertitel = seite === "cockpit"
+      ? `${jetzt.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · KW ${kw}`
+      : aktivId && !FIRMEN_IDS.includes(seite) && projekt ? [projekt.name, projekt.projektnummer].filter(Boolean).join(" · ") : null;
+    return (
+      <>
+        <DesktopShell
+          titel={seitenLabel} untertitel={untertitel} aktiv={seite} onWaehlen={waehlen} gruppen={gruppen}
+          projekte={projekte.filter(p => !p.archiviert)} aktivProjektId={aktivId} onProjektWaehlen={projektWaehlen}
+          onNeuesProjekt={rolleConfig?.kannBearbeiten !== false ? () => setNeuProjekt(true) : null}
+          firmenName={eigeneFirma?.name || firma?.name} rolleLabel={ROLLEN[aktiveRolle]?.label}
+          nutzerName={[aktiveProfil?.vorname, aktiveProfil?.nachname].filter(Boolean).join(" ")}
+          dark={theme.dark} onThemeWechsel={theme.toggle} onAbmelden={abmelden} verbunden={sbConnected}
+          aktionen={null}>
+          <PlanGuard firma={firma} ressource="app" rolle={aktiveRolle} session={auth.session}>
+            <React.Suspense fallback={<TabLadeFallback />}>
+              {!aktivId && seite === "cockpit" && <CockpitView session={auth.session} projekte={projekte} kalkulationspreise={kalkulationspreise} onProjektOeffnen={oeffnen} />}
+              {!aktivId && seite === "archiv" && <ArchivView firmaId={firma?.id} session={auth.session} onOeffnen={archivProjektOeffnen} />}
+              {(aktivId || FIRMEN_IDS.includes(seite)) && tabInhalt()}
+            </React.Suspense>
+          </PlanGuard>
+        </DesktopShell>
+      </>
+    );
+  }
+
   if (!aktivId) {
 
     // Baustelle anlegen → direkt Formular zeigen
@@ -1350,68 +1581,6 @@ export default function PolierApp() {
     );
   }
 
-  // ── Baustellen-Ansicht ──
-  // Rollenbasierte Tabs
-  const ALLE_TABS = [
-    { id:"dashboard",     icon:"📊",  label:"Übersicht",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
-    { id:"aufgaben",      icon:"✅",  label:"Aufgaben",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter","facharbeiter"] },
-    { id:"gantt",         icon:"📅",  label:"Zeitplan",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
-    { id:"kosten",        icon:"💰",  label:"Kosten",      rollen:["administrator","geschaeftsfuehrer"] },
-    { id:"wetter",        icon:"🌤️", label:"Wetter",      rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
-    { id:"kolonnen",      icon:"👷",  label:"Kolonnen",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
-    { id:"tagebuch",      icon:"📋",  label:"Tagebuch",    rollen:["administrator","geschaeftsfuehrer","polier"] },
-    { id:"stempeln",      icon:"⏱️",  label:"Stempeln",    rollen:["administrator","polier","vorarbeiter","facharbeiter"] },
-    { id:"stunden",       icon:"📊",  label:"Stunden",     rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
-    // Monatliche Lohnvorerfassung für das Lohnbüro (views/LohnView.jsx).
-    { id:"lohn",          icon:"💶",  label:"Lohn",        rollen:["administrator","geschaeftsfuehrer","bauleiter"] },
-    { id:"ki_frage",      icon:"💬",  label:"KI fragen",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
-    { id:"simulation",    icon:"🧪",  label:"Simulation",  rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
-    // Polier: erstellt Angebote (v.a. per KI-Assistent) und reicht sie zur
-    // internen Freigabe beim GF ein — versenden darf er erst danach (siehe
-    // interne_freigabe in AngebotEditor.jsx).
-    { id:"angebot",       icon:"📄",  label:"Angebot",     rollen:["administrator","geschaeftsfuehrer","polier"] },
-    { id:"rechnungen",    icon:"🧾",  label:"Rechnungen",  rollen:["administrator","geschaeftsfuehrer"] },
-    // Offene Posten, Eingangsrechnungen, Mahnungen, DATEV (views/FinanzenView.jsx).
-    { id:"finanzen",      icon:"🏦",  label:"Finanzen",    rollen:["administrator","geschaeftsfuehrer"] },
-    // Stunden je LV-Position, Leistungsstand, Soll-Ist und Prognose
-    // (views/LeistungView.jsx, lib/arbeitskalkulation.js).
-    { id:"leistung",      icon:"📊",  label:"Soll-Ist",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
-    // Ein Vorarbeiter führt eine Kolonne, keine ganze Baustelle (siehe
-    // Kommentar bei der vorarbeiter-Rolle weiter unten) — deshalb weder
-    // Abschluss-Button noch Lese-Zugriff auf die Abschlussakte für ihn.
-    { id:"abschluss",     icon:"🗂️",  label:"Abschluss",   rollen:["administrator","geschaeftsfuehrer","polier"] },
-    { id:"admin_params",  icon:"⚙️",  label:"Parameter",   rollen:["administrator"] },
-    { id:"nutzer",        icon:"👥",  label:"Nutzer",      rollen:["administrator"] },
-    // Fehlte bisher komplett in dieser Liste, obwohl ROLLEN.administrator.tabs
-    // (konstanten.js) "firmen" längst als vorgesehenen Tab führt — dadurch
-    // gab es innerhalb einer Baustelle überhaupt keinen Weg zu "Unternehmen"
-    // mehr: homeTab==="firmen" (FirmenView) ist nur auf dem Übersicht-Screen
-    // sichtbar (!aktivId), und nirgends in der App wird aktivId je wieder auf
-    // null gesetzt, um dorthin zurückzukommen — nur der native Zurück-Button
-    // (Browser/Android) tat das zufällig mit, in einer installierten iOS-PWA
-    // ganz ohne Browser-Chrome also faktisch nie.
-    { id:"firmen",        icon:"🏢",  label:"Unternehmen", rollen:["administrator"] },
-    { id:"abwesenheiten", icon:"🌴",  label:"Abwesenheit", rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter","facharbeiter"] },
-    { id:"profil",        icon:"👤",  label:"Mein Profil", rollen:["geschaeftsfuehrer","bauleiter","polier","vorarbeiter","facharbeiter"] },
-  ];
-  const TABS = ALLE_TABS.filter(t => !aktiveRolle || t.rollen.includes(aktiveRolle));
-
-  // ── Navigation gruppieren: Hauptfunktionen sichtbar, Rest unter "Mehr" ──
-  const HAUPT_TAB_IDS = ["dashboard", "aufgaben", "tagebuch", "kolonnen", "stempeln"];
-  let hauptTabs = TABS.filter(t => HAUPT_TAB_IDS.includes(t.id))
-    .sort((a,b) => HAUPT_TAB_IDS.indexOf(a.id) - HAUPT_TAB_IDS.indexOf(b.id));
-  let mehrTabs  = TABS.filter(t => !HAUPT_TAB_IDS.includes(t.id));
-  // Ein "Mehr"-Menü mit nur einem Eintrag ist ein unnötiger Umweg (z.B.
-  // Facharbeiter: dahinter versteckte sich bislang nur "Mein Profil") —
-  // dann direkt in die Hauptleiste zeigen statt hinter einem Tippschritt.
-  if (mehrTabs.length === 1) {
-    hauptTabs = [...hauptTabs, ...mehrTabs];
-    mehrTabs = [];
-  }
-  const aktivInMehr = mehrTabs.some(t => t.id === tab);
-  const TAB_ICONS = { dashboard:LayoutGrid, aufgaben:CircleCheckBig, tagebuch:NotebookPen,
-    kolonnen:Users, stempeln:Clock, gantt:Calendar, kosten:Euro, wetter:CloudSun,
-    stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, firmen:Building2, profil:User, ki_frage:Sparkles, simulation:FlaskConical, abwesenheiten:Palmtree, abschluss:Archive };
 
   return (
     // position:fixed auf html/body war der Bug (siehe theme.css) — aber
@@ -1480,93 +1649,7 @@ export default function PolierApp() {
       <div style={{ padding:"16px 14px 20px", background:"var(--bg)",
         flex:"1 1 0", minHeight:0, overflowY:"auto", WebkitOverflowScrolling:"touch",
         overscrollBehaviorY:"contain" }}>
-        {tab === "dashboard" && (
-          <PushBanner erlaubt={push.erlaubt} berechtigung={() => push.berechtigung(auth.session)} />
-        )}
-        {speicherFehler && (
-          <div style={{ background:"var(--rbg)", color:"var(--red)",
-            padding:"9px 16px", marginBottom:10, fontSize:12,
-            border:"1px solid var(--red)", display:"flex",
-            justifyContent:"space-between", alignItems:"center", gap:10 }}>
-            <span>{speicherFehler}</span>
-            <button onClick={() => setSpeicherFehler("")}
-              style={{ background:"none", border:"none", color:"var(--red)",
-                cursor:"pointer", fontSize:15, fontFamily:"inherit", flexShrink:0 }}>✕</button>
-          </div>
-        )}
-        {tab === "dashboard" && <DashboardView aufgaben={felder} kolonnen={kolonnen} sbConnected={sbConnected} projekt={projekt}
-            onEdit={rolleConfig?.kannBearbeiten !== false ? () => setEditProjekt(true) : undefined}
-            onNavigate={(tabId, filter) => {
-              if (filter) setAufgabenFilter(filter);
-              else setAufgabenFilter("alle");
-              setTab(tabId);
-            }} />}
-        <React.Suspense fallback={<TabLadeFallback />}>
-        {tab === "gantt"     && <GanttView felder={felder}
-            onAufgabeKlick={id => { setAufgabenEditId(id); setAufgabenFilter("alle"); setTab("aufgaben"); }} />}
-        {tab === "wetter"    && <WeatherView ort={projekt?.ort} plz={projekt?.plz} projektId={projekt?.id} />}
-        {tab === "kolonnen"  && <KolonnenView kolonnen={kolonnen} projekt={projekt} subs={subs} setKolonnen={setKolonnen}
-            darfBearbeiten={rolleConfig?.kannBearbeiten !== false}
-            kannKolonneLoeschen={rolleConfig?.kannKolonneLoeschen === true}
-            profil={aktiveProfil} session={auth.session} />}
-        {tab === "tagebuch"  && <TagesbuchView
-            berichte={berichte} setBerichte={setBerichte} sbConnected={sbConnected}
-            projekt={projekt} eigeneFirma={eigeneFirma} kolonnen={kolonnen}
-            zeitbuchungen={zeitbuchungen}
-            tagebuchVorlage={tagebuchVorlage}
-            offlineSpeichern={offline.speichereOffline}
-            aufgaben={felder} setAufgaben={setFelder}
-            session={auth.session}
-            onNavigate={(tabId, filter) => {
-              if (filter) setAufgabenFilter(filter);
-              else setAufgabenFilter("alle");
-              setTab(tabId);
-            }}
-          />}
-        {tab === "aufgaben"      && <AufgabenView aufgaben={felder} setAufgaben={setFelder} kolonnen={kolonnen} sbConnected={sbConnected} darfBearbeiten={rolleConfig?.kannAufgabenBearbeiten !== false} initialFilter={aufgabenFilter}
-            initialEditId={aufgabenEditId}
-            kannVorschlagen={["facharbeiter","vorarbeiter"].includes(aktiveRolle)}
-            darfEntscheiden={["administrator","polier","bauleiter"].includes(aktiveRolle)}
-            onVorschlagen={aufgabeVorschlagen} onEntscheiden={aufgabeEntscheiden}
-            zeitbuchungen={zeitbuchungen} projekt={projekt}
-            session={auth.session} firmaId={firma?.id} profil={aktiveProfil} />}
-        {/* key={projekt?.id}: KostenView hält Budget-Positionen/Stundensatz
-            in lokalem State, initialisiert nur aus dem projekt-Prop beim
-            ersten Mount — ohne key blieb beim Wechsel der Baustelle (ohne
-            Tab-Wechsel weg von "kosten") der Stand der vorherigen Baustelle
-            stehen, "Speichern" hätte dann sogar das falsche Projekt
-            überschrieben. Der key erzwingt einen frischen Mount pro Baustelle. */}
-        {tab === "kosten"        && <KostenView key={projekt?.id} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} angebote={angebote} kalkulationspreise={kalkulationspreise} baufortschritt={baufortschritt} stammpositionen={stammpositionen} setStammpositionen={stammpositionenStatus === "ok" ? setStammpositionen : null} istAdmin={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
-        {tab === "stempeln"      && <StempeluhrView profil={aktiveProfil}
-            projekte={aktiveProfil?.kolonne_id
-              ? projekte.filter(p => (p.kolonnen||[]).some(k => k.id === aktiveProfil.kolonne_id)).length > 0
-                ? projekte.filter(p => (p.kolonnen||[]).some(k => k.id === aktiveProfil.kolonne_id))
-                : projekte
-              : projekte}
-            session={auth.session} kolonnen={kolonnen} aufgaben={felder} />}
-        {tab === "stunden"       && <StundenExportView profil={aktiveProfil} session={auth.session} projekte={projekte} eigeneFirma={eigeneFirma}
-            // darfAlleSehen steuert hier nur die Mitarbeiter-Filter-Anzeige
-            // innerhalb der bereits per RLS eingeschränkten Treffermenge —
-            // bei Vorarbeiter ist das durch die zeitbuchungen-Policy schon
-            // auf die eigene Kolonne begrenzt, "alle" heißt für ihn also
-            // "alle aus seiner Kolonne", nicht firmenweit.
-            darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
-        {tab === "finanzen"      && <FinanzenView session={auth.session} firmaId={firma?.id} projekte={projekte} eigeneFirma={eigeneFirma} datevEinstellungen={kalkulationsgrundlagen?.datev} />}
-        {tab === "lohn"          && <LohnView session={auth.session} firmaId={firma?.id} projekte={projekte} einstellungen={lohnEinstellungen}
-            setEinstellungen={setLohnEinstellungen} status={lohnEinstellungenStatus} darfEinstellen={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} />}
-        {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
-        {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
-        {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
-        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} stammpositionen={stammpositionen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} rolle={aktiveRolle} angebotRegeln={angebotRegeln} kalkulationsgrundlagen={kalkulationsgrundlagen} onTerminplanErzeugen={aufgabenAusKalkulationAnlegen} co2Faktoren={co2Faktoren || []} session={auth.session} />}
-        {tab === "leistung"      && <LeistungView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} zeitbuchungen={zeitbuchungen} kalkulationspreise={kalkulationspreise} onBaufortschrittSpeichern={baufortschrittSpeichern} stammpositionen={stammpositionen} setStammpositionen={stammpositionenStatus === "ok" ? setStammpositionen : null} istAdmin={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} session={auth.session} />}
-        {tab === "rechnungen"    && <RechnungenView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} rechnungen={rechnungen} rechnungBestaetigungen={rechnungBestaetigungen} eigeneFirma={eigeneFirma} onBaufortschrittSpeichern={baufortschrittSpeichern} onRechnungSpeichern={rechnungSpeichern} onRechnungLoeschen={rechnungLoeschen} profil={aktiveProfil} datevEinstellungen={kalkulationsgrundlagen?.datev} />}
-        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} standardZuschlaege={standardZuschlaege} setStandardZuschlaege={setStandardZuschlaege} stammpositionen={stammpositionen} setStammpositionen={setStammpositionen} stammpositionenStatus={stammpositionenStatus} angebotRegeln={angebotRegeln} setAngebotRegeln={setAngebotRegeln} angebotRegelnStatus={angebotRegelnStatus} kalkulationsgrundlagen={kalkulationsgrundlagen || LEERE_GRUNDLAGEN} setKalkulationsgrundlagen={grundlagenAendern} kalkulationsgrundlagenStatus={kalkulationsgrundlagenStatus} co2Faktoren={co2Faktoren || []} setCo2Faktoren={setCo2Faktoren} co2FaktorenStatus={co2FaktorenStatus} session={auth.session} />}
-        {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
-        {tab === "firmen"       && <FirmenView owneFirma={eigeneFirma} setEigeneFirma={setEigeneFirma} subs={subs} setSubs={setSubs}
-            onOnboardingReset={() => setOnboardingDone(false)} session={auth.session} firmaId={firma?.id} firma={firma} projekte={projekte} />}
-        {tab === "profil"       && <MeinProfilView profil={aktiveProfil} session={auth.session} onProfilAktualisiert={auth.profilAktualisieren} pinPflicht={!!firma?.pin_pflicht} />}
-        {tab === "abwesenheiten" && <AbwesenheitenView session={auth.session} profil={aktiveProfil} />}
-        </React.Suspense>
+        {tabInhalt()}
       </div>
       </PlanGuard>
 

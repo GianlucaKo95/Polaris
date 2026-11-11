@@ -526,7 +526,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
                   padding:"3px 0", borderBottom:"1px solid var(--border)",
                   display:"flex", justifyContent:"space-between", gap:8 }}>
                   <span>{pos.bez} · {pos.einheit}</span>
-                  {pos.ep > 0 && <span style={{ flexShrink:0 }}>{pos.ep.toLocaleString("de-DE",{minimumFractionDigits:2})} €</span>}
+                  {pos.ep > 0 && <span style={{ flexShrink:0 }}>{pos.ep.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span>}
                 </div>
               ))}
             </div>
