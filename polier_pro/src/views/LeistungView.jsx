@@ -5,6 +5,7 @@ import { sollIstJePosition, faktorenJeStammposition } from "../lib/arbeitskalkul
 import { zeitansaetzeAnpassen } from "../lib/nachkalkulation.js";
 import { istTitel } from "../lib/lv.js";
 import { inputStyle } from "../components/Label.jsx";
+import { AbschnittMengen } from "../components/AbschnittMengen.jsx";
 
 const h = n => (n || 0).toLocaleString("de-DE", { maximumFractionDigits: 1 });
 const euro = n => `${Math.round(n || 0).toLocaleString("de-DE")} €`;
@@ -79,6 +80,9 @@ export function LeistungView({ projekt, angebote = [], baufortschritt = [], zeit
           <TriangleAlert size={14} style={{ flexShrink:0, marginTop:1 }} /> Tabelle stunden_positionen fehlt — bitte supabase-kalkulation.sql ausführen.
         </div>
       )}
+
+      <AbschnittMengen projekt={projekt} auftraege={auftraege} baufortschritt={baufortschritt}
+        onBaufortschrittSpeichern={onBaufortschrittSpeichern} session={session} />
 
       {/* Soll-Ist-Übersicht */}
       <div style={{ background:"var(--surface)", border:"1.5px solid var(--border)", borderRadius:14, padding:12, marginBottom:12 }}>

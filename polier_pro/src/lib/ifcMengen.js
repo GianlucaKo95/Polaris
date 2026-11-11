@@ -65,29 +65,70 @@ export function mengenAlsText(gruppen, dateiname = "") {
 // aus dem web-ifc-Modul (die Nummern kommen aus dem IFC-Schema).
 export async function ifcElementeLesen(api, modelID, typen) {
   const elemente = [];
+  const einheiten = ifcEinheiten(api, modelID, typen);
   for (const [name, typNr] of Object.entries(typen)) {
     if (!BAUTEILARTEN[name]) continue;
     const ids = api.GetLineIDsWithType(modelID, typNr);
     for (let i = 0; i < ids.size(); i++) {
       const id = ids.get(i);
-      const mengen = {};
-      const sets = await api.properties.getPropertySets(modelID, id, true);
-      for (const s of sets || []) {
-        for (const q of s?.Quantities || []) {
-          const n = q?.Name?.value;
-          const wert = q?.AreaValue?.value ?? q?.VolumeValue?.value ?? q?.LengthValue?.value ?? q?.CountValue?.value;
-          if (n && Number.isFinite(Number(wert))) mengen[n] = Number(wert);
-        }
-      }
-      let material = "";
-      try {
-        const mats = await api.properties.getMaterialsProperties(modelID, id, true);
-        const m = mats?.[0];
-        material = m?.Name?.value || m?.ForLayerSet?.MaterialLayers?.[0]?.Material?.Name?.value
-          || m?.MaterialLayers?.[0]?.Material?.Name?.value || "";
-      } catch { /* Material optional */ }
-      elemente.push({ typ: name, material, mengen });
+      elemente.push({ typ: name, id, ...(await mengenUndMaterial(api, modelID, id, einheiten)) });
     }
   }
   return elemente;
+}
+
+// Mengenangaben (IfcElementQuantity) und erstes Material eines Bauteils.
+// einheiten: Umrechnungsfaktoren auf m / m² / m³ (siehe ifcEinheiten()).
+export async function mengenUndMaterial(api, modelID, id, einheiten = { laenge: 1, flaeche: 1, volumen: 1 }) {
+  const mengen = {};
+  const sets = await api.properties.getPropertySets(modelID, id, true);
+  for (const s of sets || []) {
+    for (const q of s?.Quantities || []) {
+      const n = q?.Name?.value;
+      const wert = q?.AreaValue?.value != null ? q.AreaValue.value * einheiten.flaeche
+        : q?.VolumeValue?.value != null ? q.VolumeValue.value * einheiten.volumen
+        : q?.LengthValue?.value != null ? q.LengthValue.value * einheiten.laenge
+        : q?.CountValue?.value;
+      if (n && Number.isFinite(Number(wert))) mengen[n] = Number(wert);
+    }
+  }
+  let material = "";
+  try {
+    const mats = await api.properties.getMaterialsProperties(modelID, id, true);
+    const m = mats?.[0];
+    material = m?.Name?.value || m?.ForLayerSet?.MaterialLayers?.[0]?.Material?.Name?.value
+      || m?.MaterialLayers?.[0]?.Material?.Name?.value || "";
+  } catch { /* Material optional */ }
+  return { mengen, material };
+}
+
+// Eine Fläche, ein Volumen, eine Länge je Bauteil (Netto vor Brutto).
+export function hauptmengen(mengen) {
+  return { flaeche: erster(mengen || {}, FLAECHE), volumen: erster(mengen || {}, VOLUMEN), laenge: erster(mengen || {}, LAENGE) };
+}
+
+// Projekteinheiten (IfcUnitAssignment): Faktor auf m, m², m³. Fehlt die
+// Flächen-/Volumeneinheit, gilt m² bzw. m³ (so exportieren Revit, Archicad,
+// Allplan die Basismengen auch in mm-Projekten).
+const SI_PREFIX = { EXA: 1e18, PETA: 1e15, TERA: 1e12, GIGA: 1e9, MEGA: 1e6, KILO: 1e3, HECTO: 1e2, DECA: 10,
+  DECI: 1e-1, CENTI: 1e-2, MILLI: 1e-3, MICRO: 1e-6, NANO: 1e-9 };
+export function ifcEinheiten(api, modelID, typen) {
+  const e = { laenge: 1, flaeche: 1, volumen: 1 };
+  let unitIds = [];
+  try {
+    const projekte = api.GetLineIDsWithType(modelID, typen.IFCPROJECT);
+    const projekt = projekte.size() ? api.GetLine(modelID, projekte.get(0), false) : null;
+    const zuordnung = projekt?.UnitsInContext?.value ? api.GetLine(modelID, projekt.UnitsInContext.value, false) : null;
+    unitIds = (zuordnung?.Units || []).map(u => u.value).filter(Boolean);
+  } catch { /* ohne Projekt: Standard */ }
+  for (const id of unitIds) {
+    const u = api.GetLine(modelID, id, false);
+    if (u?.type !== typen.IFCSIUNIT) continue;
+    const art = u?.UnitType?.value, pre = u?.Prefix?.value;
+    const f = pre ? SI_PREFIX[pre] ?? 1 : 1;
+    if (art === "LENGTHUNIT") e.laenge = f;
+    if (art === "AREAUNIT") e.flaeche = f * f;
+    if (art === "VOLUMEUNIT") e.volumen = f * f * f;
+  }
+  return e;
 }

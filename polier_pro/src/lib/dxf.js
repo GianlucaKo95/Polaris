@@ -284,7 +284,9 @@ export function dxfPolygonArea(pts) {
   return Math.abs(a / 2);
 }
 
-export function parseDXFFlaechen(dxfText) {
+// Alle Entitäten der Zeichnung: POLYLINE-Vertices eingesammelt, Blöcke
+// (INSERT) aufgelöst. Grundlage für Flächen und Achsraster.
+export function dxfEntitaetenLesen(dxfText) {
   const tokens   = dxfTokenize(dxfText);
   const sections = dxfSplitSections(tokens);
 
@@ -351,6 +353,11 @@ export function parseDXFFlaechen(dxfText) {
   // (transformierte) Geometrie zurück. Direkte Entitäten kombinieren wir separat.
   const blockGeometrie = dxfResolveInserts(entities, blockDefs);
   const allEntities = entities.filter(e => e.type !== "INSERT").concat(blockGeometrie);
+  return allEntities;
+}
+
+export function parseDXFFlaechen(dxfText) {
+  const allEntities = dxfEntitaetenLesen(dxfText);
 
   // ── Geometrie extrahieren ──
   const closedPolygons = []; // { points, layer, source }
@@ -405,4 +412,22 @@ export function parseDXFFlaechen(dxfText) {
   }
 
   return results;
+}
+
+// Für die Achsabschnitts-Auswertung (lib/achsraster.js → dxfRasterAuswerten):
+// Linien (mit Layer), Texte/Attribute mit Einfügepunkt, geschlossene Flächen.
+export function dxfObjekteLesen(dxfText) {
+  const linien = [], texte = [], flaechen = [];
+  for (const e of dxfEntitaetenLesen(dxfText)) {
+    if (["TEXT", "MTEXT", "ATTRIB"].includes(e.type) && e.tags) {
+      const text = [dxfGetAll(e.tags, 3).join(""), dxfGet(e.tags, 1, "")].join("");
+      texte.push({ text, x: dxfGetNum(e.tags, 10, 0), y: dxfGetNum(e.tags, 20, 0) });
+      continue;
+    }
+    const geo = e.__precomputed || dxfEntityToPolyline(e);
+    if (!geo || geo.points.length < 2) continue;
+    if (geo.type === "LINE" || (geo.points.length === 2 && !geo.closed)) linien.push({ layer: geo.layer, p1: geo.points[0], p2: geo.points.at(-1) });
+    else if (geo.closed !== false && geo.points.length >= 3) flaechen.push({ layer: geo.layer, punkte: geo.points });
+  }
+  return { linien, texte, flaechen };
 }
