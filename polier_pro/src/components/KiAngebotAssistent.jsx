@@ -14,6 +14,14 @@ import { agentStarten, agentFortsetzen, vorschlagZuPositionen } from "../lib/kiA
 const MAX_PDF_BYTES = 8 * 1024 * 1024;
 function base64AusDataUrl(url) { return url.slice(url.indexOf(",") + 1); }
 async function anhangAusDatei(datei) {
+  // BIM-Modell: Mengen je Bauteil auslesen (lib/ifcMengen.js) und als Text
+  // an die KI geben — das Modell selbst wäre für die KI nicht lesbar.
+  if (/\.ifc$/i.test(datei.name)) {
+    const { ifcMengenAusDatei } = await import("../lib/ifcLaden.js");
+    const { text, gruppen } = await ifcMengenAusDatei(datei);
+    if (!gruppen.length) throw new Error(`${datei.name}: keine Bauteile mit Mengen gefunden.`);
+    return { name: datei.name, block: { type: "text", text } };
+  }
   if (datei.type === "application/pdf") {
     if (datei.size > MAX_PDF_BYTES) throw new Error(`${datei.name} ist größer als 8 MB.`);
     const url = await new Promise((ok, fehler) => {
@@ -150,12 +158,12 @@ export function KiAngebotAssistent({ projekt, eigeneFirma, stammpositionen = [],
             </div>
           )}
           <DiktierFeld label={nachtragZu ? "Was ist zusätzlich oder anders?" : "Anfrage des Kunden"} value={anfrage} onChange={setAnfrage} rows={6} />
-          <input ref={dateiRef} type="file" accept="image/*,application/pdf" multiple onChange={dateienGewaehlt} style={{ display:"none" }} />
+          <input ref={dateiRef} type="file" accept="image/*,application/pdf,.ifc" multiple onChange={dateienGewaehlt} style={{ display:"none" }} />
           <button onClick={() => dateiRef.current?.click()} disabled={anhaenge.length >= 5}
             style={{ marginTop:8, background:"var(--surface2)", color:"var(--text)", border:"1.5px dashed var(--border)",
               borderRadius:10, padding:"9px 12px", width:"100%", cursor:"pointer", fontSize:12.5, fontFamily:"inherit",
               display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-            <Paperclip size={13} /> Foto, Plan oder PDF anhängen (max. 5)
+            <Paperclip size={13} /> Foto, Plan, PDF oder IFC-Modell anhängen (max. 5)
           </button>
           {anhaenge.length > 0 && (
             <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
