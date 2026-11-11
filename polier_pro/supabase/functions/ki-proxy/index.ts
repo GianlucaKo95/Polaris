@@ -23,6 +23,10 @@
 // Erwartet, Authorization: Bearer <User-JWT>, und eine dieser Formen:
 //   { prompt: string, maxTokens?: number }                              — Einzel-Prompt
 //   { system?: string, messages: {role,content}[], maxTokens?: number } — mehrstufiger Chat
+//   + optional tools / tool_choice (Anthropic-Format) — Tool-Use, z.B. der
+//     KI-Angebots-Agent (src/lib/kiAngebotAgent.js). Die Werkzeuge selbst
+//     laufen im Browser auf den Stammdaten der Firma; diese Function reicht
+//     nur Definitionen und tool_use/tool_result-Blöcke unverändert durch.
 // ═══════════════════════════════════════════════════════════════════════
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -63,12 +67,15 @@ serve(async (req: Request) => {
   // validiert content nicht inhaltlich, sondern reicht es unverändert an
   // Anthropic durch, daher hier `unknown` statt `string`.
   let system: string | undefined, messages: Array<{ role: string; content: unknown }>, maxTokens: number;
+  let tools: unknown[] | undefined, toolChoice: unknown;
   try {
     const body = await req.json();
     maxTokens = body.maxTokens || 1000;
     if (Array.isArray(body.messages) && body.messages.length > 0) {
       messages = body.messages;
       system = typeof body.system === "string" ? body.system : undefined;
+      tools = Array.isArray(body.tools) && body.tools.length > 0 ? body.tools : undefined;
+      toolChoice = tools && body.tool_choice ? body.tool_choice : undefined;
     } else if (typeof body.prompt === "string" && body.prompt) {
       messages = [{ role: "user", content: body.prompt }];
     } else {
@@ -151,6 +158,8 @@ serve(async (req: Request) => {
         max_tokens: maxTokens,
         fallbacks: "default",
         ...(system ? { system } : {}),
+        ...(tools ? { tools } : {}),
+        ...(toolChoice ? { tool_choice: toolChoice } : {}),
         messages,
       }),
     });

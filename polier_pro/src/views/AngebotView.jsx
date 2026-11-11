@@ -6,7 +6,7 @@ import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen } from "../lib/gaeb90
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen, positionenMitKalkulationVorbereiten } from "../lib/mutterlv.js";
 
-export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, session }) {
+export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, stammpositionen = [], eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, session }) {
   const [aktAngebot,  setAktAngebot]  = useState(null);
   const [fehler,      setFehler]      = useState("");
   const [info,        setInfo]        = useState(null); // { titel, treffer, gesamt, fehlend } — letztes aus Ausschreibung generiertes Angebot
@@ -114,6 +114,9 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
       lvVorlagen={lvVorlagen}
       angebotVorlage={angebotVorlage}
       kalkulationspreise={kalkulationspreise}
+      stammpositionen={stammpositionen}
+      standardZuschlaege={standardZuschlaege}
+      angebote={angebote}
       projekt={projekt}
       eigeneFirma={eigeneFirma}
       firmaId={firmaId}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ClipboardList, X, CircleCheckBig, ChevronLeft, ChartColumn, FileText, Settings, Plus, Sparkles, TriangleAlert, Upload } from "lucide-react";
 import { AUFGABEN_TYPEN } from "../config/konstanten.js";
@@ -7,7 +7,10 @@ import { escapeHtml } from "../lib/utils.js";
 import { druckePDF } from "../lib/pdf.jsx";
 import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { Spinner } from "../components/Spinner.jsx";
-import { kiAngebotErstellen } from "../lib/ai.js";
+import { KiAngebotAssistent } from "../components/KiAngebotAssistent.jsx";
+import { positionMengeAendern } from "../lib/stammpositionen.js";
+import { katalogBauen, QUELLEN_LABEL } from "../lib/katalog.js";
+import { angebotPruefen, vergleichswerteAusAngeboten, AMPEL_FARBE } from "../lib/plausibilitaet.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
@@ -17,6 +20,8 @@ import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, gaeb90Schreiben, gae
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 import { leereKalkulation, kalkulationEp, kalkulationEinzelkosten, kalkulationZuschlagProzent, kalkulationGesamtkosten } from "../lib/kalkulation.js";
 import { PositionKalkulation } from "../components/PositionKalkulation.jsx";
+import { gaebX84Schreiben } from "../lib/gaebX84.js";
+import { efbAuswerten, efbHtml } from "../lib/efb.js";
 import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
@@ -33,15 +38,13 @@ import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], projekt, eigeneFirma, firmaId, profil, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], projekt, eigeneFirma, firmaId, profil, session }) {
   const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
   const [vonAufgabe,setVonAufgabe]= useState(false);
   const [vonKI,     setVonKI]     = useState(false);
-  const [kiDiktat,  setKiDiktat]  = useState("");
-  const [kiLaedt,   setKiLaedt]   = useState(false);
-  const [kiFehler,  setKiFehler]  = useState("");
+  const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
   const [gaebFehler, setGaebFehler] = useState("");
   const [gaebInfo,   setGaebInfo]   = useState(null); // { anzahl, warnungen }
   const gaebInputRef = useRef(null);
@@ -99,13 +102,42 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   function updatePos(id, key, val) {
     setA(x => ({ ...x, positionen:x.positionen.map(p => {
       if (p.id !== id) return p;
+      // Aus einer Stammposition: Rezeptur für die neue Menge neu hochrechnen
+      // (lib/stammpositionen.js), statt die Gesamtmengen einzufrieren.
+      if (key === "menge") {
+        const neu = positionMengeAendern(p, Number(val), stammpositionen, kalkulationspreise);
+        if (neu) return neu;
+      }
       const aktualisiert = { ...p, [key]:key==="menge"||key==="ep"||key==="rabatt" ? Number(val) : val };
+      // Von Hand überschriebener Preis: Preisquelle ehrlich auf "manuell".
+      if (key === "ep" && p.preisquelle) aktualisiert.preisquelle = { art: "manuell" };
       // Bei kalkulierten Positionen hängt der EP von der Menge ab (Gesamt-
       // kosten der Kalkulation / Menge) — bei Mengenänderung neu berechnen,
       // statt den alten EP stehen zu lassen.
       if (key === "menge" && p.kalk) aktualisiert.ep = kalkulationEp(p.kalk, kalkulationspreise, aktualisiert.menge);
       return aktualisiert;
     }) }));
+  }
+
+  // Plausibilitäts-Ampel (lib/plausibilitaet.js): EP je Position gegen die
+  // eigenen Stammdaten und frühere Angebote der Baustelle.
+  const vergleichsbasis = useMemo(() => [
+    ...katalogBauen({ stammpositionen, einheitspreise, lvVorlagen, kalkulationspreise, standardZuschlaege }),
+    ...vergleichswerteAusAngeboten(angebote, a.id),
+  ], [stammpositionen, einheitspreise, lvVorlagen, kalkulationspreise, standardZuschlaege, angebote, a.id]);
+  const pruefung = useMemo(() => angebotPruefen(a.positionen, vergleichsbasis), [a.positionen, vergleichsbasis]);
+
+  function kiErgebnisUebernehmen(ergebnis) {
+    const neuPos = ergebnis.positionen.map(p => ({ ...p, id: Date.now() + Math.random() }));
+    setA(x => ({
+      ...x,
+      positionen: [...x.positionen, ...neuPos],
+      titel: x.titel.startsWith("Angebot ") && ergebnis.titel ? ergebnis.titel : x.titel,
+      empfaenger: x.empfaenger || ergebnis.empfaenger,
+    }));
+    setKiInfo({ annahmen: ergebnis.annahmen, warnungen: ergebnis.warnungen, anzahl: neuPos.length,
+      ohnePreis: neuPos.filter(p => !(p.ep > 0)).length });
+    setVonKI(false);
   }
 
   function removePos(id) {
@@ -289,6 +321,30 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
     link.click(); URL.revokeObjectURL(url);
   }
 
+  // GAEB-DA-XML-Angebotsabgabe (X84, lib/gaebX84.js) — heute der übliche
+  // Rückgabeweg an öffentliche Auftraggeber und AVA-Programme. Anders als
+  // D84 auch für eigene Angebote ohne Ausschreibung (automatische OZ).
+  function gaebX84Exportieren() {
+    const { text, warnungen, anzahl } = gaebX84Schreiben(a.positionen, {
+      projektTitel: a.titel, datum: a.datum, bieter: eigeneFirma,
+    });
+    setGaebPreisExportInfo({ anzahl, warnungen: warnungen.length, format: "X84" });
+    const blob = new Blob([text], { type: "application/xml" });
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = ("Angebot_" + a.titel.replace(/ /g, "_") + ".x84");
+    link.click(); URL.revokeObjectURL(url);
+  }
+
+  // EFB-Preisblätter 221 + 223 (lib/efb.js) als PDF.
+  const [efbInfo, setEfbInfo] = useState(null); // { warnungen }
+  async function efbExportieren() {
+    const auswertung = efbAuswerten(a.positionen, kalkulationspreise);
+    setEfbInfo({ warnungen: auswertung.warnungen });
+    await druckePDF(efbHtml(auswertung, { angebot: a, eigeneFirma, projekt }),
+      "EFB_" + a.titel.replace(/ /g, "_") + ".pdf");
+  }
+
   // Kalkulationsübersicht als Excel — zur eigenen internen Nachverfolgung
   // (nicht für die Ausschreibung bestimmt, siehe gaebPreiseExportieren()
   // dafür): je Position Einzelkosten/Zuschlag/Gesamtkosten aus der
@@ -345,36 +401,6 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       kalkZelle(Number(summeGp.toFixed(2)), { fontWeight: "bold", type: Number }),
     ]);
     setKalkExportRows(rows);
-  }
-
-  async function kiPositionenUebernehmen() {
-    if (!kiDiktat.trim() || kiLaedt) return;
-    setKiLaedt(true);
-    setKiFehler("");
-    try {
-      const ergebnis = await kiAngebotErstellen(kiDiktat, einheitspreise, projekt, session);
-      if (!ergebnis || ergebnis.positionen.length === 0) {
-        setKiFehler("Konnte aus dem Diktat keine Positionen erkennen.");
-        return;
-      }
-      const neuPos = ergebnis.positionen.map(p => {
-        const ep = einheitspreise.find(e => e.id === p.ep_id);
-        return { id:Date.now()+Math.random(), bez:p.bez, einheit:p.einheit,
-          menge:p.menge, ep:ep?.preis || 0, rabatt:p.rabatt || 0 };
-      });
-      setA(x => ({
-        ...x,
-        positionen: [...x.positionen, ...neuPos],
-        titel: x.titel.startsWith("Angebot ") && ergebnis.titel ? ergebnis.titel : x.titel,
-        empfaenger: x.empfaenger || ergebnis.empfaenger,
-      }));
-      setKiDiktat("");
-      setVonKI(false);
-    } catch (e) {
-      setKiFehler(e.message || "KI-Anfrage fehlgeschlagen.");
-    } finally {
-      setKiLaedt(false);
-    }
   }
 
   async function speichernKlick() {
@@ -597,54 +623,12 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
     }
   }
 
-  // ── KI-Angebotserstellung als eigener Screen ──
+  // ── KI-Angebot (Agent mit Stammdatenzugriff, lib/kiAngebotAgent.js) ──
   if (vonKI) {
-    return createPortal(
-      <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0,
-        background:"var(--bg)", zIndex:700, overflowY:"auto",
-        WebkitOverflowScrolling:"touch" }}>
-        <div style={{ background:"var(--surface)", padding:"10px 18px",
-          paddingTop:"calc(14px + env(safe-area-inset-top))",
-          borderBottom:"3px solid var(--yellow)", position:"sticky", top:0,
-          display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <div style={{ color:"var(--yellow)", fontWeight:700, fontSize:16,
-            display:"flex", alignItems:"center", gap:8 }}>
-            <Sparkles size={15} /> Per KI erstellen
-          </div>
-          <button onClick={() => { setVonKI(false); setKiFehler(""); }}
-            style={{ background:"var(--surface2)", border:"1px solid var(--border)",
-              color:"var(--text)", borderRadius:8, padding:"6px 14px",
-              cursor:"pointer", fontFamily:"inherit", display:"flex" }}><X size={15} /></button>
-        </div>
-        <div style={{ padding:"14px 16px" }}>
-          <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10, lineHeight:1.5 }}>
-            Beschreibe die Leistung — die KI wählt passende Positionen aus euren
-            hinterlegten Einheitspreisen und schätzt die Mengen. Preise kommen
-            immer aus dem Katalog, nie von der KI selbst. Rabatt auf eine
-            einzelne Position kannst du mitdiktieren, z.B. "10% Rabatt auf die
-            Bodenplatte" — Rabatt lässt sich pro Position auch jederzeit von
-            Hand eintragen oder ändern.
-          </div>
-          <DiktierFeld label="Leistungsbeschreibung" value={kiDiktat} onChange={setKiDiktat} rows={4} />
-          {kiFehler && (
-            <div style={{ color:"var(--red)", fontSize:12, marginTop:8,
-              display:"flex", alignItems:"center", gap:5 }}>
-              <TriangleAlert size={13} /> {kiFehler}
-            </div>
-          )}
-          <button onClick={kiPositionenUebernehmen} disabled={!kiDiktat.trim() || kiLaedt}
-            style={{ width:"100%", marginTop:12,
-              background: kiDiktat.trim() && !kiLaedt ? "var(--yellow)" : "var(--surface2)",
-              color: kiDiktat.trim() && !kiLaedt ? "#1a1200" : "var(--muted)",
-              border:"none", borderRadius:10, padding:14, fontWeight:800,
-              cursor: kiDiktat.trim() && !kiLaedt ? "pointer" : "default", fontSize:14,
-              fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-            {kiLaedt ? <><Spinner size={14} /> Erstelle Positionen…</> : "Positionen übernehmen"}
-          </button>
-        </div>
-      </div>,
-      document.body
-    );
+    return <KiAngebotAssistent projekt={projekt} eigeneFirma={eigeneFirma}
+      stammpositionen={stammpositionen} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen}
+      kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} session={session}
+      onUebernehmen={kiErgebnisUebernehmen} onClose={() => setVonKI(false)} />;
   }
 
   // ── LV-Vorlage Auswahl als eigener Screen ──
@@ -893,6 +877,31 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 </button>
               )}
               {a.positionen.length > 0 && (
+                <button onClick={gaebX84Exportieren}
+                  style={{ background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <ChartColumn size={12} /> GAEB X84
+                </button>
+              )}
+              {a.positionen.length > 0 && (
+                <button onClick={efbExportieren}
+                  style={{ background:"var(--surface2)", color:"var(--text)",
+                    border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                  <FileText size={12} /> EFB 221/223
+                </button>
+              )}
+              {efbInfo?.warnungen.length > 0 && (
+                <div style={{ gridColumn:"1 / -1", background:"var(--ybg)", color:"var(--ydark)", borderRadius:10,
+                  padding:"8px 12px", fontSize:12, lineHeight:1.4 }}>
+                  EFB erstellt — {efbInfo.warnungen.length} Hinweis(e): {efbInfo.warnungen.slice(0, 3).join(" ")}
+                  {efbInfo.warnungen.length > 3 && " …"}
+                </div>
+              )}
+              {a.positionen.length > 0 && (
                 <button onClick={kalkulationExportieren}
                   style={{ gridColumn:"1 / -1", background:"var(--surface2)", color:"var(--text)",
                     border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 0",
@@ -958,6 +967,35 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               </div>
             )}
 
+            {kiInfo && (
+              <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12, color:"var(--text)" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{ fontWeight:700 }}>
+                    ✓ {kiInfo.anzahl} Positionen von der KI übernommen
+                    {kiInfo.ohnePreis > 0 && <span style={{ color:"var(--red)" }}> · {kiInfo.ohnePreis} ohne Preis</span>}
+                  </div>
+                  <button onClick={() => setKiInfo(null)} style={{ background:"none", border:"none",
+                    color:"var(--muted)", cursor:"pointer", display:"flex" }}><X size={13} /></button>
+                </div>
+                {kiInfo.annahmen?.length > 0 && (
+                  <div style={{ marginTop:5, color:"var(--muted)" }}>
+                    Annahmen: {kiInfo.annahmen.join(" · ")}
+                  </div>
+                )}
+              </div>
+            )}
+            {(pruefung.zaehler.rot > 0 || pruefung.zaehler.gelb > 0) && (
+              <div style={{ background: pruefung.zaehler.rot > 0 ? "var(--rbg)" : "var(--ybg)",
+                color: pruefung.zaehler.rot > 0 ? "var(--red)" : "var(--ydark)", borderRadius:10,
+                padding:"8px 12px", marginBottom:9, fontSize:12, display:"flex", alignItems:"center", gap:6 }}>
+                <TriangleAlert size={13} />
+                Preisprüfung: {pruefung.zaehler.rot > 0 && <>{pruefung.zaehler.rot} rot</>}
+                {pruefung.zaehler.rot > 0 && pruefung.zaehler.gelb > 0 && " · "}
+                {pruefung.zaehler.gelb > 0 && <>{pruefung.zaehler.gelb} gelb</>} — Positionen vor dem Versand prüfen.
+              </div>
+            )}
+
             {/* Positionen */}
             {a.positionen.length === 0 && (
               <div style={{ textAlign:"center", padding:"23px 20px", color:"var(--muted)",
@@ -971,8 +1009,18 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 border:"1.5px solid var(--border)" }}>
                 <div style={{ display:"flex", justifyContent:"space-between",
                   alignItems:"center", marginBottom:6 }}>
-                  <div style={{ color:"var(--muted)", fontSize:11,
-                    fontWeight:700 }}>Pos. {i+1}</div>
+                  <div style={{ color:"var(--muted)", fontSize:11, fontWeight:700,
+                    display:"flex", alignItems:"center", gap:6 }}>
+                    {pruefung.jePosition[pos.id] && (
+                      <span title={pruefung.jePosition[pos.id].text}
+                        style={{ width:9, height:9, borderRadius:"50%", display:"inline-block",
+                          background: AMPEL_FARBE[pruefung.jePosition[pos.id].ampel] }} />
+                    )}
+                    Pos. {i+1}
+                    {pos.preisquelle && (
+                      <span style={{ fontWeight:400 }}>· {QUELLEN_LABEL[pos.preisquelle.art] || pos.preisquelle.art}</span>
+                    )}
+                  </div>
                   {!gesperrt && (
                     <button onClick={() => removePos(pos.id)}
                       style={{ background:"var(--rbg)", color:"var(--red)",
@@ -1043,6 +1091,17 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   )}
                   {gpOf(pos).toLocaleString("de-DE", {minimumFractionDigits:2})} €
                 </div>
+                {(pruefung.jePosition[pos.id]?.ampel === "rot" || pruefung.jePosition[pos.id]?.ampel === "gelb" || pos.ki?.herleitung || pos.ki?.hinweis) && (
+                  <div style={{ marginTop:5, fontSize:11.5, lineHeight:1.45 }}>
+                    {(pruefung.jePosition[pos.id]?.ampel === "rot" || pruefung.jePosition[pos.id]?.ampel === "gelb") && (
+                      <div style={{ color: AMPEL_FARBE[pruefung.jePosition[pos.id].ampel] === "var(--yellow)" ? "var(--ydark)" : AMPEL_FARBE[pruefung.jePosition[pos.id].ampel] }}>
+                        {pruefung.jePosition[pos.id].text}
+                      </div>
+                    )}
+                    {pos.ki?.herleitung && <div style={{ color:"var(--muted)" }}>Menge (KI): {pos.ki.herleitung}</div>}
+                    {pos.ki?.hinweis && <div style={{ color:"var(--ydark)" }}>{pos.ki.hinweis}</div>}
+                  </div>
+                )}
               </div>
             ))}
           </div>

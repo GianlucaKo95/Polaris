@@ -1,6 +1,8 @@
 import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator, Upload, Coins } from "lucide-react";
+import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator, Upload, Coins, Layers, TriangleAlert } from "lucide-react";
+import { StammpositionFormular } from "./StammpositionFormular.jsx";
+import { stammpositionEp, stammpositionZeitansatz } from "../lib/stammpositionen.js";
 import { PreisFormular } from "./PreisFormular.jsx";
 import { KalkulationspreisFormular, KALKULATIONSPREIS_KATEGORIEN } from "./KalkulationspreisFormular.jsx";
 import { VorlageFormular } from "./VorlageFormular.jsx";
@@ -10,7 +12,7 @@ import { kiAngebotVorlageAnalysieren, kiTagebuchVorlageAnalysieren } from "../li
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, parseGaeb90Preise, gaeb90PreiseEinspielen } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 
-export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, kalkulationspreise, setKalkulationspreise, standardZuschlaege, setStandardZuschlaege, session }) {
+export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, kalkulationspreise, setKalkulationspreise, standardZuschlaege, setStandardZuschlaege, stammpositionen = [], setStammpositionen, stammpositionenStatus, session }) {
   const [aktiv,    setAktiv]    = useState("preise"); // preise | kalkpreise | vorlagen | angebotsvorlage | tagebuchvorlage
   const [neuPreis, setNeuPreis] = useState(null);
   const [neuVorlage,setNeuVorlage] = useState(null);
@@ -20,6 +22,17 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
   useBackButton(neuPreis || editPreis, () => { setNeuPreis(null); setEditPreis(null); });
   useBackButton(neuVorlage, () => setNeuVorlage(null));
   useBackButton(neuKalkPreis || editKalkPreis, () => { setNeuKalkPreis(null); setEditKalkPreis(null); });
+  const [stammFormular, setStammFormular] = useState(null); // null | Stammposition (neu: ohne id)
+  useBackButton(stammFormular, () => setStammFormular(null));
+
+  function stammpositionSpeichern(sp) {
+    if (sp.id && stammpositionen.find(x => x.id === sp.id)) {
+      setStammpositionen(prev => prev.map(x => x.id === sp.id ? sp : x));
+    } else {
+      setStammpositionen(prev => [...prev, { ...sp, id: Date.now() }]);
+    }
+    setStammFormular(null);
+  }
 
   // ── Mutter-LV: GAEB-Import direkt als LV-Vorlage speichern ────────────────
   // Baut auf denselben Parsern wie der GAEB-Import im Angebot (gaeb90.js/
@@ -143,7 +156,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
           gemeinsame flex:1-Reihe auf schmalen Bildschirmen aus dem
           sichtbaren Bereich heraus (der letzte Tab war nicht mehr erreichbar). */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:12 }}>
-        {[["preise",Euro,"Einheitspreise"],["kalkpreise",Calculator,"Kalkulationspreise"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
+        {[["preise",Euro,"Einheitspreise"],["kalkpreise",Calculator,"Kalkulationspreise"],["stammpositionen",Layers,"Stammpositionen"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
           <button key={k} onClick={() => setAktiv(k)}
             style={{ background: aktiv===k ? "var(--yellow)" : "var(--surface2)",
               color: aktiv===k ? "#1a1200" : "var(--muted)",
@@ -295,6 +308,65 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* STAMMPOSITIONEN — eigene Leistungspositionen mit Rezeptur je
+          Einheit (lib/stammpositionen.js). Erste Quelle des KI-Angebots-
+          Agenten (lib/kiAngebotAgent.js): je vollständiger diese Liste,
+          desto weniger Positionen bleiben im KI-Angebot ohne Preis. */}
+      {aktiv === "stammpositionen" && (
+        <div>
+          {stammpositionenStatus === "fehlt" && (
+            <div style={{ background:"var(--ybg)", color:"var(--ydark)", borderRadius:10, padding:"9px 12px",
+              fontSize:12, marginBottom:10, display:"flex", gap:7, lineHeight:1.4 }}>
+              <TriangleAlert size={14} style={{ flexShrink:0, marginTop:1 }} />
+              Die Datenbank kennt noch keine Stammpositionen. Bitte einmalig supabase-kalkulation.sql im Supabase SQL-Editor ausführen — bis dahin werden Änderungen hier nicht gespeichert.
+            </div>
+          )}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:7 }}>
+            <div style={{ color:"var(--muted)", fontSize:12 }}>{stammpositionen.length} Stammpositionen</div>
+            <button onClick={() => setStammFormular({})}
+              style={{ background:"var(--yellow)", color:"#1a1200", border:"none",
+                borderRadius:10, padding:"7px 14px", fontWeight:700,
+                cursor:"pointer", fontSize:12, fontFamily:"inherit",
+                display:"flex", alignItems:"center", gap:5 }}>
+              <Plus size={13} /> Stammposition
+            </button>
+          </div>
+          {stammpositionen.length === 0 && (
+            <div style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"20px 0", lineHeight:1.5 }}>
+              Noch keine Stammpositionen. Eine Stammposition ist eine Leistung mit Rezeptur je Einheit,
+              z.B. „Perimeterdämmung XPS 120 mm“ je m²: 0,25 h Facharbeiter + 1,05 m² XPS-Platte.
+            </div>
+          )}
+          {stammpositionen.map(sp => (
+            <div key={sp.id} style={{ background:"var(--surface)", borderRadius:12,
+              padding:"9px 14px", marginBottom:6, border:"1.5px solid var(--border)" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ color:"var(--text)", fontWeight:700, fontSize:13 }}>
+                    {sp.gewerk ? `${sp.gewerk} · ` : ""}{sp.bez}
+                  </div>
+                  <div style={{ color:"var(--muted)", fontSize:12, marginTop:2 }}>
+                    {stammpositionEp(sp, kalkulationspreise, standardZuschlaege).toLocaleString("de-DE", { minimumFractionDigits:2, maximumFractionDigits:2 })} €/{sp.einheit}
+                    {" · "}{stammpositionZeitansatz(sp, kalkulationspreise).toLocaleString("de-DE", { maximumFractionDigits:3 })} h/{sp.einheit}
+                    {" · "}{(sp.rezeptur || []).length} Rezepturzeilen
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:6 }}>
+                  <button onClick={() => setStammFormular(sp)}
+                    style={{ background:"var(--surface2)", border:"1px solid var(--border)",
+                      color:"var(--muted)", borderRadius:8, padding:"4px 10px",
+                      cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><Pencil size={13} /></button>
+                  <button onClick={() => setStammpositionen(prev => prev.filter(x => x.id !== sp.id))}
+                    style={{ background:"var(--rbg)", border:"1px solid var(--red)",
+                      color:"var(--red)", borderRadius:8, padding:"4px 10px",
+                      cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><X size={13} /></button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -464,6 +536,23 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
               initial={editKalkPreis || neuKalkPreis}
               onSave={kalkPreisSpeichern}
               onClose={() => { setNeuKalkPreis(null); setEditKalkPreis(null); }}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Stammpositions-Formular */}
+      {stammFormular && createPortal(
+        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:600, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
+          <div style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
+            padding:16, width:"100%", maxWidth:480 }}>
+            <StammpositionFormular
+              initial={stammFormular.id ? stammFormular : null}
+              kalkulationspreise={kalkulationspreise}
+              standardZuschlaege={standardZuschlaege}
+              onSave={stammpositionSpeichern}
+              onClose={() => setStammFormular(null)}
             />
           </div>
         </div>,

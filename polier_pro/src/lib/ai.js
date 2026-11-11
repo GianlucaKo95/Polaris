@@ -83,6 +83,15 @@ async function rufeKiProxyAuf(body, session, refusalHinweis = "Bitte das Diktat 
   return data;
 }
 
+// Ein Schritt eines Tool-Use-Dialogs (KI-Angebots-Agent, siehe
+// lib/kiAngebotAgent.js): reicht system/messages/tools an den ki-proxy
+// durch und gibt die rohe Anthropic-Antwort (content-Blöcke + stop_reason)
+// zurück — die Schleife und die Werkzeuge liegen im Agenten-Modul.
+export async function kiToolAufruf({ system, messages, tools, maxTokens = 4000 }, session) {
+  return rufeKiProxyAuf({ system, messages, tools, maxTokens }, session,
+    "Bitte die Anfrage umformulieren oder erneut versuchen.");
+}
+
 // ── KI-Assistent: Fragen zu echten Projektdaten ─────────────────────────
 // Baut aus Aufgaben, Kolonnen, Wettervorhersage und Terminprognose einen
 // System-Prompt mit klaren Leitplanken gegen Halluzination — die KI

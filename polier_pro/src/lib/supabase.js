@@ -1032,6 +1032,20 @@ export async function sbFirmaParameterSpeichern(firmaId, einheitspreise, lvVorla
   } catch { return false; }
 }
 
+// Stammpositionen (Rezeptur je Einheit, lib/stammpositionen.js) bewusst
+// in einem eigenen Update statt in sbFirmaParameterSpeichern: fehlt die
+// Spalte firmen.stammpositionen (supabase-kalkulation.sql noch nicht
+// eingespielt), schlägt nur dieses Update fehl, nicht das Speichern aller
+// übrigen Parameter.
+export async function sbFirmaStammpositionenSpeichern(firmaId, stammpositionen, session) {
+  if (!session?.access_token || !firmaId) return false;
+  try {
+    const client = sbClientMitToken(session);
+    const { error } = await client.from("firmen").update({ stammpositionen }).eq("id", firmaId);
+    return !error;
+  } catch { return false; }
+}
+
 export async function sbBerichtSpeichern(b, projektId, session) {
   if (!session?.access_token || !projektId) return { daten: null, fehler: "Keine gültige Sitzung." };
   const payload = {

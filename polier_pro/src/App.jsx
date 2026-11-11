@@ -10,7 +10,7 @@ import { DEFAULT_EINHEITSPREISE, DEFAULT_LV_VORLAGEN, ONBOARDING_KEY, ROLLEN, PR
 import { usePWA } from "./hooks/usePWA.js";
 import { usePushNotifications } from "./hooks/usePushNotifications.js";
 import { useOfflineSync } from "./hooks/useOfflineSync.js";
-import { sbClientMitToken, SUPABASE_URL, sbAufgabeSpeichern, sbAufgabeLoeschen, sbAufgabeVorschlagen, sbAufgabeVorschlagEntscheiden, sbBerichtSpeichern, sbKolonneSpeichern, sbKolonneLoeschen, sbFirmaParameterSpeichern, sbAngebotSpeichern, sbBaufortschrittSpeichern, sbRechnungSpeichern, sbRechnungLoeschen } from "./lib/supabase.js";
+import { sbClientMitToken, SUPABASE_URL, sbAufgabeSpeichern, sbAufgabeLoeschen, sbAufgabeVorschlagen, sbAufgabeVorschlagEntscheiden, sbBerichtSpeichern, sbKolonneSpeichern, sbKolonneLoeschen, sbFirmaParameterSpeichern, sbFirmaStammpositionenSpeichern, sbAngebotSpeichern, sbBaufortschrittSpeichern, sbRechnungSpeichern, sbRechnungLoeschen } from "./lib/supabase.js";
 import { PasswortSetzenScreen } from "./views/PasswortSetzenScreen.jsx";
 import { ErstePinAbfrageScreen } from "./views/ErstePinAbfrageScreen.jsx";
 import { EinladungScreen } from "./views/EinladungScreen.jsx";
@@ -218,6 +218,14 @@ export default function PolierApp() {
   // lib/mutterlv.js) — wird bei "Aus Ausschreibung generieren" automatisch
   // auf die als Kostenbasis behandelten Mutter-LV-Preise angewendet.
   const [standardZuschlaege, setStandardZuschlaege] = useState(null);
+  // Stammpositionen (Rezeptur je Einheit, siehe lib/stammpositionen.js) —
+  // eigene Spalte firmen.stammpositionen (supabase-kalkulation.sql). Wird
+  // getrennt vom übrigen Firmen-Datensatz geladen und gespeichert: solange
+  // die Spalte in einer Installation noch fehlt, soll nur diese Funktion
+  // ausfallen, nicht das Laden der ganzen Firma. null = (noch) nicht geladen
+  // bzw. Spalte fehlt → nie zurückschreiben.
+  const [stammpositionen, setStammpositionen] = useState([]);
+  const [stammpositionenStatus, setStammpositionenStatus] = useState(null); // null | "ok" | "fehlt"
   // Verhindert, dass der initiale Ladevorgang der Parameter aus Supabase
   // (setzt dieselben Werte, die gerade erst von dort kamen) sie sofort
   // wieder zurückschreibt, bevor der Nutzer überhaupt etwas geändert hat.
@@ -341,6 +349,29 @@ export default function PolierApp() {
     client.from("subunternehmer").select("*").eq("firma_id", firma.id)
       .then(({ data }) => { if (Array.isArray(data)) setSubs(data); });
   }, [firma?.id, auth.session?.access_token]);
+
+  // standard_zuschlaege und stammpositionen getrennt nachladen (siehe
+  // Kommentar beim State oben). standard_zuschlaege fehlte bisher in der
+  // Firmen-Abfrage — die gespeicherten Standard-Zuschläge kamen dadurch nach
+  // einem Neuladen nie zurück und wurden beim nächsten Speichern mit null
+  // überschrieben.
+  useEffect(() => {
+    if (!firma?.id || !auth.session?.access_token) return;
+    const client = sbClientMitToken(auth.session);
+    client.from("firmen").select("standard_zuschlaege").eq("id", firma.id)
+      .then(({ data, error }) => { if (!error && data?.[0]) setStandardZuschlaege(data[0].standard_zuschlaege || null); });
+    client.from("firmen").select("stammpositionen").eq("id", firma.id)
+      .then(({ data, error }) => {
+        if (error) { setStammpositionenStatus("fehlt"); return; }
+        setStammpositionen(Array.isArray(data?.[0]?.stammpositionen) ? data[0].stammpositionen : []);
+        setStammpositionenStatus("ok");
+      });
+  }, [firma?.id, auth.session?.access_token]);
+
+  useEffect(() => {
+    if (stammpositionenStatus !== "ok" || !firma?.id || !auth.session?.access_token) return;
+    sbFirmaStammpositionenSpeichern(firma.id, stammpositionen, auth.session);
+  }, [stammpositionen]);
 
   // Einheitspreise/LV-Vorlagen nach jeder Änderung in der Firma persistieren.
   useEffect(() => {
@@ -1464,9 +1495,9 @@ export default function PolierApp() {
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
         {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
-        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} session={auth.session} />}
+        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} stammpositionen={stammpositionen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} session={auth.session} />}
         {tab === "rechnungen"    && <RechnungenView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} rechnungen={rechnungen} rechnungBestaetigungen={rechnungBestaetigungen} eigeneFirma={eigeneFirma} onBaufortschrittSpeichern={baufortschrittSpeichern} onRechnungSpeichern={rechnungSpeichern} onRechnungLoeschen={rechnungLoeschen} profil={aktiveProfil} />}
-        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} standardZuschlaege={standardZuschlaege} setStandardZuschlaege={setStandardZuschlaege} session={auth.session} />}
+        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} standardZuschlaege={standardZuschlaege} setStandardZuschlaege={setStandardZuschlaege} stammpositionen={stammpositionen} setStammpositionen={setStammpositionen} stammpositionenStatus={stammpositionenStatus} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
         {tab === "firmen"       && <FirmenView owneFirma={eigeneFirma} setEigeneFirma={setEigeneFirma} subs={subs} setSubs={setSubs}
             onOnboardingReset={() => setOnboardingDone(false)} session={auth.session} firmaId={firma?.id} firma={firma} projekte={projekte} />}
