@@ -17,6 +17,7 @@ import { mittellohnBerechnen } from "../lib/kalkulationsgrundlagen.js";
 import { endsummeBerechnen, endsummeAnwenden, LEERE_ENDSUMME } from "../lib/endsumme.js";
 import { NACHTRAG_GRUENDE, NACHTRAG_STATUS, begruendungPrompt, mehrkostenanzeigeHtml } from "../lib/nachtrag.js";
 import { kiText } from "../lib/ai.js";
+import { terminplanAusAngebot } from "../lib/terminplan.js";
 import { nettoSumme, istTitel, positionsart, inSumme, POSITIONSARTEN, ART_LABEL, titelName, titelSummen } from "../lib/lv.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
@@ -45,7 +46,7 @@ import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, projekt, eigeneFirma, firmaId, profil, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen = null, projekt, eigeneFirma, firmaId, profil, session }) {
   const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
@@ -411,6 +412,17 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       kalkZelle(Number(summeGp.toFixed(2)), { fontWeight: "bold", type: Number }),
     ]);
     setKalkExportRows(rows);
+  }
+
+  // ── Terminplan aus Kalkulation (lib/terminplan.js) ──
+  const [tp, setTp] = useState({ kolonnenStaerke: 3, stundenProTag: 8, start: new Date().toISOString().slice(0, 10) });
+  const [tpMeldung, setTpMeldung] = useState("");
+  const tpVorschau = terminplanAusAngebot(a, kalkulationspreise, tp);
+  async function terminplanAnlegen() {
+    if (!onTerminplanErzeugen || !tpVorschau.length) return;
+    setTpMeldung("Lege Vorgänge an …");
+    const r = await onTerminplanErzeugen(tpVorschau);
+    setTpMeldung(r.ok ? `✓ ${r.anzahl} Vorgänge im Bauablauf angelegt` : `Fehler nach ${r.anzahl} Vorgängen: ${r.fehler}`);
   }
 
   // ── Nachtrag (lib/nachtrag.js) ──
@@ -1297,6 +1309,31 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 </div>
               )}
             </div>
+
+            {onTerminplanErzeugen && tpVorschau.length > 0 && (
+              <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:12, padding:"10px 12px", marginBottom:12 }}>
+                <div style={{ color:"var(--muted)", fontSize:11, fontWeight:700, textTransform:"uppercase", marginBottom:6 }}>Terminplan aus Kalkulation</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1.4fr", gap:6, marginBottom:8 }}>
+                  <div><div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Kolonne (Pers.)</div>
+                    <input type="number" min="1" value={tp.kolonnenStaerke} onChange={e => setTp(x => ({ ...x, kolonnenStaerke: Number(e.target.value) || 1 }))} style={{ ...inputStyle(), padding:"7px 9px", fontSize:12 }} /></div>
+                  <div><div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Std./Tag</div>
+                    <input type="number" min="1" value={tp.stundenProTag} onChange={e => setTp(x => ({ ...x, stundenProTag: Number(e.target.value) || 8 }))} style={{ ...inputStyle(), padding:"7px 9px", fontSize:12 }} /></div>
+                  <div><div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Beginn</div>
+                    <input type="date" value={tp.start} onChange={e => setTp(x => ({ ...x, start: e.target.value }))} style={{ ...inputStyle(), padding:"7px 9px", fontSize:12 }} /></div>
+                </div>
+                {tpVorschau.map((v, i) => (
+                  <div key={i} style={{ fontSize:12, color:"var(--text)", marginBottom:3 }}>
+                    {v.titel}: {v.soll_stunden.toLocaleString("de-DE")} h → <b>{v.dauer_tage} AT</b>
+                    <span style={{ color:"var(--muted)" }}> ({new Date(v.beginn).toLocaleDateString("de-DE")} – {new Date(v.faellig_am).toLocaleDateString("de-DE")})</span>
+                  </div>
+                ))}
+                <button onClick={terminplanAnlegen} disabled={!!tpMeldung && !tpMeldung.startsWith("Fehler")}
+                  style={{ width:"100%", marginTop:8, background:"var(--surface)", border:"1.5px solid var(--border)", color:"var(--text)",
+                    borderRadius:10, padding:9, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+                  {tpMeldung || "Als Vorgänge in den Bauablauf übernehmen"}
+                </button>
+              </div>
+            )}
 
             {(a.nachtrag_zu || nachtragZu) && (
               <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:12, padding:"10px 12px", marginBottom:12 }}>
