@@ -1,9 +1,10 @@
 import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator, Upload, Coins, Layers, TriangleAlert } from "lucide-react";
+import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator, Upload, Coins, Layers, TriangleAlert, ShieldCheck } from "lucide-react";
 import { StammpositionFormular } from "./StammpositionFormular.jsx";
 import { stammpositionEp, stammpositionZeitansatz } from "../lib/stammpositionen.js";
 import { aufteilungGueltig } from "../lib/efb.js";
+import { STANDARD_REGELN } from "../lib/angebotRegeln.js";
 import { PreisFormular } from "./PreisFormular.jsx";
 import { KalkulationspreisFormular, KALKULATIONSPREIS_KATEGORIEN } from "./KalkulationspreisFormular.jsx";
 import { VorlageFormular } from "./VorlageFormular.jsx";
@@ -13,7 +14,8 @@ import { kiAngebotVorlageAnalysieren, kiTagebuchVorlageAnalysieren } from "../li
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, parseGaeb90Preise, gaeb90PreiseEinspielen } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 
-export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, kalkulationspreise, setKalkulationspreise, standardZuschlaege, setStandardZuschlaege, stammpositionen = [], setStammpositionen, stammpositionenStatus, session }) {
+export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, kalkulationspreise, setKalkulationspreise, standardZuschlaege, setStandardZuschlaege, stammpositionen = [], setStammpositionen, stammpositionenStatus, angebotRegeln, setAngebotRegeln, angebotRegelnStatus, session }) {
+  const regeln = { ...STANDARD_REGELN, ...(angebotRegeln || {}) };
   const [aktiv,    setAktiv]    = useState("preise"); // preise | kalkpreise | vorlagen | angebotsvorlage | tagebuchvorlage
   const [neuPreis, setNeuPreis] = useState(null);
   const [neuVorlage,setNeuVorlage] = useState(null);
@@ -157,7 +159,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
           gemeinsame flex:1-Reihe auf schmalen Bildschirmen aus dem
           sichtbaren Bereich heraus (der letzte Tab war nicht mehr erreichbar). */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:12 }}>
-        {[["preise",Euro,"Einheitspreise"],["kalkpreise",Calculator,"Kalkulationspreise"],["stammpositionen",Layers,"Stammpositionen"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
+        {[["preise",Euro,"Einheitspreise"],["kalkpreise",Calculator,"Kalkulationspreise"],["stammpositionen",Layers,"Stammpositionen"],["freigabe",ShieldCheck,"Freigaberegeln"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
           <button key={k} onClick={() => setAktiv(k)}
             style={{ background: aktiv===k ? "var(--yellow)" : "var(--surface2)",
               color: aktiv===k ? "#1a1200" : "var(--muted)",
@@ -386,6 +388,43 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* FREIGABEREGELN — Kompetenzgrenze des Poliers (lib/angebotRegeln.js) */}
+      {aktiv === "freigabe" && (
+        <div>
+          {angebotRegelnStatus === "fehlt" && (
+            <div style={{ background:"var(--ybg)", color:"var(--ydark)", borderRadius:10, padding:"9px 12px",
+              fontSize:12, marginBottom:10, display:"flex", gap:7, lineHeight:1.4 }}>
+              <TriangleAlert size={14} style={{ flexShrink:0, marginTop:1 }} />
+              Bitte einmalig supabase-kalkulation.sql ausführen — bis dahin werden die Freigaberegeln nicht gespeichert.
+            </div>
+          )}
+          <div style={{ background:"var(--surface)", border:"1.5px solid var(--border)", borderRadius:12, padding:"12px 14px" }}>
+            <div style={{ color:"var(--text)", fontWeight:700, fontSize:13.5, marginBottom:4 }}>Kompetenzgrenze Polier</div>
+            <div style={{ color:"var(--muted)", fontSize:12, marginBottom:8, lineHeight:1.45 }}>
+              Bis zu dieser Angebotssumme (netto) darf ein Polier Angebote selbst versenden. Darüber gibt die Geschäftsführung frei. 0 = jedes Angebot braucht die Freigabe.
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <input type="number" min="0" step="500" value={regeln.kompetenzgrenzePolier || ""}
+                onChange={e => setAngebotRegeln(x => ({ ...(x || {}), kompetenzgrenzePolier: Number(e.target.value) || 0 }))}
+                placeholder="0" style={{ flex:1, background:"var(--surface2)", color:"var(--text)", border:"1.5px solid var(--border)",
+                  borderRadius:8, padding:"9px 10px", fontSize:14, fontFamily:"inherit" }} />
+              <span style={{ color:"var(--muted)", fontSize:13 }}>€ netto</span>
+            </div>
+            <div style={{ color:"var(--muted)", fontSize:11, fontWeight:700, textTransform:"uppercase", margin:"14px 0 6px" }}>
+              Auch unter der Grenze Freigabe verlangen, wenn …
+            </div>
+            {[["rotErfordertFreigabe","die Preisprüfung rote Positionen meldet (ohne Preis oder > 60 % Abweichung)"],
+              ["manuellePreiseErfordernFreigabe","der Polier Preise von Hand überschrieben hat"]].map(([feld, text]) => (
+              <label key={feld} style={{ display:"flex", gap:8, alignItems:"flex-start", fontSize:12.5, color:"var(--text)", marginBottom:6, cursor:"pointer" }}>
+                <input type="checkbox" checked={regeln[feld] !== false}
+                  onChange={e => setAngebotRegeln(x => ({ ...(x || {}), [feld]: e.target.checked }))} style={{ marginTop:2 }} />
+                {text}
+              </label>
+            ))}
+          </div>
         </div>
       )}
 

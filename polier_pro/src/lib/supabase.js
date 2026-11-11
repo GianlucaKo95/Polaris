@@ -1057,6 +1057,17 @@ export async function sbFirmaStammpositionenSpeichern(firmaId, stammpositionen, 
   } catch { return false; }
 }
 
+// Freigaberegeln (Kompetenzgrenze Polier, lib/angebotRegeln.js) — eigenes
+// Update aus demselben Grund wie sbFirmaStammpositionenSpeichern.
+export async function sbFirmaAngebotRegelnSpeichern(firmaId, angebotRegeln, session) {
+  if (!session?.access_token || !firmaId) return false;
+  try {
+    const client = sbClientMitToken(session);
+    const { error } = await client.from("firmen").update({ angebot_regeln: angebotRegeln }).eq("id", firmaId);
+    return !error;
+  } catch { return false; }
+}
+
 export async function sbBerichtSpeichern(b, projektId, session) {
   if (!session?.access_token || !projektId) return { daten: null, fehler: "Keine gültige Sitzung." };
   const payload = {

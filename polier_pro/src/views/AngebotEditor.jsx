@@ -12,6 +12,7 @@ import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
 import { positionMengeAendern } from "../lib/stammpositionen.js";
 import { katalogBauen, QUELLEN_LABEL } from "../lib/katalog.js";
 import { angebotPruefen, vergleichswerteAusAngeboten, AMPEL_FARBE } from "../lib/plausibilitaet.js";
+import { freigabePflicht } from "../lib/angebotRegeln.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
@@ -39,7 +40,7 @@ import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, projekt, eigeneFirma, firmaId, profil, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, angebotRegeln = null, projekt, eigeneFirma, firmaId, profil, session }) {
   const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
@@ -413,7 +414,10 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const istPolier = rolle === "polier";
   const darfFreigeben = rolle === "administrator" || rolle === "geschaeftsfuehrer";
   const freigabe = a.interne_freigabe || null;
-  const versandErlaubt = !istPolier || freigabe?.status === "freigegeben";
+  // Kompetenzgrenze (lib/angebotRegeln.js): unterhalb der Grenze und ohne
+  // rote Positionen/Handpreise darf der Polier selbst versenden.
+  const pflicht = freigabePflicht({ angebot: a, rolle, regeln: angebotRegeln, pruefung });
+  const versandErlaubt = !istPolier || !pflicht.pflicht || freigabe?.status === "freigegeben";
   const freigabeInhalt = useRef(JSON.stringify([a.positionen, a.rabatt, a.mwst, a.titel]));
   useEffect(() => {
     const jetzt = JSON.stringify([a.positionen, a.rabatt, a.mwst, a.titel]);
@@ -1224,13 +1228,21 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   Interne Freigabe
                 </div>
                 <div style={{ fontSize:12.5, color:"var(--text)", marginBottom:8 }}>
-                  {!freigabe?.status && (istPolier ? "Vor dem Versand muss die Geschäftsführung das Angebot freigeben." : "Keine Freigabe angefragt.")}
+                  {!freigabe?.status && istPolier && !pflicht.pflicht && (
+                    <span style={{ color:"var(--green)" }}>✓ Innerhalb deiner Kompetenzgrenze{pflicht.grenze ? ` (bis ${pflicht.grenze.toLocaleString("de-DE")} € netto)` : ""} — du kannst selbst versenden.</span>
+                  )}
+                  {!freigabe?.status && istPolier && pflicht.pflicht && (
+                    <>Freigabe durch die Geschäftsführung nötig:
+                      {pflicht.gruende.map((g, i) => <div key={i} style={{ color:"var(--ydark)", marginTop:3 }}>• {g}</div>)}
+                    </>
+                  )}
+                  {!freigabe?.status && !istPolier && "Keine Freigabe angefragt."}
                   {freigabe?.status === "angefragt" && "⏳ Freigabe angefragt."}
                   {freigabe?.status === "freigegeben" && `✔ Freigegeben von ${freigabe.von || "GF"} am ${new Date(freigabe.am).toLocaleDateString("de-DE")}.`}
                   {freigabe?.status === "zurueckgewiesen" && `↩ Zurückgewiesen${freigabe.notiz ? `: ${freigabe.notiz}` : ""}.`}
                   {freigabe?.status === "geaendert" && "Nach der Freigabe geändert — bitte erneut freigeben lassen."}
                 </div>
-                {istPolier && freigabe?.status !== "angefragt" && freigabe?.status !== "freigegeben" && (
+                {istPolier && pflicht.pflicht && freigabe?.status !== "angefragt" && freigabe?.status !== "freigegeben" && (
                   <button onClick={() => freigabeSetzen("angefragt")} disabled={speichertLaedt || !a.positionen.length}
                     style={{ width:"100%", background:"var(--yellow)", color:"#1a1200", border:"none", borderRadius:10,
                       padding:11, fontWeight:800, cursor:"pointer", fontFamily:"inherit" }}>

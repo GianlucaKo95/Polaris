@@ -53,3 +53,8 @@ begin
       and projekt_id in (select id from projekte where firma_id = eigene_firma_id()));
   end if;
 end $$;
+
+-- ── Freigaberegeln (Polaris 1.51) ─────────────────────────────────────────
+-- angebot_regeln: { kompetenzgrenzePolier, rotErfordertFreigabe,
+-- manuellePreiseErfordernFreigabe } — siehe src/lib/angebotRegeln.js.
+alter table firmen add column if not exists angebot_regeln jsonb;

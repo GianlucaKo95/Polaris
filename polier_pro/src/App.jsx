@@ -10,7 +10,7 @@ import { DEFAULT_EINHEITSPREISE, DEFAULT_LV_VORLAGEN, ONBOARDING_KEY, ROLLEN, PR
 import { usePWA } from "./hooks/usePWA.js";
 import { usePushNotifications } from "./hooks/usePushNotifications.js";
 import { useOfflineSync } from "./hooks/useOfflineSync.js";
-import { sbClientMitToken, SUPABASE_URL, sbAufgabeSpeichern, sbAufgabeLoeschen, sbAufgabeVorschlagen, sbAufgabeVorschlagEntscheiden, sbBerichtSpeichern, sbKolonneSpeichern, sbKolonneLoeschen, sbFirmaParameterSpeichern, sbFirmaStammpositionenSpeichern, sbAngebotSpeichern, sbBaufortschrittSpeichern, sbRechnungSpeichern, sbRechnungLoeschen } from "./lib/supabase.js";
+import { sbClientMitToken, SUPABASE_URL, sbAufgabeSpeichern, sbAufgabeLoeschen, sbAufgabeVorschlagen, sbAufgabeVorschlagEntscheiden, sbBerichtSpeichern, sbKolonneSpeichern, sbKolonneLoeschen, sbFirmaParameterSpeichern, sbFirmaStammpositionenSpeichern, sbFirmaAngebotRegelnSpeichern, sbAngebotSpeichern, sbBaufortschrittSpeichern, sbRechnungSpeichern, sbRechnungLoeschen } from "./lib/supabase.js";
 import { PasswortSetzenScreen } from "./views/PasswortSetzenScreen.jsx";
 import { ErstePinAbfrageScreen } from "./views/ErstePinAbfrageScreen.jsx";
 import { EinladungScreen } from "./views/EinladungScreen.jsx";
@@ -226,6 +226,10 @@ export default function PolierApp() {
   // bzw. Spalte fehlt → nie zurückschreiben.
   const [stammpositionen, setStammpositionen] = useState([]);
   const [stammpositionenStatus, setStammpositionenStatus] = useState(null); // null | "ok" | "fehlt"
+  // Freigaberegeln für Angebote (Kompetenzgrenze Polier, lib/angebotRegeln.js)
+  // — eigene Spalte firmen.angebot_regeln, gleiches tolerantes Muster.
+  const [angebotRegeln, setAngebotRegeln] = useState(null);
+  const [angebotRegelnStatus, setAngebotRegelnStatus] = useState(null);
   // Verhindert, dass der initiale Ladevorgang der Parameter aus Supabase
   // (setzt dieselben Werte, die gerade erst von dort kamen) sie sofort
   // wieder zurückschreibt, bevor der Nutzer überhaupt etwas geändert hat.
@@ -366,7 +370,18 @@ export default function PolierApp() {
         setStammpositionen(Array.isArray(data?.[0]?.stammpositionen) ? data[0].stammpositionen : []);
         setStammpositionenStatus("ok");
       });
+    client.from("firmen").select("angebot_regeln").eq("id", firma.id)
+      .then(({ data, error }) => {
+        if (error) { setAngebotRegelnStatus("fehlt"); return; }
+        setAngebotRegeln(data?.[0]?.angebot_regeln || null);
+        setAngebotRegelnStatus("ok");
+      });
   }, [firma?.id, auth.session?.access_token]);
+
+  useEffect(() => {
+    if (angebotRegelnStatus !== "ok" || !firma?.id || !auth.session?.access_token) return;
+    sbFirmaAngebotRegelnSpeichern(firma.id, angebotRegeln, auth.session);
+  }, [angebotRegeln]);
 
   useEffect(() => {
     if (stammpositionenStatus !== "ok" || !firma?.id || !auth.session?.access_token) return;
@@ -1498,9 +1513,9 @@ export default function PolierApp() {
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
         {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}
-        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} stammpositionen={stammpositionen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} rolle={aktiveRolle} session={auth.session} />}
+        {tab === "angebot"       && <AngebotView projekt={projekt} aufgaben={felder} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen} angebotVorlage={angebotVorlage} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} stammpositionen={stammpositionen} eigeneFirma={eigeneFirma} angebote={angebote} onAngebotSpeichern={angebotSpeichern} firmaId={firma?.id} profil={aktiveProfil} rolle={aktiveRolle} angebotRegeln={angebotRegeln} session={auth.session} />}
         {tab === "rechnungen"    && <RechnungenView projekt={projekt} angebote={angebote} baufortschritt={baufortschritt} rechnungen={rechnungen} rechnungBestaetigungen={rechnungBestaetigungen} eigeneFirma={eigeneFirma} onBaufortschrittSpeichern={baufortschrittSpeichern} onRechnungSpeichern={rechnungSpeichern} onRechnungLoeschen={rechnungLoeschen} profil={aktiveProfil} />}
-        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} standardZuschlaege={standardZuschlaege} setStandardZuschlaege={setStandardZuschlaege} stammpositionen={stammpositionen} setStammpositionen={setStammpositionen} stammpositionenStatus={stammpositionenStatus} session={auth.session} />}
+        {tab === "admin_params" && <AdminParameterView einheitspreise={einheitspreise} setEinheitspreise={setEinheitspreise} lvVorlagen={lvVorlagen} setLvVorlagen={setLvVorlagen} angebotVorlage={angebotVorlage} setAngebotVorlage={setAngebotVorlage} tagebuchVorlage={tagebuchVorlage} setTagebuchVorlage={setTagebuchVorlage} kalkulationspreise={kalkulationspreise} setKalkulationspreise={setKalkulationspreise} standardZuschlaege={standardZuschlaege} setStandardZuschlaege={setStandardZuschlaege} stammpositionen={stammpositionen} setStammpositionen={setStammpositionen} stammpositionenStatus={stammpositionenStatus} angebotRegeln={angebotRegeln} setAngebotRegeln={setAngebotRegeln} angebotRegelnStatus={angebotRegelnStatus} session={auth.session} />}
         {tab === "nutzer"       && <NutzerVerwaltungView session={auth.session} kolonnen={kolonnen} firmaId={firma?.id} projekte={projekte} />}
         {tab === "firmen"       && <FirmenView owneFirma={eigeneFirma} setEigeneFirma={setEigeneFirma} subs={subs} setSubs={setSubs}
             onOnboardingReset={() => setOnboardingDone(false)} session={auth.session} firmaId={firma?.id} firma={firma} projekte={projekte} />}

@@ -1,6 +1,6 @@
 {
   "name": "polier-pro",
-  "version": "1.50.0",
+  "version": "1.51.0",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -8,7 +8,8 @@
     "test": "node --test src/lib/*.test.mjs",
     "cap:sync": "vite build && npx cap sync",
     "android:open": "npm run cap:sync && npx cap open android",
-    "ios:open": "npm run cap:sync && npx cap open ios"
+    "ios:open": "npm run cap:sync && npx cap open ios",
+    "ki-eval": "node scripts/ki-eval.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { agentStarten, agentFortsetzen, vorschlagZuPositionen, werkzeugAusfuehren } from "./kiAngebotAgent.js";
+import { agentStarten, agentFortsetzen, vorschlagZuPositionen, werkzeugAusfuehren, vorschlagPruefen } from "./kiAngebotAgent.js";
 import { katalogBauen } from "./katalog.js";
 
 const kalkulationspreise = [
@@ -21,7 +21,7 @@ function fakeKi(antworten) {
   let i = 0;
   const rufeKi = async (system, messages, tools) => {
     gesehen.push({ system, messages: JSON.parse(JSON.stringify(messages)), tools });
-    return antworten[i++];
+    return antworten[Math.min(i++, antworten.length - 1)];
   };
   return { rufeKi, gesehen };
 }
@@ -135,4 +135,43 @@ test("Anhänge gehen als Content-Blöcke vor dem Text an die KI", async () => {
   assert.match(content[1].text, /Anhang/);
   assert.match(gesehen[0].system, /NACHTRAG/);
   assert.match(gesehen[0].system, /Rohbau EFH/);
+});
+
+
+test("Rechnen- und Checklisten-Werkzeug", () => {
+  assert.deepEqual(werkzeugAusfuehren("rechnen", { ausdruck: "40 × 2,5" }, katalog), { ergebnis: 100 });
+  assert.ok(werkzeugAusfuehren("rechnen", { ausdruck: "rm -rf" }, katalog).fehler);
+  assert.ok(werkzeugAusfuehren("checkliste_abrufen", { leistung: "Kellerabdichtung" }, katalog).checklisten.length > 0);
+});
+
+test("Vorschlagsprüfung findet fehlende Preise, falsche Einheiten, Doppelte und fehlende Herleitungen", () => {
+  const p = vorschlagPruefen({ positionen: [
+    { bez: "A", menge: 10, einheit: "m", ref: "SP:10", mengen_herleitung: "x" },
+    { bez: "B", menge: 10, einheit: "m²", ref: "SP:10", mengen_herleitung: "" },
+    { bez: "C", menge: 0, einheit: "Stk", ref: null, mengen_herleitung: "y" },
+  ] }, katalog);
+  assert.equal(p.filter(x => x.includes("Einheit")).length, 1);
+  assert.equal(p.filter(x => x.includes("doppelt")).length, 1);
+  assert.equal(p.filter(x => x.includes("herleitung")).length, 1);
+  assert.equal(p.filter(x => x.includes("Menge fehlt")).length, 1);
+  assert.equal(p.filter(x => x.includes("ohne Preisreferenz")).length, 1);
+});
+
+test("Fehlerhafter Vorschlag bekommt genau eine Korrekturrunde", async () => {
+  const schlecht = { stop_reason: "tool_use", content: [tu("v1", "angebot_vorschlagen", { titel: "T", positionen: [
+    { bez: "BE", menge: 1, einheit: "Stk", ref: "EP:1", mengen_herleitung: "pauschal" }] })] };
+  const gut = { stop_reason: "tool_use", content: [tu("v2", "angebot_vorschlagen", { titel: "T", positionen: [
+    { bez: "BE", menge: 1, einheit: "Psch", ref: "EP:1", mengen_herleitung: "pauschal" }] })] };
+  const { rufeKi, gesehen } = fakeKi([schlecht, gut]);
+  const r = await agentStarten({ anfrage: "x", katalog, kontext: {}, rufeKi });
+  assert.equal(r.status, "fertig");
+  assert.equal(r.vorschlag.positionen[0].einheit, "Psch");
+  assert.equal(r.probleme.length, 0);
+  assert.match(gesehen[1].messages.at(-1).content[0].content, /Automatische Prüfung/);
+
+  const { rufeKi: stur, gesehen: g2 } = fakeKi([schlecht]);
+  const r2 = await agentStarten({ anfrage: "x", katalog, kontext: {}, rufeKi: stur });
+  assert.equal(r2.status, "fertig");
+  assert.equal(r2.probleme.length, 1);
+  assert.equal(g2.length, 2);
 });

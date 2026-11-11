@@ -21,6 +21,7 @@
 
 import { katalogSuchen, katalogEintrag, einheitNormalisieren } from "./katalog.js";
 import { positionAusStammposition } from "./stammpositionen.js";
+import { rechnen, checklistenFuer } from "./bauwissen.js";
 
 export const MAX_RUNDEN = 10;
 
@@ -35,6 +36,24 @@ export const WERKZEUGE = [
         einheit: { type: "string", description: "Erwartete Abrechnungseinheit, z.B. m², m³, m, Stk, t, Psch (optional)" },
       },
       required: ["suchbegriff"],
+    },
+  },
+  {
+    name: "rechnen",
+    description: "Rechnet einen arithmetischen Ausdruck exakt aus (Zahlen, + − × ÷, Klammern, Komma als Dezimaltrenner). IMMER für Mengen verwenden statt im Kopf zu rechnen, z.B. '40 × 2,5' oder '(12 + 8) × 2 × 0,6'.",
+    input_schema: {
+      type: "object",
+      properties: { ausdruck: { type: "string" } },
+      required: ["ausdruck"],
+    },
+  },
+  {
+    name: "checkliste_abrufen",
+    description: "Liefert die Positionen, die zu einer Leistungsart üblicherweise gehören (Bodenplatte, Kellerabdichtung, Mauerwerk, Decke, Dach, Parkhaus-Instandsetzung). Zu Beginn aufrufen, damit keine Nebenleistung vergessen wird.",
+    input_schema: {
+      type: "object",
+      properties: { leistung: { type: "string", description: "Leistungsart in Stichworten" } },
+      required: ["leistung"],
     },
   },
   {
@@ -84,11 +103,12 @@ NACHTRAG: Dies ist ein Nachtragsangebot zum Auftrag „${nachtragZu.titel || ""}
   return `Du bist erfahrener Baukalkulator in einem deutschen Bauunternehmen und erstellst Angebote für Poliere, die selbst keine Kalkulationserfahrung haben.
 
 Regeln:
+0. Rufe zu Beginn checkliste_abrufen für die Leistungsart auf und prüfe jeden Punkt: gehört er zu dieser Anfrage? Übernimm nur, was der Kunde braucht.
 1. Zerlege die Anfrage in die Leistungen, die ein vollständiges Angebot braucht. Denke an übliche Nebenleistungen (Baustelleneinrichtung, Erdarbeiten, Entsorgung, Gerüst, Schutzmaßnahmen), wenn sie zur Leistung gehören.
 2. Suche JEDE Leistung mit katalog_suchen, bevor du sie vorschlägst. Probiere bei keinem Treffer 1–2 andere Stichworte.
 3. Du nennst NIEMALS selbst einen Preis. Preise kommen ausschließlich aus dem Katalog über die Referenz (ref). Findest du nichts Passendes, setze ref=null — die Position wird dann ohne Preis zur manuellen Kalkulation markiert.
 4. Wähle die Referenz, deren Leistung und Einheit wirklich passt. Bevorzuge Urkalkulation (UK:…, nur bei Nachträgen) vor Stammpositionen (SP:…) vor Einheitspreisen (EP:…) vor früheren LV-Positionen (LV:…), wenn sie gleich gut passen.
-5. Leite Mengen aus den Angaben nachvollziehbar her und schreibe die Rechnung in mengen_herleitung. Rechne Einheiten sauber um (z.B. Wandlänge × Höhe = m²).
+5. Leite Mengen aus den Angaben nachvollziehbar her: rechne JEDE Menge mit dem Werkzeug rechnen und schreibe Rechnung und Ergebnis in mengen_herleitung. Rechne Einheiten sauber um (z.B. Wandlänge × Höhe = m²; Volumen = Fläche × Stärke in m).
 6. Fehlen preisrelevante Angaben, die du nicht sinnvoll annehmen kannst, stelle EINMAL mit rueckfragen_stellen bis zu 3 kurze Fragen. Sonst triff übliche Annahmen und liste sie unter annahmen.
 7. Schließe immer mit angebot_vorschlagen ab. Antworte auf Deutsch.
 
@@ -99,6 +119,15 @@ ${gewerke?.length ? `Gewerke der Firma: ${gewerke.join(", ")}` : ""}${nachtrag}`
 // Führt ein Werkzeug aus. Nur katalog_suchen liefert ein echtes Ergebnis —
 // die beiden anderen beenden die Schleife und werden vom Aufrufer behandelt.
 export function werkzeugAusfuehren(name, input, katalog) {
+  if (name === "rechnen") {
+    try { return { ergebnis: rechnen(input?.ausdruck) }; }
+    catch (e) { return { fehler: e.message }; }
+  }
+  if (name === "checkliste_abrufen") {
+    const listen = checklistenFuer(input?.leistung);
+    if (!listen.length) return { hinweis: "Keine hinterlegte Checkliste — denke selbst an Baustelleneinrichtung, Erdarbeiten, Entsorgung und Gerüst." };
+    return { checklisten: listen.map(l => ({ name: l.name, positionen: l.positionen })) };
+  }
   if (name === "katalog_suchen") {
     const treffer = katalogSuchen(katalog, input?.suchbegriff || "", { einheit: input?.einheit || null, max: 6 });
     if (treffer.length === 0) return { treffer: [], hinweis: "Keine passenden Einträge. Andere Stichworte versuchen oder ref=null verwenden." };
@@ -108,6 +137,33 @@ export function werkzeugAusfuehren(name, input, katalog) {
   }
   return { fehler: `Unbekanntes Werkzeug: ${name}` };
 }
+
+// Deterministische Prüfung des KI-Vorschlags, bevor er beim Nutzer landet.
+// Findet sie etwas, bekommt die KI EINE Korrekturrunde (siehe unten).
+export function vorschlagPruefen(vorschlag, katalog) {
+  const probleme = [];
+  const gesehen = new Map();
+  for (const p of vorschlag?.positionen || []) {
+    const name = `„${p?.bez || "?"}“`;
+    if (!(Number(p?.menge) > 0)) probleme.push(`${name}: Menge fehlt oder ist 0.`);
+    if (!String(p?.mengen_herleitung || "").trim()) probleme.push(`${name}: mengen_herleitung fehlt.`);
+    if (p?.ref) {
+      const e = katalogEintrag(katalog, p.ref);
+      if (!e) probleme.push(`${name}: Referenz ${p.ref} existiert nicht — nur Referenzen aus katalog_suchen verwenden.`);
+      else if (einheitNormalisieren(e.einheit) !== einheitNormalisieren(p.einheit)) {
+        probleme.push(`${name}: Einheit ${p.einheit} passt nicht zur Katalogeinheit ${e.einheit} von ${p.ref} — Menge in ${e.einheit} umrechnen oder andere Referenz wählen.`);
+      }
+      if (gesehen.has(p.ref)) probleme.push(`${name}: dieselbe Referenz ${p.ref} wie „${gesehen.get(p.ref)}“ — doppelt?`);
+      gesehen.set(p.ref, p.bez);
+    } else {
+      probleme.push(`${name}: ohne Preisreferenz — mit 1–2 anderen Stichworten oder Synonymen suchen; nur wenn wirklich nichts passt, ref=null lassen.`);
+    }
+  }
+  if (!(vorschlag?.positionen || []).length) probleme.push("Der Vorschlag enthält keine Positionen.");
+  return probleme;
+}
+
+const KORREKTUR_MARKE = "Automatische Prüfung des Vorschlags";
 
 function toolUses(antwort) {
   return (antwort?.content || []).filter(b => b.type === "tool_use");
@@ -140,7 +196,24 @@ export async function agentAusfuehren({ messages, katalog, kontext, rufeKi, maxR
     ohneWerkzeug = 0;
 
     const vorschlag = aufrufe.find(a => a.name === "angebot_vorschlagen");
-    if (vorschlag) return { status: "fertig", vorschlag: vorschlag.input || {}, messages: verlauf };
+    if (vorschlag) {
+      // Eine Korrekturrunde: Probleme zurückmelden und erneut vorschlagen
+      // lassen. Danach wird angenommen, was kommt — verbleibende Lücken
+      // zeigen Ampel und Freigaberegeln im Editor.
+      const probleme = vorschlagPruefen(vorschlag.input, katalog);
+      const schonKorrigiert = verlauf.some(m => Array.isArray(m.content)
+        && m.content.some(b => b.type === "tool_result" && String(b.content).startsWith(KORREKTUR_MARKE)));
+      if (probleme.length && !schonKorrigiert && runde < maxRunden - 2) {
+        verlauf.push({ role: "user", content: aufrufe.map(a => ({
+          type: "tool_result", tool_use_id: a.id,
+          content: a.id === vorschlag.id
+            ? `${KORREKTUR_MARKE}:\n- ${probleme.join("\n- ")}\n\nBitte beheben (bei Bedarf erneut suchen/rechnen) und angebot_vorschlagen erneut aufrufen. Was bewusst so gewollt ist, unverändert lassen.`
+            : JSON.stringify(werkzeugAusfuehren(a.name, a.input, katalog)),
+        })) });
+        continue;
+      }
+      return { status: "fertig", vorschlag: vorschlag.input || {}, messages: verlauf, probleme };
+    }
 
     const rueckfrage = aufrufe.find(a => a.name === "rueckfragen_stellen");
     if (rueckfrage) {

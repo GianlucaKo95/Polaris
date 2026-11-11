@@ -18,6 +18,7 @@
 // ein Suchwort auch als Treffer, wenn es TEIL eines Katalogworts ist.
 
 import { stammpositionEp } from "./stammpositionen.js";
+import { synonymeVon } from "./bauwissen.js";
 
 const STOPPWOERTER = new Set([
   "und", "oder", "mit", "ohne", "inkl", "inklusive", "für", "fuer", "von", "vom", "zum", "zur",
@@ -33,8 +34,27 @@ export function normalisieren(text) {
     .trim();
 }
 
+// Kurze Wörter zählen nur, wenn sie ein bekanntes Fachkürzel sind ("BE",
+// "KS", "ZE") — sonst wären Einheiten und Füllwörter Treffer.
 export function suchwoerter(text) {
-  return normalisieren(text).split(" ").filter(w => w.length >= 3 && !STOPPWOERTER.has(w));
+  return normalisieren(text).split(" ").filter(w =>
+    !STOPPWOERTER.has(w) && (w.length >= 3 || synonymeVon(w).length > 1));
+}
+
+// Tippfehler-Toleranz: Editierdistanz ≤ 1 bei Wörtern ab 6 Zeichen.
+function fastGleich(a, b) {
+  if (a.length < 6 || b.length < 6 || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, fehler = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++fehler > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return fehler + (a.length - i) + (b.length - j) <= 1;
+}
+
+function wortPasst(w, k) {
+  return k === w || (w.length >= 5 && k.includes(w)) || (k.length >= 5 && w.includes(k)) || fastGleich(w, k);
 }
 
 export function einheitNormalisieren(einheit) {
@@ -47,8 +67,9 @@ export function einheitNormalisieren(einheit) {
   return ALIAS[e] || e;
 }
 
-// Ähnlichkeit 0..1: Anteil der Suchwörter, die im Kandidaten vorkommen
-// (exakt oder als Wortbestandteil, in beide Richtungen ab 5 Zeichen).
+// Ähnlichkeit 0..1: Anteil der Suchwörter, die im Kandidaten vorkommen —
+// exakt, als Wortbestandteil (ab 5 Zeichen), mit einem Tippfehler oder über
+// ein Fach-Synonym aus bauwissen.js ("Drän" findet "Drainage").
 export function aehnlichkeit(suchtext, kandidatText) {
   const such = suchwoerter(suchtext);
   if (such.length === 0) return 0;
@@ -56,7 +77,8 @@ export function aehnlichkeit(suchtext, kandidatText) {
   if (kand.length === 0) return 0;
   let treffer = 0;
   for (const w of such) {
-    if (kand.some(k => k === w || (w.length >= 5 && k.includes(w)) || (k.length >= 5 && w.includes(k)))) treffer++;
+    const varianten = synonymeVon(w);
+    if (kand.some(k => varianten.some(v => wortPasst(v, k)))) treffer++;
   }
   return treffer / such.length;
 }
