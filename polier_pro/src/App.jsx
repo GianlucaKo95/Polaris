@@ -56,6 +56,7 @@ const KiFrageView            = React.lazy(() => import("./views/KiFrageView.jsx"
 const BaustellenAbschlussView = React.lazy(() => import("./views/BaustellenAbschlussView.jsx").then(m => ({ default: m.BaustellenAbschlussView })));
 const SimulationView         = React.lazy(() => import("./views/SimulationView.jsx").then(m => ({ default: m.SimulationView })));
 const KostenView             = React.lazy(() => import("./views/KostenView.jsx").then(m => ({ default: m.KostenView })));
+const LohnView               = React.lazy(() => import("./views/LohnView.jsx").then(m => ({ default: m.LohnView })));
 const StundenExportView      = React.lazy(() => import("./views/StundenExportView.jsx").then(m => ({ default: m.StundenExportView })));
 const AngebotView            = React.lazy(() => import("./views/AngebotView.jsx").then(m => ({ default: m.AngebotView })));
 const LeistungView           = React.lazy(() => import("./views/LeistungView.jsx").then(m => ({ default: m.LeistungView })));
@@ -364,6 +365,8 @@ export default function PolierApp() {
     useFirmaSpalte(firma?.id, auth.session, "kalkulationsgrundlagen", null);
   // CO₂-Faktoren der Firma (EPD/ÖKOBAUDAT, lib/co2.js) — vor den Richtwerten.
   const [co2Faktoren, setCo2Faktoren, co2FaktorenStatus] = useFirmaSpalte(firma?.id, auth.session, "co2_faktoren", []);
+  // Lohnvorerfassung: Lohnarten, Personalnummern, Sollzeiten (lib/lohnvorerfassung.js).
+  const [lohnEinstellungen, setLohnEinstellungen, lohnEinstellungenStatus] = useFirmaSpalte(firma?.id, auth.session, "lohn_einstellungen", null);
   function grundlagenAendern(neu) {
     setKalkulationsgrundlagen(neu);
     setKalkulationspreise(prev => kalkulationspreiseAbleiten(prev, neu));
@@ -1358,6 +1361,8 @@ export default function PolierApp() {
     { id:"tagebuch",      icon:"📋",  label:"Tagebuch",    rollen:["administrator","geschaeftsfuehrer","polier"] },
     { id:"stempeln",      icon:"⏱️",  label:"Stempeln",    rollen:["administrator","polier","vorarbeiter","facharbeiter"] },
     { id:"stunden",       icon:"📊",  label:"Stunden",     rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
+    // Monatliche Lohnvorerfassung für das Lohnbüro (views/LohnView.jsx).
+    { id:"lohn",          icon:"💶",  label:"Lohn",        rollen:["administrator","geschaeftsfuehrer","bauleiter"] },
     { id:"ki_frage",      icon:"💬",  label:"KI fragen",   rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     { id:"simulation",    icon:"🧪",  label:"Simulation",  rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     // Polier: erstellt Angebote (v.a. per KI-Assistent) und reicht sie zur
@@ -1543,6 +1548,8 @@ export default function PolierApp() {
             // auf die eigene Kolonne begrenzt, "alle" heißt für ihn also
             // "alle aus seiner Kolonne", nicht firmenweit.
             darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
+        {tab === "lohn"          && <LohnView session={auth.session} firmaId={firma?.id} projekte={projekte} einstellungen={lohnEinstellungen}
+            setEinstellungen={setLohnEinstellungen} status={lohnEinstellungenStatus} darfEinstellen={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} />}
         {tab === "ki_frage"      && <KiFrageView projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
         {tab === "abschluss"     && <BaustellenAbschlussView projekt={projekt} aufgaben={felder} tagesberichte={berichte} eigeneFirma={eigeneFirma} session={auth.session} onAbgeschlossen={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "simulation"    && <SimulationView aufgaben={felder} kolonnen={kolonnen} projekt={projekt} projekte={projekte} session={auth.session} />}

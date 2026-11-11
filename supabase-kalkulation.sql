@@ -105,3 +105,26 @@ end $$;
 
 -- ── CO₂-Faktoren der Firma (Polaris 1.63, lib/co2.js) ──────────────────
 alter table firmen add column if not exists co2_faktoren jsonb not null default '[]'::jsonb;
+
+-- ── Lohnvorerfassung (Polaris 1.64, lib/lohnvorerfassung.js) ────────────
+alter table firmen add column if not exists lohn_einstellungen jsonb;
+create table if not exists lohn_monat (
+  id          bigserial primary key,
+  firma_id    int not null references firmen(id) on delete cascade,
+  monat       date not null,                 -- immer der 1. des Monats
+  profil_id   uuid not null references profile(id) on delete cascade,
+  eingaben    jsonb not null default '{}'::jsonb,  -- schlechtwetter, erschwernis, ausloese
+  updated_at  timestamptz default now(),
+  unique (firma_id, monat, profil_id)
+);
+alter table lohn_monat enable row level security;
+do $$
+begin
+  if not exists (select 1 from pg_policies where tablename = 'lohn_monat' and policyname = 'lohn_monat_firma') then
+    create policy "lohn_monat_firma" on lohn_monat for all using (
+      firma_id = eigene_firma_id() and eigene_rolle() in ('administrator','geschaeftsfuehrer','bauleiter')
+    ) with check (
+      firma_id = eigene_firma_id() and eigene_rolle() in ('administrator','geschaeftsfuehrer','bauleiter')
+    );
+  end if;
+end $$;
