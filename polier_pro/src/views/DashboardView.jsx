@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Calendar, CalendarX, Users, Pencil } from "lucide-react";
 import { WeatherView } from "./WeatherView.jsx";
 import { terminprognose } from "../lib/terminkette.js";
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
 
 export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, projekt, wetter, onEdit }) {
+  const istDesktop = useIstDesktop();
   const [wetterInfo, setWetterInfo] = useState(null);
   const offeneAufgaben = aufgaben.filter(a => a.status !== "abgeschlossen");
   const kritisch  = aufgaben.filter(a => a.prioritaet === "kritisch" && a.status !== "abgeschlossen").length;
@@ -89,14 +91,14 @@ export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, pro
       )}
 
       {/* Kennzahlen — jede Kachel ist ein Sprungziel */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
-        <KpiKachel label="Offene Aufgaben" wert={offeneAufgaben.length}
+      <div style={{ display:"grid", gridTemplateColumns: istDesktop ? "repeat(4, minmax(0, 1fr))" : "1fr 1fr", gap: istDesktop ? 16 : 10, marginBottom: istDesktop ? 24 : 12 }}>
+        <KpiKachel d={istDesktop} label="Offene Aufgaben" wert={offeneAufgaben.length}
           farbe="var(--yellow)" onClick={() => springeZu("aufgaben","offen")} />
-        <KpiKachel label="Kritisch" wert={kritisch}
+        <KpiKachel d={istDesktop} label="Kritisch" wert={kritisch}
           farbe={kritisch>0 ? "var(--red)" : "var(--green)"} onClick={() => springeZu("aufgaben","kritisch")} />
-        <KpiKachel label="Mängel" wert={maengel}
+        <KpiKachel d={istDesktop} label="Mängel" wert={maengel}
           farbe={maengel>0 ? "var(--red)" : "var(--green)"} onClick={() => springeZu("aufgaben","maengel")} />
-        <KpiKachel label="Überfällig" wert={ueberfaellig.length}
+        <KpiKachel d={istDesktop} label="Überfällig" wert={ueberfaellig.length}
           farbe={ueberfaellig.length>0 ? "var(--orange)" : "var(--green)"} onClick={() => springeZu("aufgaben","alle")} />
       </div>
 
@@ -108,8 +110,10 @@ export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, pro
             const istUeberfaellig = ueberfaellig.includes(a);
             return (
               <div key={a.id} onClick={() => springeZu("aufgaben")}
+                className={istDesktop ? "desk-zeile" : undefined}
                 style={{ background:"var(--surface)", border:"1px solid var(--border)",
-                  borderLeft:`4px solid ${istUeberfaellig ? "var(--red)" : "var(--yellow)"}`,
+                  borderLeft: istDesktop ? "1px solid var(--border)" : `4px solid ${istUeberfaellig ? "var(--red)" : "var(--yellow)"}`,
+                  borderRadius: istDesktop ? 8 : undefined,
                   marginBottom:6, display:"flex", cursor:"pointer" }}>
                 <div style={{ flex:1, padding:"9px 14px" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}>
@@ -117,7 +121,7 @@ export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, pro
                     <div style={{ background: istUeberfaellig ? "var(--rbg)" : "var(--ybg)",
                       color: istUeberfaellig ? "var(--red)" : "var(--ydark)",
                       padding:"3px 8px", fontSize:10, fontWeight:800, whiteSpace:"nowrap" }}>
-                      {istUeberfaellig ? "ÜBERFÄLLIG" : "OFFEN"}
+                      {istDesktop ? (istUeberfaellig ? "Überfällig" : "Offen") : istUeberfaellig ? "ÜBERFÄLLIG" : "OFFEN"}
                     </div>
                   </div>
                   <div style={{ display:"flex", gap:14, marginTop:6, color:"var(--muted)", fontSize:11.5, fontWeight:600 }}>
@@ -207,6 +211,30 @@ export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, pro
 
 function CockpitKarte({ ampelRot, ampelOrange, ampelGruen, totalMann, stundenGeplant,
   wetterGeladen, betonageVorsicht, betonageKritisch, hatOffeneBetonage, deltaTage }) {
+  if (document.documentElement.dataset.layout === "desktop") {
+    // Desktop: Ampel als Punkte, Lage als ruhige Wertepaare statt Emoji-Zeilen
+    const punkt = farbe => <span aria-hidden="true" style={{ width:8, height:8, borderRadius:4, background:farbe }} />;
+    const paar = (l, w, farbe) => (
+      <div><div style={{ fontSize:13, color:"var(--text2)" }}>{l}</div><div style={{ marginTop:4, color: farbe || "var(--text)" }}>{w}</div></div>
+    );
+    return (
+      <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 20px", marginBottom:16 }}>
+        <div style={{ display:"flex", gap:24, flexWrap:"wrap", alignItems:"center", paddingBottom:12, borderBottom:"1px solid var(--border)" }}>
+          <span style={{ color:"var(--text2)", fontSize:13 }}>Termine</span>
+          {[[ampelGruen, "im Plan", "var(--green)"], [ampelOrange, "gefährdet", "var(--akzent)"], [ampelRot, "Terminrisiko", "var(--red)"]].map(([n, l, f]) => (
+            <span key={l} style={{ display:"inline-flex", alignItems:"center", gap:8 }}>{punkt(f)}
+              <span style={{ fontFamily:"var(--font-zahl)" }}>{n}</span> {l}</span>
+          ))}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:16, paddingTop:12 }}>
+          {paar("Eingeplant", `${totalMann} Mitarbeiter${stundenGeplant > 0 ? `, ${stundenGeplant} h` : ""}`)}
+          {wetterGeladen && paar("Wetterrisiko", betonageKritisch ? "hoch" : betonageVorsicht ? "erhöht" : "gering", betonageKritisch ? "var(--red)" : undefined)}
+          {wetterGeladen && hatOffeneBetonage && paar("Betonage", betonageKritisch ? "nicht empfohlen" : betonageVorsicht ? "mit Vorsicht" : "möglich")}
+          {deltaTage !== null && paar("Terminprognose", deltaTage > 0 ? `${deltaTage} Tag${deltaTage === 1 ? "" : "e"} Verzug` : "im Plan", deltaTage > 0 ? "var(--red)" : undefined)}
+        </div>
+      </div>
+    );
+  }
   const zeile = { display:"flex", alignItems:"center", gap:6, fontSize:12.5, color:"var(--text)", fontWeight:600 };
   return (
     <div style={{ background:"var(--surface)", border:"1px solid var(--border)",
@@ -247,7 +275,21 @@ function initialen(name = "") {
   return name.split(" ").map(w => w[0]).filter(Boolean).slice(0,2).join("").toUpperCase() || "?";
 }
 
-function KpiKachel({ label, wert, farbe, onClick }) {
+function KpiKachel({ label, wert, farbe, onClick, d = false }) {
+  // Desktop: Kennzahl ohne Farbrand; ein Punkt nur, wenn die Zahl Handlung verlangt
+  if (d) {
+    const warnt = wert > 0 && (farbe === "var(--red)" || farbe === "var(--orange)");
+    return (
+      <button onClick={onClick} className="desk-zeile"
+        style={{ textAlign:"left", background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 20px",
+          cursor:"pointer", fontFamily:"inherit", color:"var(--text)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, color:"var(--text2)", fontSize:13 }}>
+          {label}{warnt && <span aria-hidden="true" style={{ width:6, height:6, borderRadius:3, background: farbe }} />}
+        </div>
+        <div style={{ fontFamily:"var(--font-zahl)", fontVariantNumeric:"tabular-nums", fontSize:24, lineHeight:"32px", fontWeight:500, marginTop:8 }}>{wert}</div>
+      </button>
+    );
+  }
   return (
     <div onClick={onClick}
       style={{ background:"var(--surface)", padding:"10px 16px",

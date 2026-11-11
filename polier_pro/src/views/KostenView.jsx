@@ -4,6 +4,7 @@ import { Label, inputStyle } from "../components/Label.jsx";
 import { sbProjektKostenSpeichern } from "../lib/supabase.js";
 import { Spinner } from "../components/Spinner.jsx";
 import { kalkulationSollAufschluesselung } from "../lib/kalkulation.js";
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
 import { leistungsfaktor, zeitansaetzeAnpassen } from "../lib/nachkalkulation.js";
 
 const STANDARD_POSITIONEN = [
@@ -58,6 +59,7 @@ function ausAngebotUebernehmen(angebot) {
 }
 
 export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebote, kalkulationspreise = [], baufortschritt = [], stammpositionen = [], setStammpositionen = null, istAdmin = false, session, onKostenGespeichert }) {
+  const istDesktop = useIstDesktop();
   const [budgetPos, setBudgetPos] = useState(
     (projekt?.budget_positionen?.length ? projekt.budget_positionen : STANDARD_POSITIONEN)
       .map(positionNormalisieren)
@@ -143,19 +145,19 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
         marginBottom:12, border:"1.5px solid var(--border)" }}>
         <div style={{ color:"var(--text)", fontWeight:700, fontSize:15,
           marginBottom:10, display:"flex", alignItems:"center", gap:7 }}><Euro size={16} /> Kostenübersicht</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10,
+        <div style={{ display:"grid", gridTemplateColumns: istDesktop ? "repeat(4, minmax(0, 1fr))" : "1fr 1fr", gap:10,
           marginBottom:10 }}>
           {[
             ["Budget gesamt",  euro(budgetGesamt), "var(--text)"],
-            ["Ist bisher",     euro(istGesamt), auslastung>80?"var(--red)":"var(--green)"],
-            ["Rest-Budget",    euro(restBudget), restBudget<0?"var(--red)":"var(--green)"],
-            ["Stunden",        `${stundenGesamt.toFixed(1)} h`, "var(--blue)"],
+            ["Ist bisher",     euro(istGesamt), auslastung>80?"var(--red)": istDesktop ? "var(--text)" : "var(--green)"],
+            ["Rest-Budget",    euro(restBudget), restBudget<0?"var(--red)": istDesktop ? "var(--text)" : "var(--green)"],
+            ["Stunden",        `${stundenGesamt.toLocaleString("de-DE", { minimumFractionDigits:1, maximumFractionDigits:1 })} h`, istDesktop ? "var(--text)" : "var(--blue)"],
           ].map(([l,v,c]) => (
             <div key={l} style={{ background:"var(--surface2)", borderRadius:12,
               padding:"9px 14px", border:"1px solid var(--border)" }}>
               <div style={{ color:"var(--muted)", fontSize:10, fontWeight:700,
                 textTransform:"uppercase", marginBottom:4 }}>{l}</div>
-              <div style={{ color:c, fontWeight:900, fontSize:18 }}>{v}</div>
+              <div style={{ color:c, fontWeight:900, fontSize:18, fontFamily: istDesktop ? "var(--font-zahl)" : undefined, fontVariantNumeric:"tabular-nums" }}>{v}</div>
             </div>
           ))}
         </div>

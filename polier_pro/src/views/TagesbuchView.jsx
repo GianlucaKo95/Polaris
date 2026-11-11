@@ -3,15 +3,17 @@ import { createPortal } from "react-dom";
 import { Mic, Camera, PenLine, CloudSun, CloudRain, Users, TriangleAlert } from "lucide-react";
 import { supabase } from "../lib/supabase.js";
 import { KITagesabschlussButton } from "./KITagesabschlussButton.jsx";
-import { leereAufgabe } from "../lib/utils.js";
+import { leereAufgabe, layoutText } from "../lib/utils.js";
 import { WordExportButton } from "../components/WordExportButton.jsx";
 import { RevisionssichererExport } from "./RevisionssichererExport.jsx";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
 import { AUFGABEN_STATUS, AUFGABEN_PRIO } from "../config/konstanten.js";
 
 export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eigeneFirma, kolonnen, zeitbuchungen, tagebuchVorlage, offlineSpeichern, aufgaben, setAufgaben, session, onNavigate }) {
+  const istDesktop = useIstDesktop();
   const [open,       setOpen]       = useState(false);
   const [detail,     setDetail]     = useState(null);
   const [form,       setForm]       = useState({ taetigkeit:"", besonderheiten:"", material:"", arbeiter:0, maengel:0 });
@@ -152,6 +154,8 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
   return (
     <div>
       {/* Diktat zuerst: der Haupteinstieg in einen neuen Bericht */}
+      {/* Desktop: Diktat, Foto und Tippen öffnen dasselbe Formular, dort ist das Mikrofon — der Knopf „Bericht“ reicht */}
+      {!istDesktop && <>
       <div onClick={() => setOpen(true)}
         style={{ background:"var(--ink)", color:"#fff", padding:13, marginBottom:9, cursor:"pointer" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
@@ -179,6 +183,7 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
           </button>
         ))}
       </div>
+      </>}
 
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:9, gap:10, flexWrap:"wrap" }}>
         <div style={{ color: "var(--text)", fontWeight:800, fontSize:13, paddingTop:6 }}>Einträge</div>
@@ -231,6 +236,11 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
       </div>
 
       {/* Berichtsliste */}
+      {istDesktop && berichte.length === 0 && (
+        <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"32px 20px", color:"var(--text2)" }}>
+          Noch keine Berichte. „Bericht“ legt den ersten an, im Formular lässt er sich auch diktieren
+        </div>
+      )}
       {berichte.map((b, i) => (
         <div key={i} onClick={() => setDetail(b)}
           style={{ background:"var(--surface)", padding:"12px 18px", marginBottom:7,
@@ -254,7 +264,7 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
             <span style={{ display:"flex", alignItems:"center", gap:4 }}><Users size={13} />{b.arbeiter}</span>
           </div>
           <div style={{ color: "var(--text2)", fontSize:13.5, lineHeight:1.4 }}>{b.taetigkeit}</div>
-          {b.maengel > 0 && <div style={{ color: "var(--orange)", fontSize:12, marginTop:6, fontWeight:700 }}>⚠ {b.maengel} Mängel</div>}
+          {b.maengel > 0 && <div style={{ color: "var(--orange)", fontSize:12, marginTop:6, fontWeight:700 }}>{layoutText("⚠")} {b.maengel} Mängel</div>}
           {b.bilder?.length > 0 && (
             <div style={{ display:"flex", gap:6, marginTop:10, flexWrap:"wrap" }}>
               {b.bilder.slice(0,4).map((url, j) => (
@@ -281,7 +291,7 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
           <div style={{ background: "var(--surface)", minHeight:"100dvh", maxWidth:520, margin:"0 auto", padding:14,
             paddingTop:"calc(20px + env(safe-area-inset-top))" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-              <div style={{ color: "var(--yellow)", fontWeight:700, fontSize:16 }}>📋 {detail.datum}</div>
+              <div style={{ color: "var(--yellow)", fontWeight:700, fontSize:16 }}>{layoutText("📋")} {detail.datum}</div>
               <div style={{ display:"flex", gap:8 }}>
                 <RevisionssichererExport
                   bericht={detail}
@@ -406,7 +416,7 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
               marginBottom:12, paddingTop:"calc(6px + env(safe-area-inset-top))",
               position:"sticky", top:0, background:"var(--surface)", zIndex:5 }}>
               <div style={{ color: "var(--yellow)", fontWeight:700, fontSize:16 }}>
-                📋 Tagesbericht – {new Date().toLocaleDateString("de-DE")}
+                {layoutText("📋")} Tagesbericht – {new Date().toLocaleDateString("de-DE")}
               </div>
               <button onClick={resetForm}
                 style={{ background:"none", border:"none", color: "var(--muted)", fontSize:22, cursor:"pointer" }}>✕</button>
@@ -455,13 +465,13 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
                   style={{ flex:1, background: "var(--border)", color: "var(--text)",
                     border:`1px dashed ${'var(--muted)'}`, borderRadius:10, padding:"10px 0",
                     cursor:"pointer", fontSize:13 }}>
-                  📁 Galerie
+                  {layoutText("📁")} Galerie
                 </button>
                 <button onClick={() => { fileRef.current.setAttribute("capture","environment"); fileRef.current.click(); }}
                   style={{ flex:1, background: "var(--border)", color: "var(--text)",
                     border:`1px dashed ${'var(--muted)'}`, borderRadius:10, padding:"10px 0",
                     cursor:"pointer", fontSize:13 }}>
-                  📷 Kamera
+                  {layoutText("📷")} Kamera
                 </button>
               </div>
 

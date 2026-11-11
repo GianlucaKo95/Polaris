@@ -152,9 +152,9 @@ export function FinanzenView({ session, firmaId, projekte = [], eigeneFirma, dat
           <TriangleAlert size={14} style={{ flexShrink:0, marginTop:1 }} /> Tabelle eingangsrechnungen fehlt — bitte supabase-kalkulation.sql ausführen.
         </div>
       )}
-      <div style={{ display:"flex", gap:6, marginBottom:12 }}>
+      <div className="unter-reiter" role="tablist" style={{ display:"flex", gap:6, marginBottom:12 }}>
         {[["op", "Offene Posten"], ["eingang", "Eingangsrechnungen"], ["datev", "DATEV"]].map(([k, l]) =>
-          <button key={k} onClick={() => setReiter(k)} style={knopf(reiter === k)}>{l}</button>)}
+          <button key={k} role="tab" aria-selected={reiter === k} onClick={() => setReiter(k)} style={knopf(reiter === k)}>{l}</button>)}
       </div>
       {meldung && <div style={{ fontSize:12, marginBottom:8, color: meldung.startsWith("✓") ? "var(--green)" : "var(--ydark)" }}>{meldung}</div>}
 

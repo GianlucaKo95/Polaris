@@ -140,6 +140,12 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
     </div>
   );
 
+  if (!weather && document.documentElement.dataset.layout === "desktop") return (
+    <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"12px 16px", marginBottom:16,
+      color:"var(--text2)", display:"flex", alignItems:"center", gap:8 }}>
+      <CircleX size={16} strokeWidth={1.5} /> Wetter gerade nicht abrufbar
+    </div>
+  );
   if (!weather) return (
     <div style={{ background: "var(--surface)", borderRadius: 12, padding:14, textAlign:"center", color: "var(--red)",
       display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>

@@ -244,3 +244,44 @@ input, textarea, select {
 .desk-feld::placeholder { color: var(--muted); }
 .lv-tabelle input[type="number"]::-webkit-inner-spin-button, .lv-tabelle input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .lv-tabelle input[type="number"] { -moz-appearance: textfield; }
+
+/* ── Ältere Ansichten im Desktop-Rahmen angleichen ──────────────────────
+   Die Handy-Ansichten setzen ihre Optik inline (fette 11-px-Labels, 15-px-
+   Felder mit 1,5-px-Rand). Im Desktop-Inhalt gelten stattdessen die
+   Werkplan-Werte: Gewichte 400–600, kleinste Schrift 12 px, ein Feldmaß. */
+:root[data-layout="desktop"] .desk-inhalt [style*="font-weight: 700"],
+:root[data-layout="desktop"] .desk-inhalt [style*="font-weight: 800"],
+:root[data-layout="desktop"] .desk-inhalt [style*="font-weight: 900"] { font-weight: 500 !important; }
+:root[data-layout="desktop"] .desk-inhalt [style*="font-size: 9px"],
+:root[data-layout="desktop"] .desk-inhalt [style*="font-size: 9.5px"],
+:root[data-layout="desktop"] .desk-inhalt [style*="font-size: 10px"],
+:root[data-layout="desktop"] .desk-inhalt [style*="font-size: 10.5px"],
+:root[data-layout="desktop"] .desk-inhalt [style*="font-size: 11px"],
+:root[data-layout="desktop"] .desk-inhalt [style*="font-size: 11.5px"] { font-size: 12px !important; }
+:root[data-layout="desktop"] .desk-inhalt .feld-label { font-size: 13px !important; font-weight: 400 !important; color: var(--text2) !important; margin-bottom: 4px !important; }
+:root[data-layout="desktop"] .desk-inhalt input:not(.desk-feld):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([style*="border: none"]),
+:root[data-layout="desktop"] .desk-inhalt select:not(.desk-feld):not([style*="border: none"]),
+:root[data-layout="desktop"] .desk-inhalt textarea:not(.desk-feld):not([style*="border: none"]) {
+  box-sizing: border-box; min-height: 36px; padding: 7px 10px !important; font-size: 14px !important; line-height: 20px;
+  border: 1px solid var(--border2) !important; border-radius: 8px !important; background-color: var(--surface);
+  transition: border-color 120ms ease-out; }
+:root[data-layout="desktop"] .desk-inhalt input:not(.desk-feld):focus,
+:root[data-layout="desktop"] .desk-inhalt select:not(.desk-feld):focus,
+:root[data-layout="desktop"] .desk-inhalt textarea:not(.desk-feld):focus { outline: none; border-color: var(--akzent) !important; }
+:root[data-layout="desktop"] .desk-inhalt input[type="checkbox"], :root[data-layout="desktop"] .desk-inhalt input[type="radio"] { accent-color: var(--text); }
+/* Unterreiter älterer Ansichten (z. B. Finanzen) als Unterstrich-Reiter wie im Rahmen */
+:root[data-layout="desktop"] .desk-inhalt .unter-reiter { gap: 24px !important; border-bottom: 1px solid var(--border); margin-bottom: 20px !important; }
+:root[data-layout="desktop"] .desk-inhalt .unter-reiter > button { height: 40px; padding: 0 !important; margin-bottom: -1px; background: none !important; border: none !important;
+  border-bottom: 2px solid transparent !important; border-radius: 0 !important; color: var(--text2) !important; font-size: 14px !important; font-weight: 400 !important; }
+:root[data-layout="desktop"] .desk-inhalt .unter-reiter > button[aria-selected="true"] { color: var(--text) !important; border-bottom-color: var(--text) !important; font-weight: 500 !important; }
+/* Farbige Akzentkanten an Kennzahl-Kacheln: auf dem Desktop eine ruhige Haarlinie */
+:root[data-layout="desktop"] .desk-inhalt [style*="border-bottom: 3px solid"] { border: 1px solid var(--border) !important; }
+:root[data-layout="desktop"] .desk-inhalt [style*="border-left: 4px solid"],
+:root[data-layout="desktop"] .desk-inhalt [style*="border-left: 3px solid"] { border-left: 1px solid var(--border) !important; }
+/* Gestrichelte „Hinzufügen“-Flächen: neutral statt orange getönt */
+:root[data-layout="desktop"] .desk-inhalt button[style*="dashed"] { background: none !important; color: var(--text) !important; border: 1px dashed var(--border2) !important; border-radius: 8px !important; }
+:root[data-layout="desktop"] .desk-inhalt b, :root[data-layout="desktop"] .desk-inhalt strong { font-weight: 500; }
+/* Rot getönte Löschknöpfe: auf dem Desktop leise, rot erst beim Zeigen */
+:root[data-layout="desktop"] .desk-inhalt button[style*="background: var(--rbg)"] { background: none !important; color: var(--muted) !important; transition: color 120ms ease-out; }
+:root[data-layout="desktop"] .desk-inhalt button[style*="background: var(--rbg)"]:hover { color: var(--red) !important; }
+:root[data-layout="desktop"] .desk-inhalt .ki-zweitknopf { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--border2) !important; }

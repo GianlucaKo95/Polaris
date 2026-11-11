@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { ClipboardList, X, CircleCheckBig, ChevronLeft, ChartColumn, FileText, Settings, Plus, Sparkles, TriangleAlert, Upload, Download } from "lucide-react";
 import { AUFGABEN_TYPEN } from "../config/konstanten.js";
 import { inputStyle, Label } from "../components/Label.jsx";
-import { escapeHtml } from "../lib/utils.js";
+import { escapeHtml, layoutText } from "../lib/utils.js";
 import { druckePDF } from "../lib/pdf.jsx";
 import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { Spinner } from "../components/Spinner.jsx";
@@ -1000,7 +1000,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   </select>
                   {!inSumme(pos) && <span style={{ color:"var(--muted)", fontSize:11 }}>nicht in der Angebotssumme</span>}
                 </div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                {/* Im Desktop-Seitenfeld stehen Menge, Einheit und EP schon in der Tabellenzeile */}
+                {!imPanel && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
                   <div>
                     <div style={{ color:"var(--muted)", fontSize:10,
                       marginBottom:3 }}>Menge</div>
@@ -1024,7 +1025,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                       onChange={e=>updatePos(pos.id,"ep",e.target.value)}
                       style={{ ...inputStyle(), padding:"8px 10px", fontSize:12 }} />
                   </div>
-                </div>
+                </div>}
                 <div style={{ display:"flex", gap:10, alignItems:"flex-end", marginTop:6 }}>
                   <div style={{ width:"33%", minWidth:90 }}>
                     <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Rabatt (%)</div>
@@ -1035,7 +1036,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                   </div>
                   {!gesperrt && (
                     <button onClick={() => kalkUmschalten(pos.id)}
-                      style={{ background: pos.kalk ? "var(--ybg)" : "var(--surface2)",
+                      style={imPanel ? { background:"var(--surface)", color:"var(--text)", border:"1px solid var(--border2)", borderRadius:8, height:36, padding:"0 12px", cursor:"pointer", fontSize:14, fontFamily:"inherit", whiteSpace:"nowrap" } : { background: pos.kalk ? "var(--ybg)" : "var(--surface2)",
                         color: pos.kalk ? "var(--ydark)" : "var(--muted)",
                         border:`1px solid ${pos.kalk ? "var(--yellow)" : "var(--border)"}`,
                         borderRadius:8, padding:"8px 10px", cursor:"pointer",
@@ -1153,7 +1154,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
           <div style={{ background:"var(--gbg)", border:"1.5px solid var(--green)", borderRadius:10,
             padding:"9px 14px", marginBottom:10, color:"var(--green)", fontSize:12.5, fontWeight:600,
             display:"flex", alignItems:"center", gap:7 }}>
-            🔒 Digital angenommen und gesperrt — keine Änderungen mehr möglich.
+            {layoutText("🔒 Digital angenommen und gesperrt — keine Änderungen mehr möglich.")}
           </div>
         )}
 
@@ -1477,8 +1478,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               <select value={a.status} disabled={gesperrt || !versandErlaubt}
                 onChange={e=>setA(x=>({...x,status:e.target.value}))}
                 style={{ ...inputStyle(), padding:"11px 12px" }}>
-                {[["entwurf","📝 Entwurf"],["versendet","📤 Versendet"],
-                  ["angenommen","✅ Angenommen"],["abgelehnt","❌ Abgelehnt"]
+                {[["entwurf","Entwurf"],["versendet","Versendet"],
+                  ["angenommen","Angenommen"],["abgelehnt","Abgelehnt"]
                 ].map(([k,l])=><option key={k} value={k}>{l}</option>)}
               </select>
               {a.entschieden_am && (

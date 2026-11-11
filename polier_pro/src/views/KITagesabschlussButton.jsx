@@ -58,7 +58,7 @@ export function KITagesabschlussButton({ projekt, kolonnen, wetter, aufgaben = [
   return (
     <>
       <button onClick={() => setOffen(true)}
-        style={{ background:"var(--yellow)", color:"#1a1200", border:"none",
+        className="ki-zweitknopf" style={{ background:"var(--yellow)", color:"#1a1200", border:"none",
           borderRadius:12, padding:"10px 18px", fontWeight:800, cursor:"pointer",
           fontSize:14, fontFamily:"inherit", display:"flex",
           alignItems:"center", gap:8 }}>

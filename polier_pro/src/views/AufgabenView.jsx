@@ -8,9 +8,12 @@ import { AufgabenKarte } from "../components/AufgabenKarte.jsx";
 import { AUFGABEN_STATUS, AUFGABEN_TYPEN } from "../config/konstanten.js";
 import { useBackButton } from "../hooks/useBackButton.js";
 
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
+
 export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, darfBearbeiten = true, initialFilter = "alle",
   initialEditId = null, kannVorschlagen = false, onVorschlagen, onEntscheiden, darfEntscheiden = darfBearbeiten,
   zeitbuchungen = [], projekt, session, firmaId, profil }) {
+  const istDesktop = useIstDesktop();
   const projektTyp = projekt?.typ;
   const [ansicht,     setAnsicht]     = useState("liste");  // liste | kanban
   const [filter,      setFilter]      = useState(initialFilter);
@@ -122,9 +125,15 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
   return (
     <div style={{ position:"relative", paddingBottom:64 }}>
       {/* Segment-Reiter über den Gesamtbestand (unabhängig vom Chip-Filter darunter) */}
-      <div style={{ display:"flex", gap:1, background:"var(--border)", marginBottom:10,
+      <div style={istDesktop ? { display:"flex", alignItems:"center", gap:4, marginBottom:16 } : { display:"flex", gap:1, background:"var(--border)", marginBottom:10,
         marginLeft:-14, marginRight:-14, width:"calc(100% + 28px)" }}>
-        {[["alle","Alle",stats.gesamt],["offen","Offen",stats.offen],["maengel","Mängel",stats.maengel],["abgeschlossen","Fertig",stats.abgeschlossen]].map(([k,l,v]) => (
+        {[["alle","Alle",stats.gesamt],["offen","Offen",stats.offen],["maengel","Mängel",stats.maengel],["abgeschlossen","Fertig",stats.abgeschlossen]].map(([k,l,v]) => istDesktop ? (
+          <button key={k} className="desk-nav" aria-pressed={filter===k} onClick={() => setFilter(k === "abgeschlossen" ? "alle" : k)}
+            style={{ height:32, padding:"0 12px", background: filter===k ? "var(--surface2)" : "none", color: filter===k ? "var(--text)" : "var(--text2)",
+              border:"none", borderRadius:6, fontSize:14, fontWeight: filter===k ? 500 : 400, cursor:"pointer", fontFamily:"inherit", display:"flex", gap:6 }}>
+            {l} <span style={{ fontFamily:"var(--font-zahl)", color:"var(--muted)" }}>{v}</span>
+          </button>
+        ) : (
           <button key={k} onClick={() => setFilter(k === "abgeschlossen" ? "alle" : k)}
             style={{ flex:1, background: filter===k ? "var(--ink)" : "var(--surface)",
               color: filter===k ? "var(--yellow)" : "var(--muted)",
@@ -133,6 +142,20 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
             {l} {v}
           </button>
         ))}
+        {istDesktop && darfBearbeiten && (
+          <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
+            <button onClick={() => setNeuMangel(true)} className="desk-nav"
+              style={{ height:36, padding:"0 12px", background:"var(--surface)", color:"var(--text)", border:"1px solid var(--border2)", borderRadius:8,
+                fontFamily:"inherit", fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+              <Plus size={16} strokeWidth={1.5} /> Mangel
+            </button>
+            <button onClick={() => setNeuAufgabe(true)}
+              style={{ height:36, padding:"0 14px", background:"var(--text)", color:"var(--surface)", border:"none", borderRadius:8,
+                fontFamily:"inherit", fontSize:14, fontWeight:500, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+              <Plus size={16} strokeWidth={1.5} /> Aufgabe
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Toolbar */}
@@ -266,7 +289,7 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
       )}
 
       {/* FAB */}
-      {darfBearbeiten && (
+      {darfBearbeiten && !istDesktop && (
         <button onClick={() => filter === "maengel" ? setNeuMangel(true) : setNeuAufgabe(true)}
           style={{ position:"fixed", right:16, bottom:100, width:56, height:56,
             background: filter === "maengel" ? "var(--red)" : "var(--yellow)",

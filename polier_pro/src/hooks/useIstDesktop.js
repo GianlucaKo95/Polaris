@@ -6,7 +6,12 @@ import { useEffect, useState } from "react";
 const ABFRAGE = "(min-width: 1024px)";
 
 export function useIstDesktop() {
-  const [desktop, setDesktop] = useState(() => typeof window !== "undefined" && window.matchMedia(ABFRAGE).matches);
+  const [desktop, setDesktop] = useState(() => {
+    const ja = typeof window !== "undefined" && window.matchMedia(ABFRAGE).matches;
+    // Schon beim ersten Rendern setzen, damit layoutText() (lib/utils.js) es sieht
+    if (ja) document.documentElement.dataset.layout = "desktop";
+    return ja;
+  });
   useEffect(() => {
     const mq = window.matchMedia(ABFRAGE);
     const neu = () => setDesktop(mq.matches);

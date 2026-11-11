@@ -3,7 +3,7 @@ import { datevBuchungsstapel } from "../lib/datev.js";
 import { gaebX31Schreiben } from "../lib/gaebX31.js";
 import { FileText, ChevronLeft, TrendingUp, Printer, Trash2, Receipt } from "lucide-react";
 import { useBackButton } from "../hooks/useBackButton.js";
-import { escapeHtml } from "../lib/utils.js";
+import { escapeHtml, layoutText } from "../lib/utils.js";
 import { druckePDF } from "../lib/pdf.jsx";
 import {
   positionenMitLeistungsstand, gesamtFortschritt, snapshotErstellen,
@@ -343,7 +343,7 @@ function AuftragDetail({ auftrag, projekt, eigeneFirma, baufortschritt, rechnung
                 <div style={{ color:"var(--yellow)", fontWeight:800, fontSize:15 }}>{EUR(g.zahlbetrag)} €</div>
                 <div style={{ display:"inline-block", background:statusInfo.bg, color:statusInfo.farbe,
                   fontWeight:700, fontSize:10.5, borderRadius:20, padding:"3px 9px", marginTop:4 }}>
-                  {statusInfo.label}
+                  {layoutText(statusInfo.label)}
                 </div>
               </div>
             </div>

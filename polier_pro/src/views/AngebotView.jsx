@@ -6,6 +6,7 @@ import { nachtragUebersicht, nachtragStatus, STATUS_LABEL } from "../lib/nachtra
 import { useBackButton } from "../hooks/useBackButton.js";
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
+import { layoutText } from "../lib/utils.js";
 import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen, positionenMitKalkulationVorbereiten } from "../lib/mutterlv.js";
 
 export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, stammpositionen = [], eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen, co2Faktoren = [], oeffneAngebotId = null, onGeoeffnet = null, session }) {
@@ -260,7 +261,7 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
                 </div>
                 <div style={{ display:"inline-block", background:statusInfo.bg, color:statusInfo.farbe,
                   fontWeight:700, fontSize:11, borderRadius:20, padding:"3px 9px", marginTop:4 }}>
-                  {statusInfo.label}
+                  {layoutText(statusInfo.label)}
                 </div>
               </div>
             </div>

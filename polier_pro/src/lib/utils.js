@@ -76,3 +76,14 @@ export function leerProjekt() {
     farbe: ["#F5C400","#4A9EE0","#2EAF6A","#C45C2A","#9B59B6"][Math.floor(Math.random()*5)],
     felder:[], kolonnen:[], berichte:[] };
 }
+
+// Emojis aus Anzeigetexten entfernen. Die Handy-App nutzt sie als Symbole in
+// Status- und Hinweistexten; auf dem Desktop tragen Farbe und Wort die Bedeutung.
+const EMOJI = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}]️?(‍[\p{Extended_Pictographic}]️?)*/gu;
+export function ohneEmoji(text) {
+  return String(text ?? "").replace(EMOJI, "").replace(/\s{2,}/g, " ").trim();
+}
+// Anzeigetext je Layout: auf dem Desktop ohne Emojis, auf dem Handy unverändert.
+export function layoutText(text) {
+  return typeof document !== "undefined" && document.documentElement.dataset.layout === "desktop" ? ohneEmoji(text) : text;
+}

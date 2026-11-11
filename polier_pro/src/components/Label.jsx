@@ -1,5 +1,5 @@
 export function Label({ children }) {
-  return <div style={{ color: "var(--muted)", fontSize:11, marginBottom:6, fontWeight:700, letterSpacing:0.6, textTransform:"uppercase" }}>{children}</div>;
+  return <div className="feld-label" style={{ color: "var(--muted)", fontSize:11, marginBottom:6, fontWeight:700, letterSpacing:0.6, textTransform:"uppercase" }}>{children}</div>;
 }
 
 export function inputStyle() {
