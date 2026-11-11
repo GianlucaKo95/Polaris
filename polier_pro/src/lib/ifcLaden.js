@@ -13,7 +13,10 @@ export async function ifcMengenAusDatei(datei) {
     const typen = Object.fromEntries(Object.keys(WebIFC).filter(k => /^IFC[A-Z]+$/.test(k)).map(k => [k, WebIFC[k]]));
     const elemente = await ifcElementeLesen(api, modelID, typen);
     const gruppen = mengenAggregieren(elemente);
-    return { gruppen, text: mengenAlsText(gruppen, datei.name) };
+    const { co2AusModell } = await import("./co2.js");
+    const co2 = co2AusModell(gruppen).filter(g => g.co2 != null);
+    const co2Text = co2.length ? `\nCO₂ Herstellung (Richtwerte): ${co2.map(g => `${g.bauteil}${g.material ? ` · ${g.material}` : ""} ≈ ${(g.co2 / 1000).toLocaleString("de-DE", { maximumFractionDigits: 1 })} t`).join("; ")}` : "";
+    return { gruppen, text: mengenAlsText(gruppen, datei.name) + co2Text };
   } finally {
     api.CloseModel(modelID);
   }

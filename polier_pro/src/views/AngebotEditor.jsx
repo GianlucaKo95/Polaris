@@ -30,6 +30,7 @@ import { leereKalkulation, kalkulationEp, kalkulationEinzelkosten, kalkulationZu
 import { PositionKalkulation } from "../components/PositionKalkulation.jsx";
 import { gaebX84Schreiben } from "../lib/gaebX84.js";
 import { efbAuswerten, efbHtml } from "../lib/efb.js";
+import { Co2Panel } from "../components/Co2Panel.jsx";
 import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 
 // aufgabe.m2 ist das einzige Mengenfeld im gesamten Aufgaben-Formular,
@@ -46,7 +47,7 @@ import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen = null, projekt, eigeneFirma, firmaId, profil, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen = null, co2Faktoren = [], projekt, eigeneFirma, firmaId, profil, session }) {
   const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
@@ -1309,6 +1310,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 </div>
               )}
             </div>
+
+            <Co2Panel positionen={a.positionen} kalkulationspreise={kalkulationspreise} eigeneFaktoren={co2Faktoren} />
 
             {onTerminplanErzeugen && tpVorschau.length > 0 && (
               <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:12, padding:"10px 12px", marginBottom:12 }}>

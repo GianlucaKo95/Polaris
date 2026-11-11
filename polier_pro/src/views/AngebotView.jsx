@@ -8,7 +8,7 @@ import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen } from "../lib/gaeb90
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen, positionenMitKalkulationVorbereiten } from "../lib/mutterlv.js";
 
-export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, stammpositionen = [], eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen, session }) {
+export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, stammpositionen = [], eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen, co2Faktoren = [], session }) {
   const [aktAngebot,  setAktAngebot]  = useState(null);
   const [fehler,      setFehler]      = useState("");
   const [info,        setInfo]        = useState(null); // { titel, treffer, gesamt, fehlend } — letztes aus Ausschreibung generiertes Angebot
@@ -143,6 +143,7 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
       angebotRegeln={angebotRegeln}
       kalkulationsgrundlagen={kalkulationsgrundlagen}
       onTerminplanErzeugen={onTerminplanErzeugen}
+      co2Faktoren={co2Faktoren}
       projekt={projekt}
       eigeneFirma={eigeneFirma}
       firmaId={firmaId}

@@ -102,3 +102,6 @@ begin
     );
   end if;
 end $$;
+
+-- ── CO₂-Faktoren der Firma (Polaris 1.63, lib/co2.js) ──────────────────
+alter table firmen add column if not exists co2_faktoren jsonb not null default '[]'::jsonb;
