@@ -13,6 +13,7 @@ import { positionMengeAendern } from "../lib/stammpositionen.js";
 import { katalogBauen, QUELLEN_LABEL } from "../lib/katalog.js";
 import { angebotPruefen, vergleichswerteAusAngeboten, AMPEL_FARBE } from "../lib/plausibilitaet.js";
 import { freigabePflicht } from "../lib/angebotRegeln.js";
+import { mittellohnBerechnen } from "../lib/kalkulationsgrundlagen.js";
 import { erzeugeAngebotDocx } from "../lib/angebotVorlage.js";
 import { DocxVorschauModal } from "../components/DocxVorschauModal.jsx";
 import { AngebotFreigabe } from "../components/AngebotFreigabe.jsx";
@@ -40,7 +41,7 @@ import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
 
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, angebotRegeln = null, projekt, eigeneFirma, firmaId, profil, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, projekt, eigeneFirma, firmaId, profil, session }) {
   const [a,         setARoh]      = useState(angebot);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   const [vonVorlage,setVonVorlage]= useState(false);
@@ -344,7 +345,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   async function efbExportieren() {
     const auswertung = efbAuswerten(a.positionen, kalkulationspreise);
     setEfbInfo({ warnungen: auswertung.warnungen });
-    await druckePDF(efbHtml(auswertung, { angebot: a, eigeneFirma, projekt, aufteilung: standardZuschlaege?.aufteilung }),
+    await druckePDF(efbHtml(auswertung, { angebot: a, eigeneFirma, projekt, aufteilung: standardZuschlaege?.aufteilung, mittellohn: mittellohnBerechnen(kalkulationsgrundlagen?.mittellohn) }),
       "EFB_" + a.titel.replace(/ /g, "_") + ".pdf");
   }
 

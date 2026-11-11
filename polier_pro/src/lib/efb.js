@@ -94,8 +94,9 @@ const pct = n => (n || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, ma
 
 // HTML für druckePDF() (lib/pdf.jsx): 221 und 223 untereinander in einer
 // .page (A4-Breite), druckePDF teilt auf Seiten auf.
-export function efbHtml(auswertung, { angebot, eigeneFirma, projekt, aufteilung = null } = {}) {
+export function efbHtml(auswertung, { angebot, eigeneFirma, projekt, aufteilung = null, mittellohn: mlGrundlage = null } = {}) {
   const auf = aufteilungGueltig(aufteilung) ? aufteilung : null;
+  const ml = mlGrundlage?.koepfe > 0 ? mlGrundlage : null;
   const teil = (z, k) => (z * (Number(auf[k]) || 0)) / 100;
   const { zeilen, summe, zuschlagProzent, mittellohn, verrechnungslohn, angebotssumme, warnungen } = auswertung;
   const kopf = (nr, titel) => `
@@ -122,7 +123,11 @@ th { background:#eee; font-size:8pt; text-align:left; }
 ${kopf("221", "Preisermittlung bei Zuschlagskalkulation")}
 <h3>1. Angaben über den Verrechnungslohn</h3>
 <table>
-${zeile221("1.1 Mittellohn ML (Lohnkosten / Lohnstunden)", `${eur(mittellohn)} €/h`)}
+${ml ? `${zeile221("1.1 Mittellohn ML (inkl. Zulagen)", `${eur(ml.mittellohn)} €/h`)}
+${zeile221("1.2 Lohngebundene Kosten (Sozialkosten)", `${eur(ml.sozialkosten)} €/h`)}
+${zeile221("1.3 Lohnnebenkosten", `${eur(ml.lohnnebenkosten)} €/h`)}
+${zeile221("1.4 Kalkulationslohn KL", `${eur(ml.kalkulationslohn)} €/h`, true)}` : ""}
+${zeile221(ml ? "Ø Lohnkosten je Stunde in diesem Angebot" : "1.1 Mittellohn ML (Lohnkosten / Lohnstunden)", `${eur(mittellohn)} €/h`)}
 ${zeile221("1.2 Lohnstunden gesamt", `${summe.stunden.toLocaleString("de-DE", { maximumFractionDigits: 2 })} h`)}
 ${zeile221("1.3 Zuschlag auf Lohn (BGK, AGK, Wagnis und Gewinn)", `${pct(zuschlagProzent.lohn)} %`)}
 ${zeile221("1.4 Verrechnungslohn VL", `${eur(verrechnungslohn)} €/h`, true)}

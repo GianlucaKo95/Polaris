@@ -58,3 +58,7 @@ end $$;
 -- angebot_regeln: { kompetenzgrenzePolier, rotErfordertFreigabe,
 -- manuellePreiseErfordernFreigabe } — siehe src/lib/angebotRegeln.js.
 alter table firmen add column if not exists angebot_regeln jsonb;
+
+-- ── Kalkulationsgrundlagen (Polaris 1.52) ─────────────────────────────────
+-- { mittellohn: {...}, geraete: [...] } — siehe src/lib/kalkulationsgrundlagen.js
+alter table firmen add column if not exists kalkulationsgrundlagen jsonb;

@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator, Upload, Coins, Layers, TriangleAlert, ShieldCheck } from "lucide-react";
+import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator, Upload, Coins, Layers, TriangleAlert, ShieldCheck, HardHat } from "lucide-react";
+import { KalkulationsgrundlagenPanel } from "../components/KalkulationsgrundlagenPanel.jsx";
 import { StammpositionFormular } from "./StammpositionFormular.jsx";
 import { stammpositionEp, stammpositionZeitansatz } from "../lib/stammpositionen.js";
 import { aufteilungGueltig } from "../lib/efb.js";
@@ -14,7 +15,7 @@ import { kiAngebotVorlageAnalysieren, kiTagebuchVorlageAnalysieren } from "../li
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, parseGaeb90Preise, gaeb90PreiseEinspielen } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 
-export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, kalkulationspreise, setKalkulationspreise, standardZuschlaege, setStandardZuschlaege, stammpositionen = [], setStammpositionen, stammpositionenStatus, angebotRegeln, setAngebotRegeln, angebotRegelnStatus, session }) {
+export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, kalkulationspreise, setKalkulationspreise, standardZuschlaege, setStandardZuschlaege, stammpositionen = [], setStammpositionen, stammpositionenStatus, angebotRegeln, setAngebotRegeln, angebotRegelnStatus, kalkulationsgrundlagen, setKalkulationsgrundlagen, kalkulationsgrundlagenStatus, session }) {
   const regeln = { ...STANDARD_REGELN, ...(angebotRegeln || {}) };
   const [aktiv,    setAktiv]    = useState("preise"); // preise | kalkpreise | vorlagen | angebotsvorlage | tagebuchvorlage
   const [neuPreis, setNeuPreis] = useState(null);
@@ -159,7 +160,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
           gemeinsame flex:1-Reihe auf schmalen Bildschirmen aus dem
           sichtbaren Bereich heraus (der letzte Tab war nicht mehr erreichbar). */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:12 }}>
-        {[["preise",Euro,"Einheitspreise"],["kalkpreise",Calculator,"Kalkulationspreise"],["stammpositionen",Layers,"Stammpositionen"],["freigabe",ShieldCheck,"Freigaberegeln"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
+        {[["preise",Euro,"Einheitspreise"],["grundlagen",HardHat,"Lohn & Geräte"],["kalkpreise",Calculator,"Kalkulationspreise"],["stammpositionen",Layers,"Stammpositionen"],["freigabe",ShieldCheck,"Freigaberegeln"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
           <button key={k} onClick={() => setAktiv(k)}
             style={{ background: aktiv===k ? "var(--yellow)" : "var(--surface2)",
               color: aktiv===k ? "#1a1200" : "var(--muted)",
@@ -311,6 +312,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
                         </div>
                         <div style={{ color:"var(--muted)", fontSize:12, marginTop:2 }}>
                           {p.preis.toLocaleString("de-DE")} €/{p.einheit}
+                          {p.herkunft && <> · automatisch aus „Lohn &amp; Geräte“</>}
                         </div>
                       </div>
                       <div style={{ display:"flex", gap:6 }}>
@@ -330,6 +332,11 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
             );
           })}
         </div>
+      )}
+
+      {aktiv === "grundlagen" && kalkulationsgrundlagen && (
+        <KalkulationsgrundlagenPanel grundlagen={kalkulationsgrundlagen} onChange={setKalkulationsgrundlagen}
+          status={kalkulationsgrundlagenStatus} />
       )}
 
       {/* STAMMPOSITIONEN — eigene Leistungspositionen mit Rezeptur je
