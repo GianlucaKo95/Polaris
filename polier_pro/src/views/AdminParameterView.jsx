@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
 import { createPortal } from "react-dom";
 import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator, Upload, Coins, Layers, TriangleAlert, ShieldCheck, HardHat, Leaf } from "lucide-react";
 import { KalkulationsgrundlagenPanel } from "../components/KalkulationsgrundlagenPanel.jsx";
@@ -17,6 +18,7 @@ import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, parseGaeb90Preise, g
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 
 export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlagen, setLvVorlagen, angebotVorlage, setAngebotVorlage, tagebuchVorlage, setTagebuchVorlage, kalkulationspreise, setKalkulationspreise, standardZuschlaege, setStandardZuschlaege, stammpositionen = [], setStammpositionen, stammpositionenStatus, angebotRegeln, setAngebotRegeln, angebotRegelnStatus, kalkulationsgrundlagen, setKalkulationsgrundlagen, kalkulationsgrundlagenStatus, co2Faktoren = [], setCo2Faktoren = () => {}, co2FaktorenStatus = null, session }) {
+  const desk = useIstDesktop();
   const regeln = { ...STANDARD_REGELN, ...(angebotRegeln || {}) };
   const [aktiv,    setAktiv]    = useState("preise"); // preise | kalkpreise | vorlagen | angebotsvorlage | tagebuchvorlage
   const [neuPreis, setNeuPreis] = useState(null);
@@ -225,7 +227,81 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
           das fertige Verkaufspreise pro Gewerk sind). Nach Kategorie
           gruppiert statt einer flachen Liste, damit die Zuordnung beim
           Zusammenstellen einer Kalkulation in AngebotEditor klar bleibt. */}
-      {aktiv === "kalkpreise" && (
+      {/* KALKULATIONSPREISE — Desktop: Zuschläge als kompakte Felder, Preise als Tabelle je Kategorie */}
+      {aktiv === "kalkpreise" && desk && (() => {
+        const zahl = { width:88, height:36, textAlign:"right", fontFamily:"var(--font-zahl)", border:"1px solid var(--border2)" };
+        const feldMitEinheit = (label, wert, setzen, max) => (
+          <label key={label} style={{ display:"flex", flexDirection:"column", gap:4 }}>
+            <span style={{ fontSize:13, color:"var(--text2)" }}>{label}</span>
+            <span style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <input type="number" min="0" max={max} className="desk-feld" value={wert ?? ""} placeholder="0" onChange={e => setzen(Number(e.target.value))} style={zahl} />
+              <span style={{ color:"var(--muted)" }}>%</span>
+            </span>
+          </label>
+        );
+        return (
+          <div className="lv-tabelle" style={{ display:"flex", flexDirection:"column", gap:32 }}>
+            <section>
+              <h2 style={{ margin:"0 0 4px", fontSize:16, lineHeight:"24px", fontWeight:500 }}>Standard-Zuschläge</h2>
+              <p style={{ color:"var(--text2)", margin:"0 0 12px", maxWidth:720 }}>Der Fremdleistungs-Satz wird automatisch auf den Mutter-LV-Preis angewendet, wenn aus einer Ausschreibung ein Angebot entsteht.</p>
+              <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:20, display:"flex", gap:48, flexWrap:"wrap" }}>
+                <div>
+                  <div style={{ marginBottom:12 }}>Zuschlag je Kostenart</div>
+                  <div style={{ display:"flex", gap:24 }}>
+                    {[["Lohn","zuschlagLohn"],["Material","zuschlagMaterial"],["Gerät","zuschlagGeraet"],["Fremdleistung","zuschlagFremdleistung"]].map(([l, f]) =>
+                      feldMitEinheit(l, standardZuschlaege?.[f], v => setStandardZuschlaege(x => ({ ...x, [f]: v }))))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ marginBottom:12 }}>Aufteilung für EFB 221 <span style={{ color:"var(--muted)" }}>· Summe 100 %</span></div>
+                  <div style={{ display:"flex", gap:24 }}>
+                    {[["BGK","bgk"],["AGK","agk"],["Wagnis und Gewinn","wg"]].map(([l, f]) =>
+                      feldMitEinheit(l, standardZuschlaege?.aufteilung?.[f], v => setStandardZuschlaege(x => ({ ...x, aufteilung: { ...(x?.aufteilung || {}), [f]: v } })), 100))}
+                  </div>
+                  {standardZuschlaege?.aufteilung && !aufteilungGueltig(standardZuschlaege.aufteilung) && (
+                    <div style={{ color:"var(--red)", fontSize:13, marginTop:8 }}>Die drei Anteile ergeben nicht 100, bis dahin zeigt EFB 221 nur den Gesamtzuschlag</div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, marginBottom:12 }}>
+                <h2 style={{ margin:0, fontSize:16, lineHeight:"24px", fontWeight:500 }}>Preise <span className="num" style={{ fontFamily:"var(--font-zahl)", fontSize:13, color:"var(--muted)", fontWeight:400 }}>{kalkulationspreise.length}</span></h2>
+                <button onClick={() => setNeuKalkPreis({ kategorie:"lohn", bezeichnung:"", einheit:"h", preis:0 })}
+                  style={{ height:36, padding:"0 12px", borderRadius:8, border:"none", background:"var(--text)", color:"var(--surface)", fontFamily:"inherit", fontSize:14, fontWeight:500, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
+                  <Plus size={16} strokeWidth={1.5} /> Preis
+                </button>
+              </div>
+              {kalkulationspreise.length === 0 && <div className="desk-leer">Noch keine Kalkulationspreise</div>}
+              {kalkulationspreise.length > 0 && (
+                <div className="listen-gruppe">
+                  <div aria-hidden="true" style={{ display:"grid", gridTemplateColumns:"minmax(0, 1fr) 160px 128px 80px 72px", gap:16, fontSize:13, color:"var(--text2)" }}>
+                    <span>Bezeichnung</span><span>Kategorie</span><span style={{ textAlign:"right" }}>Preis</span><span>Einheit</span><span />
+                  </div>
+                  {KALKULATIONSPREIS_KATEGORIEN.flatMap(([kKey, kLabel]) => kalkulationspreise.filter(p => p.kategorie === kKey).map(p => (
+                    <div key={p.id} style={{ display:"grid", gridTemplateColumns:"minmax(0, 1fr) 160px 128px 80px 72px", gap:16, alignItems:"center" }}>
+                      <span style={{ minWidth:0 }}>
+                        <span style={{ display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.bezeichnung}</span>
+                        {p.herkunft && <span style={{ fontSize:13, color:"var(--muted)" }}>automatisch aus „Lohn &amp; Geräte“</span>}
+                      </span>
+                      <span style={{ color:"var(--text2)" }}>{kLabel}</span>
+                      <span className="num" style={{ fontFamily:"var(--font-zahl)", textAlign:"right" }}>{p.preis.toLocaleString("de-DE", { minimumFractionDigits:2, maximumFractionDigits:2 })} €</span>
+                      <span style={{ color:"var(--text2)" }}>je {p.einheit}</span>
+                      <span style={{ display:"flex", justifyContent:"flex-end", gap:4 }}>
+                        <button className="zeilen-knopf" aria-label="Bearbeiten" title="Bearbeiten" onClick={() => setEditKalkPreis(p)}><Pencil size={16} strokeWidth={1.5} /></button>
+                        <button className="zeilen-knopf loeschen" aria-label="Löschen" title="Löschen" onClick={() => kalkPreisLoeschen(p.id)}><X size={16} strokeWidth={1.5} /></button>
+                      </span>
+                    </div>
+                  )))}
+                </div>
+              )}
+            </section>
+          </div>
+        );
+      })()}
+
+      {aktiv === "kalkpreise" && !desk && (
         <div>
           {/* Standard-Zuschläge: firmenweites Zuschlagsschema je Kostenart
               (siehe lib/kalkulation.js) — wird bei "Aus Ausschreibung

@@ -401,13 +401,14 @@ export function StempeluhrView({ profil, projekte, session, kolonnen = [], aufga
       <div>
       {/* Kolonnen-Sammelerfassung — nur wenn eigene Kolonne + berechtigte Rolle */}
       {eigeneKolonne && kannSammelStempeln && status === "aus" && (
-        <button onClick={() => setZeigeSammel(true)}
-          style={{ width:"100%", background:"var(--bbg)", color:"var(--blue)",
+        <button onClick={() => setZeigeSammel(true)} className={istDesktop ? "desk-knopf-auto" : undefined}
+          style={istDesktop ? { background:"var(--surface)", color:"var(--text)", border:"1px solid var(--border2)", marginBottom:24,
+            fontFamily:"inherit", alignItems:"center", gap:8, cursor:"pointer" } : { width:"100%", background:"var(--bbg)", color:"var(--blue)",
             border:"2px solid var(--blue)", padding:14,
             fontWeight:700, fontSize:14, cursor:"pointer", marginBottom:14,
             fontFamily:"inherit", display:"flex", alignItems:"center",
             justifyContent:"center", gap:8 }}>
-          <Users size={18} />Für Kolonne „{eigeneKolonne.name}" sammelbuchen
+          <Users size={istDesktop ? 16 : 18} strokeWidth={istDesktop ? 1.5 : 2} />Für Kolonne „{eigeneKolonne.name}" sammelbuchen
         </button>
       )}
 
@@ -589,13 +590,14 @@ export function StempeluhrView({ profil, projekte, session, kolonnen = [], aufga
 
       {/* Kolonnen-Sammelerfassung — nur wenn eigene Kolonne + berechtigte Rolle */}
       {eigeneKolonne && kannSammelStempeln && status === "aus" && (
-        <button onClick={() => setZeigeSammel(true)}
-          style={{ width:"100%", background:"var(--bbg)", color:"var(--blue)",
+        <button onClick={() => setZeigeSammel(true)} className={istDesktop ? "desk-knopf-auto" : undefined}
+          style={istDesktop ? { background:"var(--surface)", color:"var(--text)", border:"1px solid var(--border2)", marginBottom:24,
+            fontFamily:"inherit", alignItems:"center", gap:8, cursor:"pointer" } : { width:"100%", background:"var(--bbg)", color:"var(--blue)",
             border:"2px solid var(--blue)", padding:14,
             fontWeight:700, fontSize:14, cursor:"pointer", marginBottom:14,
             fontFamily:"inherit", display:"flex", alignItems:"center",
             justifyContent:"center", gap:8 }}>
-          <Users size={18} />Für Kolonne „{eigeneKolonne.name}" sammelbuchen
+          <Users size={istDesktop ? 16 : 18} strokeWidth={istDesktop ? 1.5 : 2} />Für Kolonne „{eigeneKolonne.name}" sammelbuchen
         </button>
       )}
 

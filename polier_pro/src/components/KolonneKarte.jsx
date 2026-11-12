@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MapPin, HardHat, ChevronDown, ChevronUp } from "lucide-react";
+import { MapPin, HardHat, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { MitarbeiterZeilen } from "./MitarbeiterZeilen.jsx";
 import { SwipeToDelete } from "./SwipeToDelete.jsx";
 import { sha256Hex } from "../lib/utils.js";
@@ -63,7 +63,11 @@ export function KolonneKarte({ k, zeitdaten, vonDatum, bisDatum, zeitenGeladen, 
   return (
     <div style={{ marginBottom:9 }}>
       {/* Kolonne Header — nach links wischen legt den Löschen-Button frei */}
-      <SwipeToDelete onDelete={kannKolonneLoeschen && setKolonnen ? kolonneLoeschen : undefined}>
+      {(() => {
+        // Desktop: kein Wisch-Löschen (mit der Maus nicht bedienbar, und die
+        // eckige Wischfläche schnitt die runden Kartenecken an) – stattdessen
+        // ein Löschen-Knopf im Kopf.
+        const karte = (
       <div style={{ background: "var(--surface)", borderRadius: expanded ? "12px 12px 0 0" : 12,
         padding:"10px 16px", border:`1px solid ${'var(--border)'}`,
         borderBottom: expanded ? "none" : undefined }}>
@@ -90,6 +94,10 @@ export function KolonneKarte({ k, zeitdaten, vonDatum, bisDatum, zeitenGeladen, 
               </div>
             )}
           </div>
+            {desk && kannKolonneLoeschen && setKolonnen && (
+              <button className="zeilen-knopf loeschen" onClick={() => { if (window.confirm(`Kolonne „${k.name}“ von der Baustelle entfernen?`)) kolonneLoeschen(); }}
+                aria-label="Kolonne entfernen" title="Kolonne entfernen" style={{ marginLeft:8, marginTop:-4 }}><Trash2 size={16} strokeWidth={1.5} /></button>
+            )}
         </div>
 
         {/* Fortschrittsbalken Anwesenheit */}
@@ -129,7 +137,11 @@ export function KolonneKarte({ k, zeitdaten, vonDatum, bisDatum, zeitenGeladen, 
           </button>
         </div>
       </div>
-      </SwipeToDelete>
+        );
+        return desk ? karte : (
+          <SwipeToDelete onDelete={kannKolonneLoeschen && setKolonnen ? kolonneLoeschen : undefined}>{karte}</SwipeToDelete>
+        );
+      })()}
 
       {/* Aufgeklappte MA-Liste */}
       {expanded && (

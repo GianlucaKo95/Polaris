@@ -44,6 +44,35 @@ export function ArchivView({ firmaId, session, onOeffnen }) {
     );
   }
 
+  // Desktop: Tabelle wie die laufenden Baustellen; die Dokumentkennung der
+  // Abschlussakte gekürzt in einer Zeile, ganz im Tooltip
+  if (document.documentElement.dataset.layout === "desktop") {
+    const spalten = "minmax(0, 1fr) 280px 112px 160px";
+    return (
+      <div className="listen-gruppe">
+        <div aria-hidden="true" style={{ display:"grid", gridTemplateColumns:spalten, gap:16, fontSize:13, color:"var(--text2)" }}>
+          <span>Baustelle</span><span>Ort</span><span>Abgeschlossen</span><span>Abschlussakte</span>
+        </div>
+        {projekte.map(p => (
+          <div key={p.id} onClick={() => onOeffnen(p.id)} role="button" tabIndex={0} onKeyDown={e => { if (e.key === "Enter") onOeffnen(p.id); }}
+            style={{ display:"grid", gridTemplateColumns:spalten, gap:16, alignItems:"center", cursor:"pointer" }}>
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</span>
+            <span style={{ color:"var(--text2)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {[p.adresse, [p.plz, p.ort].filter(Boolean).join(" ")].filter(Boolean).join(", ") || "–"}
+            </span>
+            <span className="num" style={{ fontFamily:"var(--font-zahl)", fontSize:13, color:"var(--text2)" }}>
+              {p.abschluss_datum ? new Date(p.abschluss_datum).toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" }) : "–"}
+            </span>
+            <span className="num" title={p.abschluss_dokument_id ? `Dokument-ID ${p.abschluss_dokument_id}` : undefined}
+              style={{ fontFamily:"var(--font-zahl)", fontSize:13, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {p.abschluss_dokument_id ? `${String(p.abschluss_dokument_id).slice(0, 12)}…` : "–"}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={{ color:"var(--text)", fontWeight:800, fontSize:13, marginBottom:9 }}>

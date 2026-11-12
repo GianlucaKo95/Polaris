@@ -1247,7 +1247,9 @@ export default function PolierApp() {
       const p = projekte.find(x => String(x.id) === String(id));
       if (!p) return;
       setAktivId(p.id);
-      setTab(tabId);
+      // Rollen ohne Übersicht (z. B. Facharbeiter) landen im ersten erlaubten Reiter,
+      // sonst zeigt die Seite Inhalt, zu dem kein Reiter markiert ist
+      setTab(erlaubt(tabId) ? tabId : (["aufgaben", "stempeln", "tagebuch", "kolonnen"].find(erlaubt) || tabId));
     };
     const projektReiter = (projekt?.archiviert ? ["abschluss"]
       : ["dashboard", "aufgaben", "gantt", "tagebuch", "kolonnen", ...(istBuero ? [] : ["stempeln"]), "leistung", "kosten", "angebot", "rechnungen", "abschluss"])

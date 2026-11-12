@@ -31,6 +31,10 @@ export function KalkulationsgrundlagenPanel({ grundlagen, onChange, status }) {
   const gruppen = ml.lohngruppen || [];
   const setGeraet = (i, aenderung) => onChange({ ...grundlagen, geraete: geraete.map((g, j) => j === i ? { ...g, ...aenderung } : g) });
 
+  if (typeof document !== "undefined" && document.documentElement.dataset.layout === "desktop") {
+    return <DeskGrundlagen grundlagen={grundlagen} onChange={onChange} status={status} ml={ml} erg={erg} setMl={setMl} gruppen={gruppen} geraete={geraete} setGeraet={setGeraet} />;
+  }
+
   return (
     <div>
       {status === "fehlt" && (
@@ -135,6 +139,146 @@ export function KalkulationsgrundlagenPanel({ grundlagen, onChange, status }) {
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+// ── Desktop: Tabellen statt gestapelter Handy-Felder ─────────────────────
+// Felder erscheinen erst beim Zeigen als Feld (.desk-feld), Zahlen rechtsbündig
+// in Plex Mono, Ergebnisse als Zahl am Zeilenende.
+const LOHN_SPALTEN = "minmax(0, 1fr) 96px 128px 32px";
+const GERAET_SPALTEN = "minmax(0, 1fr) 120px 88px 88px 88px 88px 88px 104px 32px";
+const zahlFeld = { width:"100%", textAlign:"right", fontFamily:"var(--font-zahl)" };
+const h2 = { margin:"0 0 4px", fontSize:16, lineHeight:"24px", fontWeight:500 };
+const hinweis = { color:"var(--text2)", margin:"0 0 12px", maxWidth:720 };
+const kopf = { fontSize:13, color:"var(--text2)" };
+const leiseKnopf = { height:32, padding:"0 12px", marginTop:12, borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface)",
+  color:"var(--text)", fontFamily:"inherit", fontSize:14, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:8 };
+
+function DeskZahl({ label, value, onChange, suffix, breite = 96 }) {
+  return (
+    <label style={{ display:"flex", flexDirection:"column", gap:4 }}>
+      <span style={{ fontSize:13, color:"var(--text2)" }}>{label}</span>
+      <span style={{ display:"flex", alignItems:"center", gap:8 }}>
+        <input type="number" step="0.01" className="desk-feld" value={value ?? ""} onChange={e => onChange(num(e.target.value))}
+          style={{ ...zahlFeld, width:breite, border:"1px solid var(--border2)", height:36 }} />
+        {suffix && <span style={{ color:"var(--muted)" }}>{suffix}</span>}
+      </span>
+    </label>
+  );
+}
+
+function DeskGrundlagen({ grundlagen, onChange, status, ml, erg, setMl, gruppen, geraete, setGeraet }) {
+  const d = { ...STANDARD_DATEV, ...(grundlagen.datev || {}) };
+  const setD = (k, v) => onChange({ ...grundlagen, datev: { ...(grundlagen.datev || {}), [k]: v } });
+  const loeschen = (aktion, was) => (
+    <button className="zeilen-knopf loeschen" onClick={aktion} aria-label={`${was} entfernen`} title={`${was} entfernen`}><X size={16} strokeWidth={1.5} /></button>
+  );
+  return (
+    <div className="lv-tabelle" style={{ display:"flex", flexDirection:"column", gap:32 }}>
+      {status === "fehlt" && (
+        <div style={{ color:"var(--akzent)", display:"flex", gap:8, alignItems:"center" }}>
+          <TriangleAlert size={16} strokeWidth={1.5} /> Bitte supabase-kalkulation.sql ausführen, bis dahin wird hier nichts gespeichert
+        </div>
+      )}
+
+      <section>
+        <h2 style={h2}>Mittellohn</h2>
+        <p style={hinweis}>Lohngruppen mit Anzahl und Stundenlohn ergeben den Mittellohn, Zuschläge darauf den Kalkulationslohn.</p>
+        <div style={{ display:"grid", gridTemplateColumns:"minmax(0, 640px) minmax(0, 1fr)", gap:24, alignItems:"start" }}>
+          <div>
+            <div className="listen-gruppe">
+              <div aria-hidden="true" style={{ display:"grid", gridTemplateColumns: LOHN_SPALTEN, gap:16, ...kopf }}>
+                <span>Lohngruppe</span><span style={{ textAlign:"right" }}>Anzahl</span><span style={{ textAlign:"right" }}>Stundenlohn</span><span />
+              </div>
+              {gruppen.map((g, i) => (
+                <div key={i} style={{ display:"grid", gridTemplateColumns: LOHN_SPALTEN, gap:16, alignItems:"center" }}>
+                  <input className="desk-feld" value={g.bez || ""} placeholder="z. B. Facharbeiter" aria-label="Lohngruppe"
+                    onChange={e => setMl({ lohngruppen: gruppen.map((x, j) => j === i ? { ...x, bez: e.target.value } : x) })} style={{ width:"100%" }} />
+                  <input type="number" className="desk-feld" value={g.anzahl ?? ""} aria-label="Anzahl"
+                    onChange={e => setMl({ lohngruppen: gruppen.map((x, j) => j === i ? { ...x, anzahl: num(e.target.value) } : x) })} style={zahlFeld} />
+                  <input type="number" step="0.01" className="desk-feld" value={g.stundenlohn ?? ""} aria-label="Stundenlohn in Euro"
+                    onChange={e => setMl({ lohngruppen: gruppen.map((x, j) => j === i ? { ...x, stundenlohn: num(e.target.value) } : x) })} style={zahlFeld} />
+                  {loeschen(() => setMl({ lohngruppen: gruppen.filter((_, j) => j !== i) }), "Lohngruppe")}
+                </div>
+              ))}
+              {!gruppen.length && <div style={{ color:"var(--text2)" }}>Noch keine Lohngruppe</div>}
+            </div>
+            <button onClick={() => setMl({ lohngruppen: [...gruppen, { bez: "", anzahl: 1, stundenlohn: 0 }] })} style={leiseKnopf}>
+              <Plus size={16} strokeWidth={1.5} /> Lohngruppe
+            </button>
+            <div style={{ display:"flex", gap:24, marginTop:24, flexWrap:"wrap" }}>
+              <DeskZahl label="Zulagen" suffix="€/h" value={ml.zulagen} onChange={v => setMl({ zulagen: v })} />
+              <DeskZahl label="Sozialkosten" suffix="%" value={ml.sozialkostenProzent} onChange={v => setMl({ sozialkostenProzent: v })} />
+              <DeskZahl label="Lohnnebenkosten" suffix="€/h" value={ml.lohnnebenkosten} onChange={v => setMl({ lohnnebenkosten: v })} />
+            </div>
+          </div>
+          <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 20px" }}>
+            {[["Mittellohn", erg.mittellohn, "€/h"], ["Sozialkosten", erg.sozialkosten, "€/h"], ["Lohnnebenkosten", erg.lohnnebenkosten, "€/h"]].map(([l, w, e]) => (
+              <div key={l} style={{ display:"flex", justifyContent:"space-between", gap:16, lineHeight:"28px" }}>
+                <span style={{ color:"var(--text2)" }}>{l}</span>
+                <span className="num" style={{ fontFamily:"var(--font-zahl)" }}>{erg.koepfe > 0 ? `${euro(w)} ${e}` : "–"}</span>
+              </div>
+            ))}
+            <div style={{ borderTop:"1px solid var(--border)", marginTop:8, paddingTop:12 }}>
+              <div style={{ color:"var(--text2)" }}>Kalkulationslohn</div>
+              <div className="num" style={{ fontFamily:"var(--font-zahl)", fontSize:24, lineHeight:"32px", marginTop:4, color: erg.koepfe > 0 ? "var(--akzent)" : "var(--muted)" }}>
+                {erg.koepfe > 0 ? `${euro(erg.kalkulationslohn)} €/h` : "–"}
+              </div>
+              <div style={{ fontSize:13, color:"var(--muted)", marginTop:4 }}>steht als „Mittellohn (Kalkulationslohn)“ in den Kalkulationspreisen</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 style={h2}>Geräte</h2>
+        <p style={hinweis}>Nach BGL: Kosten je Betriebsstunde = Neuwert × (A+V % + Reparatur %) ÷ Stunden im Monat + Verbrauch × Kraftstoffpreis</p>
+        <div className="listen-gruppe">
+          <div aria-hidden="true" style={{ display:"grid", gridTemplateColumns: GERAET_SPALTEN, gap:12, ...kopf }}>
+            <span>Gerät</span><span style={{ textAlign:"right" }}>Neuwert €</span><span style={{ textAlign:"right" }}>A+V %/Mon.</span>
+            <span style={{ textAlign:"right" }}>Rep. %/Mon.</span><span style={{ textAlign:"right" }}>h/Mon.</span><span style={{ textAlign:"right" }}>l/h</span>
+            <span style={{ textAlign:"right" }}>€/l</span><span style={{ textAlign:"right" }}>€ je h</span><span />
+          </div>
+          {geraete.map((g, i) => {
+            const k = geraetekostenJeStunde(g);
+            const f = (feld, label) => (
+              <input type="number" step="0.01" className="desk-feld" aria-label={label} value={g[feld] ?? ""} onChange={e => setGeraet(i, { [feld]: num(e.target.value) })} style={zahlFeld} />
+            );
+            return (
+              <div key={g.id} style={{ display:"grid", gridTemplateColumns: GERAET_SPALTEN, gap:12, alignItems:"center" }}>
+                <input className="desk-feld" value={g.bez || ""} placeholder="z. B. Hydraulikbagger 14 t" aria-label="Gerät" onChange={e => setGeraet(i, { bez: e.target.value })} style={{ width:"100%" }} />
+                {f("neuwert", "Neuwert")}{f("avProzent", "Abschreibung und Verzinsung je Monat in Prozent")}{f("repProzent", "Reparatur je Monat in Prozent")}
+                {f("stundenJeMonat", "Stunden je Monat")}{f("verbrauchJeH", "Verbrauch Liter je Stunde")}{f("betriebsstoffPreis", "Kraftstoffpreis je Liter")}
+                <span className="num" title={`${euro(k.vorhaltung)} € Vorhaltung + ${euro(k.betriebsstoff)} € Betriebsstoff`}
+                  style={{ fontFamily:"var(--font-zahl)", textAlign:"right" }}>{euro(k.gesamt)}</span>
+                {loeschen(() => onChange({ ...grundlagen, geraete: geraete.filter((_, j) => j !== i) }), "Gerät")}
+              </div>
+            );
+          })}
+          {!geraete.length && <div style={{ color:"var(--text2)" }}>Noch kein Gerät</div>}
+        </div>
+        <button onClick={() => onChange({ ...grundlagen, geraete: [...geraete, { id: `g${Date.now()}`, bez: "", stundenJeMonat: 170 }] })} style={leiseKnopf}>
+          <Plus size={16} strokeWidth={1.5} /> Gerät
+        </button>
+      </section>
+
+      <section>
+        <h2 style={h2}>DATEV-Export</h2>
+        <p style={hinweis}>Für Rechnungen, Eingangsrechnungen und Zahlungen. Bauleistungen an Bauunternehmer (§ 13b UStG) brauchen ein eigenes Erlöskonto, mit dem Steuerberater abstimmen.</p>
+        <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"20px", display:"grid", gridTemplateColumns:"repeat(5, minmax(0, 1fr))", gap:"16px 24px" }}>
+          {[["Beraternummer", "beraternummer", "vom Steuerberater"], ["Mandantennummer", "mandantennummer", "vom Steuerberater"], ["Kontenrahmen", "kontenrahmen", "03"],
+            ["Beginn Wirtschaftsjahr", "wjBeginn", "2026-01-01"], ["Bankkonto", "bankkonto", "1200"],
+            ["Debitorenkonto", "debitorenkonto", "10000"], ["Erlöskonto", "erloeskonto", "8400"], ["Kreditorenkonto", "kreditorenkonto", "70000"],
+            ["Aufwand Material", "aufwandskonto", "3400"], ["Aufwand Subunternehmer", "nuAufwandskonto", "3100"]].map(([l, k, ph]) => (
+            <label key={k} style={{ display:"flex", flexDirection:"column", gap:4, minWidth:0 }}>
+              <span style={{ fontSize:13, color:"var(--text2)" }}>{l}</span>
+              <input className="desk-feld" value={d[k] ?? ""} placeholder={ph} onChange={e => setD(k, e.target.value.trim())}
+                style={{ width:"100%", height:36, fontFamily:"var(--font-zahl)", border:"1px solid var(--border2)" }} />
+            </label>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
