@@ -4,7 +4,7 @@ import { SchnellErstellung } from "./SchnellErstellung.jsx";
 import { AufgabenFormular } from "./AufgabenFormular.jsx";
 import { leereAufgabe } from "../lib/utils.js";
 import { FilterBtn } from "../components/FilterBtn.jsx";
-import { AufgabenKarte } from "../components/AufgabenKarte.jsx";
+import { AufgabenKarte, AufgabenTabellenKopf } from "../components/AufgabenKarte.jsx";
 import { AUFGABEN_STATUS, AUFGABEN_TYPEN } from "../config/konstanten.js";
 import { useBackButton } from "../hooks/useBackButton.js";
 
@@ -158,7 +158,22 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
         )}
       </div>
 
-      {/* Toolbar */}
+      {/* Toolbar (Desktop: Gewerke und Liste/Kanban in einer Zeile, leise Segmente) */}
+      {istDesktop && (
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, marginBottom:16 }}>
+          <div className="filter-reiter" style={{ display:"flex" }}>
+            {[["alle","Alle Gewerke"],["kritisch","Kritisch"],["beton","Betonage"],["schalung","Schalung"],["bewehrung","Bewehrung"]].map(([k,l]) => (
+              <button key={k} aria-pressed={filter===k} onClick={() => setFilter(k)}>{l}</button>
+            ))}
+          </div>
+          <div className="filter-reiter" style={{ display:"flex" }}>
+            {[["liste","Liste"],["kanban","Kanban"]].map(([v,l]) => (
+              <button key={v} aria-pressed={ansicht===v} onClick={() => setAnsicht(v)}>{l}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      {!istDesktop && <>
       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:9, overflowX:"auto" }}>
         {[
           ["alle","Alle"],
@@ -187,6 +202,7 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
               fontWeight: ansicht===v ? 700 : 500 }}>{l}</button>
         ))}
       </div>
+      </>}
 
       {/* Liste — nach Dringlichkeit gruppiert */}
       {ansicht === "liste" && (
@@ -201,50 +217,50 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
           {zurPruefungListe.length > 0 && (
             <>
               <SektionsTitel label="Zur Prüfung" />
-              {zurPruefungListe.map(a => (
+              <AufgabenGruppe d={istDesktop}>{zurPruefungListe.map(a => (
                 <AufgabenKarte key={a.id} aufgabe={a} kolonnen={kolonnen} istStunden={istStundenProAufgabe[a.id] || 0}
                   onClick={() => (darfBearbeiten || kannVorschlagen) && setEditAufgabe(a)}
                   onDelete={darfBearbeiten ? handleDelete : undefined}
                   onEntscheiden={darfEntscheiden ? onEntscheiden : undefined} />
-              ))}
+              ))}</AufgabenGruppe>
             </>
           )}
 
           {ueberfaelligListe.length > 0 && (
             <>
               <SektionsTitel label="Überfällig" />
-              {ueberfaelligListe.map(a => (
+              <AufgabenGruppe d={istDesktop}>{ueberfaelligListe.map(a => (
                 <AufgabenKarte key={a.id} aufgabe={a} kolonnen={kolonnen} istStunden={istStundenProAufgabe[a.id] || 0}
                   onClick={() => (darfBearbeiten || kannVorschlagen) && setEditAufgabe(a)}
                   onDelete={darfBearbeiten ? handleDelete : undefined}
                   onToggleErledigt={darfBearbeiten ? handleToggleErledigt : undefined}
                   onVorschlagen={kannVorschlagen ? onVorschlagen : undefined} />
-              ))}
+              ))}</AufgabenGruppe>
             </>
           )}
 
           {offenListe.length > 0 && (
             <>
               <SektionsTitel label="Offen" />
-              {offenListe.map(a => (
+              <AufgabenGruppe d={istDesktop}>{offenListe.map(a => (
                 <AufgabenKarte key={a.id} aufgabe={a} kolonnen={kolonnen} istStunden={istStundenProAufgabe[a.id] || 0}
                   onClick={() => (darfBearbeiten || kannVorschlagen) && setEditAufgabe(a)}
                   onDelete={darfBearbeiten ? handleDelete : undefined}
                   onToggleErledigt={darfBearbeiten ? handleToggleErledigt : undefined}
                   onVorschlagen={kannVorschlagen ? onVorschlagen : undefined} />
-              ))}
+              ))}</AufgabenGruppe>
             </>
           )}
 
           {erledigtListe.length > 0 && (
             <>
               <SektionsTitel label="Erledigt" />
-              {erledigtListe.map(a => (
+              <AufgabenGruppe d={istDesktop}>{erledigtListe.map(a => (
                 <AufgabenKarte key={a.id} aufgabe={a} kolonnen={kolonnen} istStunden={istStundenProAufgabe[a.id] || 0}
                   onClick={() => (darfBearbeiten || kannVorschlagen) && setEditAufgabe(a)}
                   onDelete={darfBearbeiten ? handleDelete : undefined}
                   onToggleErledigt={darfBearbeiten ? handleToggleErledigt : undefined} />
-              ))}
+              ))}</AufgabenGruppe>
             </>
           )}
         </div>
@@ -303,7 +319,16 @@ export function AufgabenView({ aufgaben, setAufgaben, kolonnen, sbConnected, dar
   );
 }
 
+// Desktop: Aufgaben einer Gruppe als Tafel mit Kopfzeile; Handy: Karten wie bisher
+function AufgabenGruppe({ d, children }) {
+  if (!d) return <>{children}</>;
+  return <div className="listen-gruppe"><AufgabenTabellenKopf />{children}</div>;
+}
+
 function SektionsTitel({ label }) {
+  if (document.documentElement.dataset.layout === "desktop") return (
+    <h2 style={{ margin:"24px 0 12px", fontSize:16, lineHeight:"24px", fontWeight:500, color:"var(--text)" }}>{label}</h2>
+  );
   return (
     <div style={{ display:"flex", alignItems:"center", gap:8, margin:"16px 0 8px" }}>
       <div style={{ color:"var(--muted)", fontSize:11, fontWeight:800,

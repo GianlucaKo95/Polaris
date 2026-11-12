@@ -3,10 +3,13 @@ import { Calendar, TriangleAlert, Zap, Info } from "lucide-react";
 import { daysBetween } from "../lib/utils.js";
 import { terminprognose } from "../lib/terminkette.js";
 import { AUFGABEN_STATUS } from "../config/konstanten.js";
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
 
 export function GanttView({ felder, onAufgabeKlick }) {
   const [legendeOffen, setLegendeOffen] = useState(false);
-  const DAY_W = 36;
+  const d = useIstDesktop();
+  const [platz, setPlatz] = useState(0); // Desktop: verfügbare Breite der Zeitachse
+  const NAME_W = d ? 240 : 140;
   const heute = new Date();
   // Start des heutigen Tages (Uhrzeit genullt) — ein Feld mit faellig_am
   // von heute (Mitternacht) galt sonst ab der ersten Sekunde nach 0 Uhr
@@ -16,7 +19,22 @@ export function GanttView({ felder, onAufgabeKlick }) {
   const heuteStart = new Date(heute); heuteStart.setHours(0,0,0,0);
   const startDate = new Date(heute); startDate.setDate(startDate.getDate() - 14);
   const endDate   = new Date(heute); endDate.setDate(endDate.getDate() + 42);
+  // Desktop: Zeitachse reicht bis zur frühesten und spätesten Aufgabe, damit
+  // überfällige Balken nicht links aus dem Plan fallen
+  if (d) {
+    for (const f of felder) {
+      if (!f.faellig_am) continue;
+      const a = new Date(f.faellig_am); a.setDate(a.getDate() - 3);
+      const e = new Date(f.faellig_am); e.setDate(e.getDate() + (f.dauer_tage || 1) + 7);
+      if (a < startDate) startDate.setTime(a.getTime());
+      if (e > endDate) endDate.setTime(e.getTime());
+    }
+    // auf Montag ausrichten, damit die Wochenspalten sauber beginnen
+    startDate.setDate(startDate.getDate() - ((startDate.getDay() + 6) % 7));
+  }
   const totalDays = daysBetween(startDate.toISOString().slice(0,10), endDate.toISOString().slice(0,10));
+  // Desktop: der ganze Plan passt in die Breite (mind. 10 px je Tag), Handy: feste 36 px mit Scroll
+  const DAY_W = d ? Math.max(10, Math.min(28, platz ? Math.floor((platz - NAME_W) / (totalDays + 1)) : 28)) : 36;
   const scrollRef = useRef(null);
 
   // Kritischer Pfad + berechnetes Projektende aus Dauer + Abhängigkeiten —
@@ -29,11 +47,19 @@ export function GanttView({ felder, onAufgabeKlick }) {
   // Woche um "heute" herum, der Rest bleibt per Scroll erreichbar statt
   // wie zuvor auf einen Blick zusammengequetscht zu werden.
   useEffect(() => {
+    if (!d || !scrollRef.current) return;
+    const el = scrollRef.current;
+    const ro = new ResizeObserver(() => setPlatz(el.clientWidth));
+    ro.observe(el); setPlatz(el.clientWidth);
+    return () => ro.disconnect();
+  }, [d]);
+  useEffect(() => {
     if (scrollRef.current) {
       const todayOffset = daysBetween(startDate.toISOString().slice(0,10), heute.toISOString().slice(0,10));
-      scrollRef.current.scrollLeft = todayOffset * DAY_W - 60;
+      // Desktop: der Plan passt meist ganz hinein, dann bleibt er am Anfang; sonst so, dass heute sichtbar ist
+      scrollRef.current.scrollLeft = d ? Math.max(0, (todayOffset + 14) * DAY_W + NAME_W - scrollRef.current.clientWidth) : todayOffset * DAY_W - 60;
     }
-  }, []);
+  }, [d ? DAY_W : 0]); // Desktop: nach dem Messen der Breite neu ausrichten
 
   // Generate day headers
   const days = [];
@@ -44,6 +70,140 @@ export function GanttView({ felder, onAufgabeKlick }) {
   }
 
   const todayOffset = daysBetween(startDate.toISOString().slice(0,10), heute.toISOString().slice(0,10));
+
+  if (d) {
+    const sichtbar = felder.filter(f => f.faellig_am).sort((a, b) => a.faellig_am.localeCompare(b.faellig_am));
+    const verzug = felder.filter(f => f.faellig_am && f.status !== "abgeschlossen" && new Date(f.faellig_am) < heuteStart);
+    const konflikte = felder.filter(f => f.faellig_am && f.status !== "abgeschlossen" && new Date(f.faellig_am) >= heuteStart && terminketten.get(f.id)?.terminkonflikt);
+    const balkenFarbe = { offen:"var(--text2)", in_arbeit:"var(--akzent)", zur_pruefung:"var(--blue)", abgeschlossen:"var(--green)", blockiert:"var(--red)" };
+    const kw = dt => { const t = new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate())); const n = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - n);
+      return Math.ceil(((t - new Date(Date.UTC(t.getUTCFullYear(), 0, 1))) / 864e5 + 1) / 7); };
+    const name = { position:"sticky", left:0, zIndex:3, width:NAME_W, minWidth:NAME_W, boxSizing:"border-box", padding:"0 16px",
+      background:"var(--surface)", borderRight:"1px solid var(--border)", alignSelf:"stretch", display:"flex", flexDirection:"column", justifyContent:"center" };
+    const breite = (totalDays + 1) * DAY_W;
+    return (
+      <div>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, marginBottom:16 }}>
+          <div>
+            <h2 style={{ margin:0, fontSize:16, lineHeight:"24px", fontWeight:500 }}>Terminplan</h2>
+            {zielTermin && (
+              <div style={{ marginTop:4, color:"var(--text2)" }}>
+                Fertigstellung berechnet <span className="num" style={{ fontFamily:"var(--font-zahl)", color:"var(--text)" }}>{projektEnde.toLocaleDateString("de-DE")}</span>
+                {deltaTage > 0
+                  ? <span style={{ color:"var(--red)" }}> · {deltaTage} Tag{deltaTage===1?"":"e"} nach dem Ziel {zielTermin.toLocaleDateString("de-DE")}</span>
+                  : <span style={{ color:"var(--green)" }}> · im Plan</span>}
+              </div>
+            )}
+          </div>
+          <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:13, color:"var(--text2)" }} aria-label="Legende">
+            {Object.entries(AUFGABEN_STATUS).map(([k,v]) => (
+              <span key={k} style={{ display:"inline-flex", alignItems:"center", gap:6 }}>
+                <span aria-hidden="true" style={{ width:12, height:8, borderRadius:2, background: balkenFarbe[k] || "var(--text2)" }} />{v.label}
+              </span>
+            ))}
+            <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}><Zap size={14} strokeWidth={1.5} /> Kritischer Pfad</span>
+          </div>
+        </div>
+
+        <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, overflow:"hidden" }}>
+          <div ref={scrollRef} style={{ overflowX:"auto" }}>
+            <div style={{ width: NAME_W + breite }}>
+              <div style={{ display:"flex", height:40, borderBottom:"1px solid var(--border)", fontSize:12, color:"var(--muted)" }}>
+                <div style={{ ...name, fontSize:13, color:"var(--text2)" }}>Aufgabe</div>
+                <div style={{ position:"relative", width: breite }}>
+                  {days.map((dt,i) => dt.getDay() === 1 && (
+                    <div key={i} style={{ position:"absolute", left: i * DAY_W, top:0, bottom:0, borderLeft:"1px solid var(--border)", padding:"4px 6px", whiteSpace:"nowrap", lineHeight:"16px" }}>
+                      <div>KW {kw(dt)}</div>
+                      <div className="num" style={{ fontFamily:"var(--font-zahl)" }}>{dt.getDate()}.{dt.getMonth()+1}.</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ position:"relative" }}>
+                {/* Wochenlinien, Wochenenden und Heute über alle Zeilen */}
+                <div aria-hidden="true" style={{ position:"absolute", left: NAME_W, top:0, bottom:0, width: breite, pointerEvents:"none" }}>
+                  {days.map((dt,i) => (dt.getDay() === 0 || dt.getDay() === 6) && (
+                    <div key={i} style={{ position:"absolute", left: i * DAY_W, width: DAY_W, top:0, bottom:0, background:"var(--bg)" }} />
+                  ))}
+                  {days.map((dt,i) => dt.getDay() === 1 && (
+                    <div key={`m${i}`} style={{ position:"absolute", left: i * DAY_W, top:0, bottom:0, borderLeft:"1px solid var(--border)" }} />
+                  ))}
+                  <div style={{ position:"absolute", left: todayOffset * DAY_W + DAY_W / 2, top:0, bottom:0, width:1, background:"var(--akzent)", zIndex:2 }} />
+                </div>
+                {sichtbar.length === 0 && <div style={{ padding:"16px", color:"var(--text2)" }}>Noch keine Aufgaben mit Fälligkeitsdatum</div>}
+                {sichtbar.map(f => {
+                  const startOff = daysBetween(startDate.toISOString().slice(0,10), f.faellig_am);
+                  const dur = f.dauer_tage || 1;
+                  const isLate = f.status !== "abgeschlossen" && new Date(f.faellig_am) < heuteStart;
+                  const info = terminketten.get(f.id);
+                  const wartetAuf = (f.abhaengig_von || []).map(id => felder.find(x => x.id === id)).filter(x => x && x.status !== "abgeschlossen");
+                  const warnung = isLate || info?.terminkonflikt;
+                  return (
+                    <div key={f.id} onClick={() => onAufgabeKlick?.(f.id)} className="desk-zeile"
+                      style={{ display:"flex", alignItems:"center", height:40, borderBottom:"1px solid var(--border)", cursor: onAufgabeKlick ? "pointer" : "default", position:"relative" }}>
+                      <div style={name}>
+                        <div style={{ display:"flex", alignItems:"center", gap:6, minWidth:0 }}>
+                          {info?.kritisch && <Zap size={14} strokeWidth={1.5} style={{ flexShrink:0, color:"var(--akzent)" }} aria-label="Kritischer Pfad" />}
+                          <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color: f.status === "abgeschlossen" ? "var(--muted)" : "var(--text)" }}>{f.titel}</span>
+                        </div>
+                        {wartetAuf.length > 0 && (
+                          <div style={{ fontSize:12, color:"var(--muted)" }} title={`Wartet auf: ${wartetAuf.map(x=>x.titel).join(", ")}`}>
+                            wartet auf {wartetAuf.length} Aufgabe{wartetAuf.length===1?"":"n"}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ position:"relative", width: breite, height:40 }}>
+                        <div title={[f.titel, isLate ? `${daysBetween(f.faellig_am, heute.toISOString().slice(0,10))} Tage Verzug` : null, info?.terminkonflikt ? "Termin durch Vorgänger gefährdet" : null, info?.kritisch ? "Kritischer Pfad" : null].filter(Boolean).join(" · ")}
+                          style={{ position:"absolute", left: startOff * DAY_W + 2, width: Math.max(dur * DAY_W - 4, 8), top:10, height:20, borderRadius:4,
+                            background: balkenFarbe[f.status] || "var(--text2)", opacity: f.status === "abgeschlossen" ? 0.5 : 1,
+                            boxShadow: warnung ? "0 0 0 2px var(--surface), 0 0 0 3px var(--red)" : "none", zIndex:1 }} />
+                        <span style={{ position:"absolute", left: (startOff + dur) * DAY_W + 6, top:10, lineHeight:"20px", fontSize:12, whiteSpace:"nowrap",
+                          color: warnung ? "var(--red)" : "var(--text2)", zIndex:1 }}>
+                          {warnung && <TriangleAlert size={12} strokeWidth={1.5} style={{ verticalAlign:"-2px", marginRight:4 }} />}
+                          {f.festigkeit ? `${f.festigkeit} %` : ""}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {(verzug.length > 0 || konflikte.length > 0) && (
+          <div style={{ display:"grid", gridTemplateColumns: verzug.length && konflikte.length ? "1fr 1fr" : "1fr", gap:16, marginTop:24 }}>
+            {verzug.length > 0 && (
+              <div>
+                <h2 style={{ margin:"0 0 12px", fontSize:16, lineHeight:"24px", fontWeight:500 }}>Verzug</h2>
+                <div className="listen-gruppe">
+                  {verzug.map(f => (
+                    <div key={f.id} onClick={() => onAufgabeKlick?.(f.id)} style={{ display:"flex", justifyContent:"space-between", gap:16, cursor:"pointer" }}>
+                      <span>{f.titel}</span>
+                      <span className="num" style={{ fontFamily:"var(--font-zahl)", fontSize:13, color:"var(--red)", whiteSpace:"nowrap" }}>{daysBetween(f.faellig_am, heute.toISOString().slice(0,10))} Tage</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {konflikte.length > 0 && (
+              <div>
+                <h2 style={{ margin:"0 0 12px", fontSize:16, lineHeight:"24px", fontWeight:500 }}>Terminrisiko durch Vorgänger</h2>
+                <div className="listen-gruppe">
+                  {konflikte.map(f => (
+                    <div key={f.id} onClick={() => onAufgabeKlick?.(f.id)} style={{ display:"flex", justifyContent:"space-between", gap:16, cursor:"pointer" }}>
+                      <span>{f.titel}</span>
+                      <span style={{ fontSize:13, color:"var(--akzent)", whiteSpace:"nowrap" }}>Termin nicht mehr erreichbar</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div>

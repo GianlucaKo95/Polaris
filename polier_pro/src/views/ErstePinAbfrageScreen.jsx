@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Lock, ArrowRight, CircleX } from "lucide-react";
 import { sbFetch } from "../lib/supabase.js";
 import { sha256Hex } from "../lib/utils.js";
+import { PolarisMarke } from "../components/PolarisMarke.jsx";
 
 // Wird EINMALIG direkt nach der ersten Anmeldung (Passwort-Vergabe per
 // Einladung oder Supabase-Invite-Link) für alle Nicht-Admin-Rollen gezeigt —
@@ -56,7 +57,7 @@ export function ErstePinAbfrageScreen({ profil, session, pflicht, onFertig }) {
       paddingBottom:"calc(17px + env(safe-area-inset-bottom))" }}>
       <div style={{ textAlign:"center", marginBottom:23 }}>
         <div style={{ fontWeight:900, fontSize:28, letterSpacing:-1.5, color:"var(--text)" }}>
-          <span style={{ color:"var(--yellow)" }}>★</span> POLARIS
+          {document.documentElement.dataset.layout === "desktop" ? <PolarisMarke groesse={32} wortGroesse={24} /> : <><span style={{ color:"var(--yellow)" }}>★</span> POLARIS</>}
         </div>
       </div>
       <div style={{ background:"var(--surface)", borderRadius:20, padding:20,
@@ -71,7 +72,7 @@ export function ErstePinAbfrageScreen({ profil, session, pflicht, onFertig }) {
         <div style={{ color:"var(--muted)", fontSize:13, marginBottom:14, lineHeight:1.5 }}>
           {pflicht
             ? "Dein Unternehmen verlangt einen 4-stelligen Code, damit niemand sonst die App auf diesem Gerät öffnen kann."
-            : "Schütze die App mit einem 4-stelligen Code, falls das Handy in fremde Hände gerät. Du kannst das auch später jederzeit in \"Mein Profil\" einrichten."}
+            : `Schütze die App mit einem 4-stelligen Code, falls ${document.documentElement.dataset.layout === "desktop" ? "das Gerät" : "das Handy"} in fremde Hände gerät. Du kannst das auch später jederzeit in "Mein Profil" einrichten.`}
         </div>
 
         {fehler && (

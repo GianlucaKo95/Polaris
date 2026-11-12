@@ -3,6 +3,7 @@ import { CircleX, ArrowRight, PartyPopper, Rocket, Check } from "lucide-react";
 import { supabase, sbClientMitToken, sbPlanConfigListe, planConfigAnzeige } from "../lib/supabase.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { PLAN_CONFIG } from "../config/konstanten.js";
+import { PolarisMarke } from "../components/PolarisMarke.jsx";
 
 export function RegistrierungScreen({ auth, onZurueck }) {
   const [schritt,     setSchritt]     = useState(0); // 0=Konto 1=Firma 2=Fertig
@@ -101,7 +102,7 @@ export function RegistrierungScreen({ auth, onZurueck }) {
       <div style={{ textAlign:"center", marginBottom:23 }}>
         <div style={{ fontWeight:900, fontSize:28, letterSpacing:-1.5,
           color:"var(--text)" }}>
-          <span style={{ color:"var(--yellow)" }}>★</span> POLARIS
+          {document.documentElement.dataset.layout === "desktop" ? <PolarisMarke groesse={32} wortGroesse={24} /> : <><span style={{ color:"var(--yellow)" }}>★</span> POLARIS</>}
         </div>
         <div style={{ fontSize:10, color:"var(--muted)", fontWeight:600,
           letterSpacing:3, textTransform:"uppercase", marginTop:2 }}>

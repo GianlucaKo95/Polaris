@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Mic, Camera, PenLine, CloudSun, CloudRain, Users, TriangleAlert } from "lucide-react";
+import { Mic, Camera, PenLine, CloudSun, CloudRain, Users, TriangleAlert, Plus } from "lucide-react";
 import { supabase } from "../lib/supabase.js";
 import { KITagesabschlussButton } from "./KITagesabschlussButton.jsx";
 import { leereAufgabe, layoutText } from "../lib/utils.js";
@@ -186,7 +186,9 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
       </>}
 
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:9, gap:10, flexWrap:"wrap" }}>
-        <div style={{ color: "var(--text)", fontWeight:800, fontSize:13, paddingTop:6 }}>Einträge</div>
+        {istDesktop
+          ? <h2 style={{ margin:0, fontSize:16, lineHeight:"40px", fontWeight:500 }}>Berichte</h2>
+          : <div style={{ color: "var(--text)", fontWeight:800, fontSize:13, paddingTop:6 }}>Einträge</div>}
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
           <KITagesabschlussButton
             projekt={projekt} kolonnen={kolonnen} wetter={wetter} aufgaben={aufgaben} session={session}
@@ -228,9 +230,11 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
             }}
           />
           <button onClick={() => setOpen(true)}
+            className={istDesktop ? "desk-knopf-auto" : undefined}
             style={{ background: "var(--yellow)", color:"#1C2027", border:"none",
-              padding:"6px 14px", fontWeight:700, cursor:"pointer", fontSize:13 }}>
-            + Bericht
+              padding:"6px 14px", fontWeight: istDesktop ? 500 : 700, cursor:"pointer", fontSize:13,
+              alignItems:"center", gap:6 }}>
+            {istDesktop ? <><Plus size={16} strokeWidth={1.5} /> Bericht</> : "+ Bericht"}
           </button>
         </div>
       </div>
@@ -241,7 +245,33 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
           Noch keine Berichte. „Bericht“ legt den ersten an, im Formular lässt er sich auch diktieren
         </div>
       )}
-      {berichte.map((b, i) => (
+      {istDesktop && berichte.length > 0 && (
+        <div className="listen-gruppe">
+          <div aria-hidden="true" style={{ display:"grid", gridTemplateColumns: TAGEBUCH_SPALTEN, gap:16, fontSize:13, color:"var(--text2)" }}>
+            <span>Datum</span><span>Tätigkeit</span><span>Wetter</span><span style={{ textAlign:"right" }}>Personen</span><span /><span />
+          </div>
+          {berichte.map((b, i) => (
+            <div key={i} onClick={() => setDetail(b)} role="button" tabIndex={0} onKeyDown={e => { if (e.key === "Enter") setDetail(b); }}
+              style={{ display:"grid", gridTemplateColumns: TAGEBUCH_SPALTEN, gap:16, alignItems:"center", cursor:"pointer" }}>
+              <span className="num" style={{ fontFamily:"var(--font-zahl)", fontSize:13 }}>{datumDe(b.datumRaw || b.datum)}</span>
+              <span style={{ minWidth:0 }}>
+                <span style={{ display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{b.taetigkeit || "–"}</span>
+                {b.maengel > 0 && <span style={{ fontSize:12, color:"var(--red)" }}>{b.maengel} Mängel</span>}
+              </span>
+              <span style={{ color:"var(--text2)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{b.wetter || "–"}</span>
+              <span className="num" style={{ fontFamily:"var(--font-zahl)", fontSize:13, color:"var(--text2)", textAlign:"right" }}>{b.arbeiter || "–"}</span>
+              <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, color:"var(--muted)" }}>
+                {b.bilder?.length > 0 && <><Camera size={14} strokeWidth={1.5} />{b.bilder.length}</>}
+              </span>
+              <span onClick={e => e.stopPropagation()} style={{ justifySelf:"end" }}>
+                <WordExportButton kompakt bericht={b} projekt={projekt} eigeneFirma={eigeneFirma} wetter={b.wetterData || wetter}
+                  kolonnen={kolonnenMitStundenFuerTag(b.datumRaw || b.datum)} tagebuchVorlage={tagebuchVorlage} />
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {!istDesktop && berichte.map((b, i) => (
         <div key={i} onClick={() => setDetail(b)}
           style={{ background:"var(--surface)", padding:"12px 18px", marginBottom:7,
             borderLeft:`4px solid ${'var(--yellow)'}`, border:"1px solid var(--border)", cursor:"pointer" }}>
@@ -523,4 +553,12 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
       )}
     </div>
   );
+}
+
+// Desktop-Tabelle: Datum · Tätigkeit · Wetter · Personen · Fotos · Export
+const TAGEBUCH_SPALTEN = "104px minmax(0, 1fr) 240px 72px 40px 32px";
+// "2026-10-15" → "15.10.2026"; bereits deutsche Daten bleiben
+function datumDe(d) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ""));
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : (d || "–");
 }

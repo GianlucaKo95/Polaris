@@ -4,7 +4,7 @@ import { Spinner } from "./Spinner.jsx";
 import { DocxVorschauModal } from "./DocxVorschauModal.jsx";
 import { erzeugeBerichtDocx } from "../lib/tagebuchVorlage.js";
 
-export function WordExportButton({ bericht, projekt, eigeneFirma, wetter, kolonnen, tagebuchVorlage }) {
+export function WordExportButton({ bericht, projekt, eigeneFirma, wetter, kolonnen, tagebuchVorlage, kompakt = false }) {
   const [laedt, setLaedt] = useState(false);
   const [blob,  setBlob]  = useState(null);
 
@@ -19,6 +19,16 @@ export function WordExportButton({ bericht, projekt, eigeneFirma, wetter, kolonn
       setLaedt(false);
     }
   }
+
+  // kompakt (Desktop-Tabelle): leiser Symbolknopf statt gelbem Knopf je Zeile
+  if (kompakt) return (
+    <>
+      <button className="zeilen-knopf" onClick={handleExport} disabled={laedt} title="Als Word-Datei erzeugen" aria-label="Als Word-Datei erzeugen">
+        {laedt ? <Spinner size={14} /> : <FileText size={16} strokeWidth={1.5} />}
+      </button>
+      <DocxVorschauModal blob={blob} dateiname={`Bautagebuch_${bericht.datum}.docx`} eigeneFirma={eigeneFirma} onClose={() => setBlob(null)} />
+    </>
+  );
 
   return (
     <>

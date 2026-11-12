@@ -111,7 +111,8 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
       {/* Home */}
       {screen === "home" && (
         <>
-          {/* Eigene Firma Karte */}
+          {/* Eigene Firma Karte (Desktop: mit Abo zusammen eine Tafel) */}
+          <div className="listen-gruppe desk-abstand">
           <div onClick={() => { setTmpFirma({...owneFirma}); setScreen("eigene"); }}
             style={{ background: "var(--surface)", borderRadius:14, padding:"12px 18px", marginBottom:10,
               border:`2px solid ${'var(--yellow)'}`, cursor:"pointer" }}>
@@ -164,6 +165,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
               </div>
             </div>
           )}
+          </div>
 
           {/* Subunternehmer */}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:7 }}>
@@ -185,7 +187,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
           )}
 
           {subs.length === 0 ? (
-            <div style={{ background: "var(--surface)", borderRadius:12, padding:17, textAlign:"center" }}>
+            <div className="desk-leer" style={{ background: "var(--surface)", borderRadius:12, padding:17, textAlign:"center" }}>
               <div style={{ display:"flex", justifyContent:"center", color:"var(--muted)" }}><Building2 size={28} /></div>
               <div style={{ color: "var(--muted)", marginTop:8 }}>Noch keine Subunternehmer angelegt.</div>
             </div>
@@ -233,6 +235,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
                     onOnboardingReset();
                   }
                 }}
+                className="desk-knopf-auto"
                 style={{ width:"100%", background: "var(--border)", color: "var(--muted)",
                   border:`1px solid ${'var(--border)'}`, borderRadius:10, padding:12,
                   cursor:"pointer", fontSize:13,

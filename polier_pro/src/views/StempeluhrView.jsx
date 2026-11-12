@@ -6,6 +6,7 @@ import { sbFetch } from "../lib/supabase.js";
 import { getGPSPosition, reverseGeocode, geocodeAdresse, haversineMeters } from "../lib/geo.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
 
 // Ab dieser Entfernung zur (geocodierten) Projektadresse gilt eine
 // Stempelung als geografisch unplausibel — reine Hinweis-Schwelle, kein
@@ -13,6 +14,7 @@ import { useBackButton } from "../hooks/useBackButton.js";
 const GEO_WARNUNG_METER = 2000;
 
 export function StempeluhrView({ profil, projekte, session, kolonnen = [], aufgaben = [] }) {
+  const istDesktop = useIstDesktop();
   const [status,      setStatus]      = useState("aus");   // aus | ein | pause
   const [aktiveBuchung, setAktiveBuchung] = useState(null);
   const [gps,         setGPS]         = useState(null);
@@ -308,6 +310,236 @@ export function StempeluhrView({ profil, projekte, session, kolonnen = [], aufga
   const laufzeitStr = `${Math.floor(laufzeit/60)}h ${(laufzeit%60).toString().padStart(2,"0")}min`;
 
   const STATUS_FARBE = { aus: "var(--ink-text2)", ein: "#22C55E", pause: "var(--yellow)" };
+
+  if (istDesktop) return (
+    <div style={{ display:"grid", gridTemplateColumns:"360px minmax(0, 1fr)", gap:24, alignItems:"start" }}>
+      <div>
+      {/* Desktop: Uhr als ruhige Tafel mit den Stempel-Knöpfen darunter */}
+      <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"20px", marginBottom:16 }}>
+        <div style={{ fontSize:13, color:"var(--text2)" }}>
+          {jetzt.toLocaleDateString("de-DE", { weekday:"long", day:"2-digit", month:"long" })}
+        </div>
+        <div className="num" style={{ fontFamily:"var(--font-zahl)", fontSize:48, lineHeight:"56px", marginTop:4 }}>
+          {jetzt.toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" })}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, color: status === "aus" ? "var(--text2)" : "var(--text)" }}>
+          <span aria-hidden="true" style={{ width:8, height:8, borderRadius:4, background: status === "ein" ? "var(--green)" : status === "pause" ? "var(--akzent)" : "var(--muted)" }} />
+          { status === "aus" ? "Nicht eingestempelt" : status === "ein" ? `Eingestempelt · ${laufzeitStr}` : `Pause · ${laufzeitStr}` }
+        </div>
+        {gps && <div style={{ marginTop:8, fontSize:13, color:"var(--text2)", display:"flex", alignItems:"center", gap:6 }}><MapPin size={14} strokeWidth={1.5} />{gps.adresse} · ±{gps.genauigkeit} m</div>}
+        {gpsError && <div style={{ marginTop:8, fontSize:13, color:"var(--red)" }}>{gpsError}</div>}
+        {geoWarnung && <div style={{ marginTop:8, fontSize:13, color:"var(--akzent)" }}>{geoWarnung}</div>}
+        {aktionsFehler && <div style={{ marginTop:8, fontSize:13, color:"var(--red)" }}>{aktionsFehler}</div>}
+        <div style={{ display:"flex", gap:8, marginTop:20 }}>
+          {status === "aus" && (
+            <button onClick={einstempeln} disabled={gpsLaden || aktionLaeuft || !aktivProjekt}
+              style={{ flex:1, height:44, borderRadius:8, border:"none", background:"var(--green)", color:"#fff", fontFamily:"inherit", fontSize:15, fontWeight:500,
+                display:"flex", alignItems:"center", justifyContent:"center", gap:8, cursor:"pointer", opacity: gpsLaden || aktionLaeuft || !aktivProjekt ? 0.6 : 1 }}>
+              <Play size={16} strokeWidth={1.5} />{gpsLaden || aktionLaeuft ? "Ermittle Standort" : "Einstempeln"}
+            </button>
+          )}
+          {status === "ein" && <>
+            <button onClick={pauseStart} disabled={aktionLaeuft}
+              style={{ flex:1, height:44, borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface)", color:"var(--text)", fontFamily:"inherit", fontSize:15,
+                display:"flex", alignItems:"center", justifyContent:"center", gap:8, cursor:"pointer", opacity: aktionLaeuft ? 0.6 : 1 }}>
+              <Pause size={16} strokeWidth={1.5} />Pause
+            </button>
+            <button onClick={ausstempeln} disabled={gpsLaden || aktionLaeuft}
+              style={{ flex:1, height:44, borderRadius:8, border:"none", background:"var(--text)", color:"var(--surface)", fontFamily:"inherit", fontSize:15, fontWeight:500,
+                display:"flex", alignItems:"center", justifyContent:"center", gap:8, cursor:"pointer", opacity: gpsLaden || aktionLaeuft ? 0.6 : 1 }}>
+              <Square size={14} strokeWidth={1.5} />{gpsLaden || aktionLaeuft ? "Ermittle Standort" : "Ausstempeln"}
+            </button>
+          </>}
+          {status === "pause" && (
+            <button onClick={pauseEnde} disabled={aktionLaeuft}
+              style={{ flex:1, height:44, borderRadius:8, border:"none", background:"var(--text)", color:"var(--surface)", fontFamily:"inherit", fontSize:15, fontWeight:500,
+                display:"flex", alignItems:"center", justifyContent:"center", gap:8, cursor:"pointer" }}>
+              <Play size={16} strokeWidth={1.5} />Weiterarbeiten
+            </button>
+          )}
+        </div>
+        {status === "aus" && (
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:12, color:"var(--muted)", fontSize:13 }}>
+            <SatelliteDish size={14} strokeWidth={1.5} />{aktivProjekt ? "Der Standort wird beim Stempeln erfasst" : "Erst ein Projekt wählen"}
+          </div>
+        )}
+      </div>
+      {/* Aktive Buchung Info */}
+      {aktiveBuchung && status !== "aus" && (
+        <div style={{ background:"var(--surface)", padding:12,
+          marginBottom:12, border:"1px solid var(--border)" }}>
+          <div style={{ color:"var(--muted)", fontSize:11, marginBottom:4, fontWeight:700,
+            textTransform:"uppercase", letterSpacing:0.6 }}>Aktuelle Buchung</div>
+          <div style={{ color:"var(--text)", fontSize:14, fontWeight:700 }}>
+            {projekte.find(p=>p.id===aktiveBuchung.projekt_id)?.name || "—"}
+          </div>
+          {aktiveBuchung.aufgabe_id && (
+            <div style={{ color:"var(--text)", fontSize:12, marginTop:4 }}>
+              🔧 {aufgaben.find(a=>a.id===aktiveBuchung.aufgabe_id)?.titel || "Aufgabe"}
+            </div>
+          )}
+          {aktiveBuchung.taetigkeit && (
+            <div style={{ color:"var(--ydark)", fontSize:12, marginTop:4,
+              fontWeight:600 }}>
+              {taetigkeitAnzeige(aktiveBuchung.taetigkeit)?.icon} {taetigkeitAnzeige(aktiveBuchung.taetigkeit)?.label}
+            </div>
+          )}
+          {aktiveBuchung.ein_adresse && (
+            <div style={{ color:"var(--muted)", fontSize:11, marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
+              <MapPin size={12} />Eingestempelt: {aktiveBuchung.ein_adresse}
+            </div>
+          )}
+          {aktiveBuchung.notiz && (
+            <div style={{ color:"var(--muted)", fontSize:11, marginTop:2 }}>
+              {aktiveBuchung.notiz}
+            </div>
+          )}
+        </div>
+      )}
+
+      </div>
+      <div>
+      {/* Kolonnen-Sammelerfassung — nur wenn eigene Kolonne + berechtigte Rolle */}
+      {eigeneKolonne && kannSammelStempeln && status === "aus" && (
+        <button onClick={() => setZeigeSammel(true)}
+          style={{ width:"100%", background:"var(--bbg)", color:"var(--blue)",
+            border:"2px solid var(--blue)", padding:14,
+            fontWeight:700, fontSize:14, cursor:"pointer", marginBottom:14,
+            fontFamily:"inherit", display:"flex", alignItems:"center",
+            justifyContent:"center", gap:8 }}>
+          <Users size={18} />Für Kolonne „{eigeneKolonne.name}" sammelbuchen
+        </button>
+      )}
+
+      {/* Projekt Auswahl */}
+      {status === "aus" && (
+        <>
+          <div style={{ marginBottom:9 }}>
+            <Label>Projekt</Label>
+            <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:6 }}>
+              {projekte.map(p => (
+                <button key={p.id} onClick={() => { setAktivProjekt(p.id); setAufgabeId(null); }}
+                  style={{ background:"var(--surface)",
+                    border:`1px solid ${'var(--border)'}`,
+                    borderLeft:`4px solid ${aktivProjekt===p.id ? "var(--yellow)" : "var(--border)"}`,
+                    padding:"13px 15px", cursor:"pointer",
+                    fontFamily:"inherit", textAlign:"left",
+                    display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ width:22, height:22, flex:"none",
+                    border:`2px solid ${aktivProjekt===p.id ? "var(--yellow)" : "rgba(0,0,0,.18)"}`,
+                    background: aktivProjekt===p.id ? "var(--yellow)" : "transparent",
+                    display:"flex", alignItems:"center", justifyContent:"center", color:"var(--ink)" }}>
+                    {aktivProjekt===p.id && <Check size={14} strokeWidth={3} />}
+                  </div>
+                  <span style={{ color:"var(--text)", fontSize:14.5,
+                    fontWeight: aktivProjekt===p.id ? 700 : 600 }}>{p.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom:12 }}>
+            <Label>Tätigkeit</Label>
+            {taetigkeitEingeklappt ? (
+              <div onClick={() => setTaetigkeitEingeklappt(false)}
+                style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                  background:"var(--ink)", color:"#fff", padding:"10px 14px",
+                  cursor:"pointer", marginTop:6 }}>
+                <span style={{ fontSize:12.5, fontWeight:700 }}>
+                  {taetigkeitAnzeige(taetigkeit)?.icon} {taetigkeitAnzeige(taetigkeit)?.label}
+                  <span style={{ fontWeight:500, color:"var(--ink-text2)", marginLeft:7 }}>
+                    · von Aufgabe übernommen
+                  </span>
+                </span>
+                <span style={{ fontSize:11.5, fontWeight:700, textDecoration:"underline" }}>Ändern</span>
+              </div>
+            ) : (
+              <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginTop:6 }}>
+                {sichtbareTaetigkeiten.map(([key, t]) => (
+                  <button key={key} onClick={() => setTaetigkeit(key)}
+                    style={{ background: taetigkeit===key ? "var(--ink)" : "var(--surface)",
+                      color: taetigkeit===key ? "#fff" : "var(--text2)",
+                      border:`1px solid ${taetigkeit===key ? "var(--ink)" : "var(--border2)"}`,
+                      padding:"10px 14px", cursor:"pointer",
+                      fontSize:12.5, fontWeight: taetigkeit===key ? 700 : 600,
+                      fontFamily:"inherit" }}>
+                    {t.icon} {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {offeneAufgaben.length > 0 && (
+            <div style={{ marginBottom:12 }}>
+              <Label>Aufgabe (optional)</Label>
+              <select value={aufgabeId ?? ""} onChange={e => {
+                  const id = e.target.value ? Number(e.target.value) : null;
+                  setAufgabeId(id);
+                  const gewaehlte = offeneAufgaben.find(a => a.id === id);
+                  // Tätigkeit immer vom typ der gewählten Aufgabe übernehmen
+                  // — auch "allgemein"/"mangel", die es in TAETIGKEITEN gar
+                  // nicht gibt (taetigkeitAnzeige() löst beide Schlüsselräume
+                  // beim Anzeigen einheitlich auf). Vorher wurde nur bei den
+                  // fünf gemeinsamen Schlüsseln automatisch übernommen, beim
+                  // weit häufigeren "allgemein" blieb die Tätigkeit dem
+                  // Nutzer überlassen und matchte dadurch kaum je zur Aufgabe.
+                  if (gewaehlte) {
+                    setTaetigkeit(gewaehlte.typ);
+                    setTaetigkeitEingeklappt(true);
+                  } else {
+                    setTaetigkeitEingeklappt(false);
+                  }
+                }}
+                style={{ ...inputStyle(), padding:"11px 12px" }}>
+                <option value="">— keine bestimmte Aufgabe —</option>
+                {offeneAufgaben.map(a => (
+                  <option key={a.id} value={a.id}>{a.titel}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div style={{ marginBottom:12 }}>
+            <Label>Notiz (optional)</Label>
+            <input value={notiz} onChange={e => setNotiz(e.target.value)}
+              placeholder="z.B. Bewehrungsarbeiten B1" style={inputStyle()} />
+          </div>
+        </>
+      )}
+
+      {/* Heutige Buchungen */}
+      {buchungen.filter(b=>b.status==="abgeschlossen").length > 0 && (
+        <div style={{ marginTop: status==="aus" ? 4 : 20 }}>
+          <div style={{ color:"var(--text)", fontWeight:800, fontSize:13, marginBottom:7 }}>
+            Heute erfasst
+          </div>
+          {buchungen.filter(b=>b.status==="abgeschlossen").map(b => (
+            <div key={b.id} style={{ background:"var(--surface)",
+              padding:"9px 16px", marginBottom:6, border:"1px solid var(--border)",
+              display:"flex", alignItems:"center", gap:12 }}>
+              <Clock3 size={18} color="var(--muted)" />
+              <div style={{ flex:1 }}>
+                <div className="num" style={{ fontSize:13.5, fontWeight:700, color:"var(--text)" }}>
+                  {new Date(b.eingestempelt_at).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}
+                  {" → "}
+                  {b.ausgestempelt_at ? new Date(b.ausgestempelt_at).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) : "—"}
+                </div>
+                {b.ein_adresse && <div style={{ fontSize:10, color:"var(--muted)", marginTop:2 }}>{b.ein_adresse}</div>}
+                {b.taetigkeit && (
+                  <div style={{ fontSize:10, color:"var(--ydark)", marginTop:2, fontWeight:600 }}>
+                    {taetigkeitAnzeige(b.taetigkeit)?.icon} {taetigkeitAnzeige(b.taetigkeit)?.label}
+                  </div>
+                )}
+              </div>
+              <div className="num" style={{ fontWeight:800, color:"var(--text)", fontSize:15 }}>
+                {b.netto_minuten ? `${Math.floor(b.netto_minuten/60)}h ${b.netto_minuten%60}min` : "—"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      </div>
+    </div>
+  );
 
   return (
     <div>

@@ -106,7 +106,29 @@ export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, pro
       {heuteDran.length > 0 && (
         <>
           <SektionsTitel label="Heute dran" />
-          {heuteDran.map(a => {
+          {istDesktop && (
+            <div className="listen-gruppe desk-abstand">
+              {heuteDran.map(a => {
+                const istUeberfaellig = ueberfaellig.includes(a);
+                return (
+                  <div key={a.id} onClick={() => springeZu("aufgaben")} role="button" tabIndex={0}
+                    onKeyDown={e => { if (e.key === "Enter") springeZu("aufgaben"); }}
+                    style={{ display:"grid", gridTemplateColumns:"minmax(0, 1fr) 200px 112px 96px", gap:16, alignItems:"center", cursor:"pointer" }}>
+                    <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.titel}</span>
+                    <span style={{ color:"var(--text2)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.zustaendig || "–"}</span>
+                    <span className="num" style={{ fontFamily:"var(--font-zahl)", fontSize:13, color: istUeberfaellig ? "var(--red)" : "var(--text2)" }}>
+                      {a.faellig_am ? new Date(a.faellig_am).toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" }) : "–"}
+                    </span>
+                    <span style={{ justifySelf:"end", display:"inline-flex", alignItems:"center", gap:6, fontSize:13, color: istUeberfaellig ? "var(--red)" : "var(--text2)" }}>
+                      <span aria-hidden="true" style={{ width:6, height:6, borderRadius:3, background: istUeberfaellig ? "var(--red)" : "var(--muted)" }} />
+                      {istUeberfaellig ? "Überfällig" : "Offen"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {!istDesktop && heuteDran.map(a => {
             const istUeberfaellig = ueberfaellig.includes(a);
             return (
               <div key={a.id} onClick={() => springeZu("aufgaben")}
@@ -166,13 +188,13 @@ export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, pro
 
       {/* Kolonnen vor Ort */}
       <div style={{ display:"flex", justifyContent:"space-between",
-        alignItems:"center", marginBottom:7 }}>
+        alignItems:"center", marginBottom: istDesktop ? 12 : 7 }}>
         <SektionsLabel label="Kolonnen vor Ort" />
         {kolonnen.length > 0 && (
           <button onClick={() => springeZu("kolonnen")}
-            style={{ background:"none", border:"none", color:"var(--ydark)",
+            style={{ background:"none", border:"none", color: istDesktop ? "var(--text2)" : "var(--ydark)",
               fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-            Alle ansehen →
+            {istDesktop ? "Alle Kolonnen" : "Alle ansehen →"}
           </button>
         )}
       </div>
@@ -183,7 +205,22 @@ export function DashboardView({ aufgaben, kolonnen, sbConnected, onNavigate, pro
           Noch keine Kolonnen eingeteilt
         </div>
       )}
-      {kolonnen.slice(0,3).map(k => (
+      {istDesktop && kolonnen.length > 0 && (
+        <div className="listen-gruppe">
+          {kolonnen.slice(0,3).map(k => (
+            <div key={k.id} onClick={() => springeZu("kolonnen")} role="button" tabIndex={0}
+              onKeyDown={e => { if (e.key === "Enter") springeZu("kolonnen"); }}
+              style={{ display:"grid", gridTemplateColumns:"32px minmax(0, 1fr) 200px 96px", gap:12, alignItems:"center", cursor:"pointer" }}>
+              <span aria-hidden="true" style={{ width:32, height:32, borderRadius:16, background:"var(--surface2)", color:"var(--text2)",
+                display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:500 }}>{initialen(k.name)}</span>
+              <span>{k.name}</span>
+              <span style={{ color:"var(--text2)" }}>{k.vorarbeiter ? `Vorarbeiter ${k.vorarbeiter}` : "–"}</span>
+              <span className="num" style={{ justifySelf:"end", fontFamily:"var(--font-zahl)", fontSize:13, color:"var(--text2)" }}>{(k.mitarbeiter||[]).length} Mann</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {!istDesktop && kolonnen.slice(0,3).map(k => (
         <div key={k.id} onClick={() => springeZu("kolonnen")}
           style={{ background:"var(--surface)", padding:"9px 16px",
             marginBottom:6, cursor:"pointer", border:"1px solid var(--border)",
@@ -305,6 +342,9 @@ function KpiKachel({ label, wert, farbe, onClick, d = false }) {
 }
 
 function SektionsTitel({ label }) {
+  if (document.documentElement.dataset.layout === "desktop") return (
+    <h2 style={{ margin:"0 0 12px", fontSize:16, lineHeight:"24px", fontWeight:500, color:"var(--text)" }}>{label}</h2>
+  );
   return (
     <div style={{ color:"var(--text)", fontWeight:800, marginBottom:7, fontSize:13,
       letterSpacing:0.3 }}>
@@ -314,6 +354,9 @@ function SektionsTitel({ label }) {
 }
 
 function SektionsLabel({ label }) {
+  if (document.documentElement.dataset.layout === "desktop") return (
+    <h2 style={{ margin:0, fontSize:16, lineHeight:"24px", fontWeight:500, color:"var(--text)" }}>{label}</h2>
+  );
   return (
     <div style={{ color:"var(--text)", fontWeight:800, fontSize:13 }}>{label}</div>
   );

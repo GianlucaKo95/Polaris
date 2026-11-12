@@ -6,6 +6,7 @@ import { taetigkeitAnzeige } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { KolonneKarte } from "../components/KolonneKarte.jsx";
 import { ALLE_GEWERKE } from "../config/konstanten.js";
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
 
 // Wandelt eine native zeitbuchungen-Zeile in die gleiche Form um, die
 // KolonneKarte/MitarbeiterZeilen bisher nur von 123erfasst kannten — so
@@ -26,6 +27,7 @@ function alsZeitEintrag(b) {
 }
 
 export function KolonnenView({ kolonnen, projekt, subs = [], setKolonnen, darfBearbeiten = true, kannKolonneLoeschen = false, profil, session }) {
+  const desk = useIstDesktop();
   const [zeitdaten,   setZeitdaten]   = useState([]);
   const [ladeStatus,  setLadeStatus]  = useState("idle"); // idle | loading | ok | error
   const [datenquelle, setDatenquelle] = useState(null);   // "eigen" | "123erfasst"
@@ -113,25 +115,25 @@ export function KolonnenView({ kolonnen, projekt, subs = [], setKolonnen, darfBe
   return (
     <div>
       {/* KPI Leiste */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:10 }}>
-        <div style={{ background: "var(--surface)", borderRadius:10, padding:"8px 12px", borderBottom:`3px solid ${'var(--yellow)'}` }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap: desk ? 16 : 8, marginBottom: desk ? 24 : 10 }}>
+        <div className="desk-kennzahl" style={{ background: "var(--surface)", borderRadius:10, padding:"8px 12px", borderBottom:`3px solid ${'var(--yellow)'}` }}>
           <div style={{ color: "var(--muted)", fontSize:10 }}>Kolonnen</div>
           <div style={{ color: "var(--text)", fontWeight:800, fontSize:22 }}>{kolonnen.length}</div>
         </div>
-        <div style={{ background: "var(--surface)", borderRadius:10, padding:"8px 12px", borderBottom:`3px solid ${'var(--blue)'}` }}>
+        <div className="desk-kennzahl" style={{ background: "var(--surface)", borderRadius:10, padding:"8px 12px", borderBottom:`3px solid ${'var(--blue)'}` }}>
           <div style={{ color: "var(--muted)", fontSize:10 }}>Mitarbeiter</div>
           <div style={{ color: "var(--text)", fontWeight:800, fontSize:22 }}>{totalMann}</div>
         </div>
-        <div style={{ background: "var(--surface)", borderRadius:10, padding:"8px 12px", borderBottom:`3px solid ${'var(--green)'}` }}>
-          <div style={{ color: "var(--muted)", fontSize:10 }}>Stunden Σ</div>
+        <div className="desk-kennzahl" style={{ background: "var(--surface)", borderRadius:10, padding:"8px 12px", borderBottom:`3px solid ${'var(--green)'}` }}>
+          <div style={{ color: "var(--muted)", fontSize:10 }}>{desk ? "Stunden im Zeitraum" : "Stunden Σ"}</div>
           <div style={{ color: "var(--text)", fontWeight:800, fontSize:22 }}>
-            {ladeStatus === "ok" ? totalStd.toFixed(1)+"h" : "—"}
+            {ladeStatus === "ok" ? (desk ? `${totalStd.toLocaleString("de-DE", { minimumFractionDigits:1, maximumFractionDigits:1 })} h` : totalStd.toFixed(1)+"h") : "—"}
           </div>
         </div>
       </div>
 
       {/* Datumsfilter */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr auto", gap:8, marginBottom:10, alignItems:"end" }}>
+      <div style={{ display:"grid", gridTemplateColumns: desk ? "176px 176px 40px" : "1fr 1fr auto", gap:8, marginBottom: desk ? 24 : 10, alignItems:"end" }}>
         <div>
           <Label>Von</Label>
           <input type="date" value={vonDatum} onChange={e => setVonDatum(e.target.value)} style={inputStyle()} />
@@ -146,9 +148,9 @@ export function KolonnenView({ kolonnen, projekt, subs = [], setKolonnen, darfBe
               blieb er kürzer und falsch ausgerichtet, weil nur die Felder
               selbst ein Label über sich haben. */}
           <div style={{ visibility:"hidden" }}><Label>·</Label></div>
-          <button onClick={ladeZeiten}
-            style={{ width:"100%", background: "var(--border)", border:`1.5px solid ${'var(--border2)'}`,
-              color: "var(--text)", borderRadius:8, padding:"13px 14px", boxSizing:"border-box",
+          <button onClick={ladeZeiten} aria-label="Zeiten neu laden" title="Zeiten neu laden"
+            style={{ width:"100%", background: desk ? "var(--surface)" : "var(--border)", border:`${desk ? "1px" : "1.5px"} solid ${'var(--border2)'}`,
+              color: "var(--text)", borderRadius:8, padding: desk ? 0 : "13px 14px", height: desk ? 36 : undefined, boxSizing:"border-box",
               cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
             <RefreshCw size={16} />
           </button>

@@ -17,8 +17,13 @@ export function useFirmenUebersicht(session, projekte) {
     let aktiv = true;
     setLaedt(true);
     const c = sbClientMitToken(session);
+    // Ältere Datenbanken ohne die Spalten aus supabase-kalkulation.sql
+    // (interne_freigabe, nachtrag_zu): dann alle vorhandenen Spalten laden,
+    // statt die ganze Angebotsliste als Fehler zu verwerfen.
+    const angeboteLaden = () => c.from("angebote").select("id,projekt_id,titel,empfaenger,datum,status,positionen,rabatt,mwst,interne_freigabe,nachtrag_zu,created_at").in("projekt_id", ids)
+      .then(r => r.error?.code === "42703" ? c.from("angebote").select("*").in("projekt_id", ids) : r);
     Promise.all([
-      c.from("angebote").select("id,projekt_id,titel,empfaenger,datum,status,positionen,rabatt,mwst,interne_freigabe,nachtrag_zu,created_at").in("projekt_id", ids),
+      angeboteLaden(),
       c.from("rechnungen").select("*").in("projekt_id", ids),
       c.from("baufortschritt").select("*").in("projekt_id", ids),
     ]).then(([a, r, b]) => {

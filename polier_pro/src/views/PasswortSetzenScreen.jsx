@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Eye, EyeOff, CircleX, ArrowRight } from "lucide-react";
+import { PolarisMarke } from "../components/PolarisMarke.jsx";
 
 export function PasswortSetzenScreen({ auth, type }) {
   const [password,  setPassword]  = useState("");
@@ -17,7 +18,7 @@ export function PasswortSetzenScreen({ auth, type }) {
       paddingBottom:"calc(17px + env(safe-area-inset-bottom))" }}>
       <div style={{ textAlign:"center", marginBottom:23 }}>
         <div style={{ fontWeight:900, fontSize:28, letterSpacing:-1.5, color:"var(--text)" }}>
-          <span style={{ color:"var(--yellow)" }}>★</span> POLARIS
+          {document.documentElement.dataset.layout === "desktop" ? <PolarisMarke groesse={32} wortGroesse={24} /> : <><span style={{ color:"var(--yellow)" }}>★</span> POLARIS</>}
         </div>
       </div>
       <div style={{ background:"var(--surface)", borderRadius:20, padding:20,

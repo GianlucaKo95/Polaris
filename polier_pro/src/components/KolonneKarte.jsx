@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { MapPin, HardHat } from "lucide-react";
+import { MapPin, HardHat, ChevronDown, ChevronUp } from "lucide-react";
 import { MitarbeiterZeilen } from "./MitarbeiterZeilen.jsx";
 import { SwipeToDelete } from "./SwipeToDelete.jsx";
 import { sha256Hex } from "../lib/utils.js";
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
 
 export function KolonneKarte({ k, zeitdaten, vonDatum, bisDatum, zeitenGeladen, setKolonnen, darfBearbeiten = true, kannKolonneLoeschen = false }) {
+  const desk = useIstDesktop();
   const [expanded, setExpanded] = useState(false);
   const [neuerName, setNeuerName] = useState("");
   const [neuePin,  setNeuePin]  = useState("");
@@ -104,9 +106,9 @@ export function KolonneKarte({ k, zeitdaten, vonDatum, bisDatum, zeitenGeladen, 
         <div style={{ display:"flex", alignItems:"center", marginTop:10, gap:6 }}>
           <div style={{ display:"flex" }}>
             {mas.slice(0,5).map((ma, i) => (
-              <div key={ma.id} style={{ width:26, height:26, borderRadius:13,
-                background: "var(--border)", border:`2px solid ${'var(--surface)'}`,
-                marginLeft: i > 0 ? -8 : 0,
+              <div key={ma.id} title={ma.name} style={{ width: desk ? 28 : 26, height: desk ? 28 : 26, borderRadius:14,
+                background: desk ? "var(--surface2)" : "var(--border)", border: desk ? "none" : `2px solid ${'var(--surface)'}`,
+                marginLeft: i > 0 ? (desk ? 4 : -8) : 0,
                 display:"flex", alignItems:"center", justifyContent:"center",
                 color: "var(--muted)", fontSize:10, fontWeight:700, zIndex:5-i }}>
                 {ma.name.split(" ").map(n=>n[0]).join("").slice(0,2)}
@@ -115,14 +117,15 @@ export function KolonneKarte({ k, zeitdaten, vonDatum, bisDatum, zeitenGeladen, 
             {mas.length > 5 && (
               <div style={{ width:26, height:26, borderRadius:13,
                 background: "var(--border)", border:`2px solid ${'var(--surface)'}`,
-                marginLeft:-8, display:"flex", alignItems:"center", justifyContent:"center",
+                marginLeft: desk ? 4 : -8, display:"flex", alignItems:"center", justifyContent:"center",
                 color: "var(--muted)", fontSize:9 }}>+{mas.length-5}</div>
             )}
           </div>
-          <button onClick={() => setExpanded(e => !e)}
-            style={{ marginLeft:"auto", background: "var(--border)", border:"none", color: "var(--text)",
-              borderRadius:8, padding:"5px 12px", cursor:"pointer", fontSize:12 }}>
-            {expanded ? "▲ Zuklappen" : "▼ Mitarbeiter"}
+          <button onClick={() => setExpanded(e => !e)} aria-expanded={expanded}
+            style={{ marginLeft:"auto", background: desk ? "none" : "var(--border)", border: desk ? "1px solid var(--border2)" : "none", color: "var(--text)",
+              borderRadius:8, padding: desk ? "0 12px" : "5px 12px", height: desk ? 32 : undefined, cursor:"pointer", fontSize: desk ? 13 : 12,
+              display:"flex", alignItems:"center", gap:6 }}>
+            {desk ? <>{expanded ? <ChevronUp size={16} strokeWidth={1.5} /> : <ChevronDown size={16} strokeWidth={1.5} />}{expanded ? "Zuklappen" : `${mas.length} Mitarbeiter`}</> : expanded ? "▲ Zuklappen" : "▼ Mitarbeiter"}
           </button>
         </div>
       </div>

@@ -6,12 +6,14 @@ import { ROLLEN } from "../config/konstanten.js";
 import { ibanMaskiert } from "../lib/utils.js";
 import { EinladungGenerieren } from "./EinladungGenerieren.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
 
 const AENDERUNGS_FELD_LABEL = {
   strasse: "Straße", plz: "PLZ", ort: "Ort", iban: "IBAN", kontoinhaber: "Kontoinhaber",
 };
 
 export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, projekte = [] }) {
+  const desk = useIstDesktop();
   const [nutzer,      setNutzer]      = useState([]);
   const [einladungen, setEinladungen] = useState([]);
   const [aenderungen, setAenderungen] = useState([]);
@@ -169,8 +171,8 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
   return (
     <div>
       {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between",
-        alignItems:"center", marginBottom:12 }}>
+      <div style={{ display:"flex", justifyContent: desk ? "flex-end" : "space-between",
+        alignItems:"center", marginBottom: desk ? 16 : 12 }}>
         <div className="seiten-kopf" style={{ color:"var(--text)", fontWeight:800, fontSize:16,
           display:"flex", alignItems:"center", gap:8 }}>
           <Users size={17} /> Nutzerverwaltung
@@ -195,18 +197,18 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
 
       {/* Stats */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr",
-        gap:8, marginBottom:12 }}>
+        gap: desk ? 16 : 8, marginBottom: desk ? 24 : 12 }}>
         {[
           ["Aktive Nutzer",    aktiveNutzer.length,       "var(--green)"],
           ["Inaktiv",          inaktiveNutzer.length,     "var(--muted)"],
-          ["Offen. Einl.",     offeneEinl.length,         "var(--yellow)"],
+          [desk ? "Offene Einladungen" : "Offen. Einl.", offeneEinl.length,         "var(--yellow)"],
           ["Änderungen",       offeneAenderungen.length,  offeneAenderungen.length > 0 ? "var(--red)" : "var(--muted)"],
         ].map(([l,v,c]) => (
-          <div key={l} style={{ background:"var(--surface)", borderRadius:12,
+          <div key={l} className="desk-kennzahl" style={{ background:"var(--surface)", borderRadius:12,
             padding:"7px 12px", border:"1.5px solid var(--border)",
             position:"relative", overflow:"hidden" }}>
-            <div style={{ position:"absolute", top:0, left:0, right:0,
-              height:3, background:c }} />
+            {!desk && <div style={{ position:"absolute", top:0, left:0, right:0,
+              height:3, background:c }} />}
             {/* overflowWrap: mehrwortige Labels ("Aktive Nutzer") brechen am
                 Leerzeichen von selbst um, aber ein einzelnes langes Wort ohne
                 Leerzeichen ("Änderungen") hat sonst keine Umbruchstelle und
@@ -219,9 +221,9 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
       </div>
 
       {/* Tab Toggle */}
-      <div style={{ display:"flex", gap:6, marginBottom:10 }}>
+      <div className="filter-reiter" style={{ display:"flex", gap:6, marginBottom:10 }}>
         {[["nutzer",User,"Nutzer"], ["einladungen",Mail,"Einladungen"], ["aenderungen",FileClock,"Änderungen"]].map(([k,Icon,l]) => (
-          <button key={k} onClick={() => setAnsicht(k)}
+          <button key={k} aria-pressed={ansicht===k} onClick={() => setAnsicht(k)}
             style={{ flex:1, position:"relative", background: ansicht===k ? "var(--yellow)" : "var(--surface2)",
               color: ansicht===k ? "#1a1200" : "var(--muted)",
               border:`1.5px solid ${ansicht===k ? "var(--yellow)" : "var(--border)"}`,
@@ -229,7 +231,10 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
               cursor:"pointer", fontSize:13, fontFamily:"inherit",
               display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
             <Icon size={13} /> {l}
-            {k === "aenderungen" && offeneAenderungen.length > 0 && (
+            {k === "aenderungen" && offeneAenderungen.length > 0 && desk && (
+              <span style={{ fontFamily:"var(--font-zahl)", fontSize:12, color:"var(--red)", marginLeft:6 }}>{offeneAenderungen.length}</span>
+            )}
+            {k === "aenderungen" && offeneAenderungen.length > 0 && !desk && (
               <span style={{ position:"absolute", top:-6, right:-6, background:"var(--red)",
                 color:"#fff", borderRadius:20, minWidth:18, height:18, fontSize:10, fontWeight:800,
                 display:"flex", alignItems:"center", justifyContent:"center", padding:"0 4px" }}>
@@ -248,7 +253,7 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
 
       {/* NUTZER LISTE */}
       {!laden && ansicht === "nutzer" && (
-        <div>
+        <div className="listen-gruppe">
           {nutzer.map(n => {
             const rolle = ROLLEN[n.rolle] || ROLLEN.facharbeiter;
             const kolonne = kolonnen.find(k => k.id === n.kolonne_id);
@@ -264,7 +269,12 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
                   alignItems:"flex-start", marginBottom: isEdit ? 12 : 0 }}>
                   <div style={{ display:"flex", gap:10, alignItems:"center" }}>
                     {/* Avatar */}
-                    <div style={{ width:40, height:40, borderRadius:20,
+                    {desk && !n.avatar_url ? (
+                      <div aria-hidden="true" style={{ width:32, height:32, borderRadius:16, background:"var(--surface2)", color:"var(--text2)",
+                        display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:500, flexShrink:0 }}>
+                        {((n.vorname || "")[0] || "") + ((n.nachname || "")[0] || "")}
+                      </div>
+                    ) : <div style={{ width:40, height:40, borderRadius:20,
                       background:`${rolle.farbe}22`,
                       border:`2px solid ${rolle.farbe}`,
                       display:"flex", alignItems:"center", justifyContent:"center",
@@ -273,7 +283,7 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
                         ? <img src={n.avatar_url} style={{ width:36, height:36,
                             borderRadius:18, objectFit:"cover" }} />
                         : rolle.icon}
-                    </div>
+                    </div>}
                     <div>
                       <div style={{ color:"var(--text)", fontWeight:700, fontSize:14 }}>
                         {n.vorname || "—"} {n.nachname || ""}
@@ -284,11 +294,11 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
                       </div>
                       <div style={{ display:"flex", gap:6, marginTop:2,
                         alignItems:"center" }}>
-                        <div style={{ background:`${rolle.farbe}22`,
+                        {desk ? <div style={{ color:"var(--text2)", fontSize:13 }}>{rolle.label}</div> : <div style={{ background:`${rolle.farbe}22`,
                           color:rolle.farbe, borderRadius:20,
                           padding:"1px 8px", fontSize:10, fontWeight:700 }}>
-                          {rolle.icon} {rolle.label}
-                        </div>
+                          {!desk && <>{rolle.icon} </>}{rolle.label}
+                        </div>}
                         {kolonne && (
                           <div style={{ color:"var(--muted)", fontSize:11,
                             display:"flex", alignItems:"center", gap:3 }}>
@@ -310,7 +320,7 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
                       )}
                     </div>
                   </div>
-                  <button onClick={() => setEditNutzer(isEdit ? null : n.id)}
+                  <button className="zeilen-knopf" aria-label={isEdit ? "Schließen" : "Bearbeiten"} title={isEdit ? "Schließen" : "Bearbeiten"} onClick={() => setEditNutzer(isEdit ? null : n.id)}
                     style={{ background:"var(--surface2)", border:"1px solid var(--border)",
                       color:"var(--muted)", borderRadius:8, padding:"4px 10px",
                       cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}>
@@ -332,7 +342,7 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
                           borderRadius:8, padding:"8px 10px", fontSize:13,
                           cursor:"pointer", fontFamily:"inherit" }}>
                         {Object.entries(ROLLEN).map(([k,r]) => (
-                          <option key={k} value={k}>{r.icon} {r.label}</option>
+                          <option key={k} value={k}>{desk ? r.label : `${r.icon} ${r.label}`}</option>
                         ))}
                       </select>
                     </div>
@@ -571,7 +581,7 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
                       <div style={{ background:`${rolle.farbe}22`, color:rolle.farbe,
                         borderRadius:20, padding:"2px 8px", fontSize:11,
                         fontWeight:700 }}>
-                        {rolle.icon} {rolle.label}
+                        {!desk && <>{rolle.icon} </>}{rolle.label}
                       </div>
                     </div>
                     <div style={{ color:"var(--muted)", fontSize:11, marginTop:4,
@@ -625,7 +635,7 @@ export function NutzerVerwaltungView({ session, kolonnen = [], firmaId = null, p
                     border:"1px solid var(--border)" }}>
                     <div style={{ display:"flex", gap:6, alignItems:"center" }}>
                       <div style={{ color:rolle.farbe, fontSize:11,
-                        fontWeight:700 }}>{rolle.icon} {rolle.label}</div>
+                        fontWeight:700 }}>{!desk && <>{rolle.icon} </>}{rolle.label}</div>
                       <div style={{ color:"var(--muted)", fontSize:11 }}>
                         · {e.aktiv === false ? "Widerrufen" : "Abgelaufen"}
                         {e.eingelöst_at ? " · Eingelöst" : ""}

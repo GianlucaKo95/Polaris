@@ -1,4 +1,5 @@
 import { LockKeyhole, LogOut, Mail } from "lucide-react";
+import { PolarisMarke } from "../components/PolarisMarke.jsx";
 
 const SUPPORT_MAIL = "gk@koeven.de";
 
@@ -28,7 +29,7 @@ export function FirmaGesperrtScreen({ onAbmelden, rolle }) {
       paddingBottom:"calc(17px + env(safe-area-inset-bottom))" }}>
       <div style={{ textAlign:"center", marginBottom:23 }}>
         <div style={{ fontWeight:900, fontSize:28, letterSpacing:-1.5, color:"var(--text)" }}>
-          <span style={{ color:"var(--yellow)" }}>★</span> POLARIS
+          {document.documentElement.dataset.layout === "desktop" ? <PolarisMarke groesse={32} wortGroesse={24} /> : <><span style={{ color:"var(--yellow)" }}>★</span> POLARIS</>}
         </div>
       </div>
       <div style={{ background:"var(--surface)", borderRadius:20, padding:24,

@@ -46,7 +46,7 @@ export function AngeboteListeView({ projekte = [], firmenDaten, onOeffnen }) {
         <label style={{ display: "flex", alignItems: "center", gap: 8, height: 36, padding: "0 12px", width: 280, boxSizing: "border-box",
           background: "var(--surface)", border: "1px solid var(--border2)", borderRadius: 8, color: "var(--muted)" }}>
           <Search size={16} strokeWidth={1.5} aria-hidden="true" />
-          <input value={suche} onChange={e => setSuche(e.target.value)} placeholder="Titel, Empfänger, Baustelle" aria-label="Angebote durchsuchen"
+          <input className="ohne-rahmen" value={suche} onChange={e => setSuche(e.target.value)} placeholder="Titel, Empfänger, Baustelle" aria-label="Angebote durchsuchen"
             style={{ border: "none", outline: "none", background: "transparent", font: "inherit", color: "var(--text)", width: "100%" }} />
         </label>
       </div>

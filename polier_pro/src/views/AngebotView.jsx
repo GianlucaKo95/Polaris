@@ -7,9 +7,12 @@ import { useBackButton } from "../hooks/useBackButton.js";
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 import { layoutText } from "../lib/utils.js";
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
+import { Menue } from "../components/Menue.jsx";
 import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen, positionenMitKalkulationVorbereiten } from "../lib/mutterlv.js";
 
 export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, stammpositionen = [], eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen, co2Faktoren = [], oeffneAngebotId = null, onGeoeffnet = null, session }) {
+  const istDesktop = useIstDesktop();
   const [aktAngebot,  setAktAngebot]  = useState(null);
   // Aus der Angebotsliste (Desktop) direkt ein bestimmtes Angebot öffnen
   useEffect(() => {
@@ -159,8 +162,28 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
     />;
   }
 
+  const STATUS_DESK = { entwurf:["Entwurf","var(--muted)"], versendet:["Versendet","var(--blue)"], angenommen:["Angenommen","var(--green)"], abgelehnt:["Abgelehnt","var(--red)"] };
+  const FREIGABE_DESK = { angefragt:["Freigabe angefragt","var(--akzent)"], freigegeben:["Intern freigegeben","var(--green)"], zurueckgewiesen:["Zurückgewiesen","var(--red)"] };
+
   return (
     <div>
+      {istDesktop && (
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:16, marginBottom:16 }}>
+          <h2 style={{ margin:0, fontSize:16, lineHeight:"24px", fontWeight:500 }}>Angebote und Nachträge</h2>
+          <div style={{ display:"flex", gap:8 }}>
+            <Menue label={generiertLaedt ? "Liest Ausschreibung" : "Aus Ausschreibung"} icon={Upload} eintraege={[
+              { label:"GAEB 90", hinweis:"D81, D83", aktion: () => ausschreibungStructRef.current?.click(), disabled: generiertLaedt },
+              { label:"GAEB-XML", hinweis:"X83", aktion: () => ausschreibungXmlRef.current?.click(), disabled: generiertLaedt },
+            ]} />
+            <button onClick={neuesAngebot}
+              style={{ height:36, padding:"0 12px", borderRadius:8, border:"none", background:"var(--text)", color:"var(--surface)",
+                fontFamily:"inherit", fontSize:14, fontWeight:500, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
+              <Plus size={16} strokeWidth={1.5} /> Angebot
+            </button>
+          </div>
+        </div>
+      )}
+      {!istDesktop && <>
       <div style={{ display:"flex", justifyContent:"space-between",
         alignItems:"center", marginBottom:10 }}>
         <div style={{ color:"var(--text)", fontWeight:700, fontSize:15,
@@ -195,6 +218,7 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
           <Upload size={12} /> Aus Ausschreibung (X83)
         </button>
       </div>
+      </>}
       <input ref={ausschreibungStructRef} type="file" onChange={ausschreibungStrukturImportieren}
         accept=".d81,.d83,.d85,.d86,.D81,.D83,.D85,.D86,.p81,.p83,.p85,.p86" style={{ display:"none" }} />
       <input ref={ausschreibungXmlRef} type="file" onChange={ausschreibungXmlImportieren}
@@ -229,7 +253,54 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
         </div>
       )}
 
-      {angebote.map(a => {
+      {istDesktop && angebote.length > 0 && (
+        <div className="listen-gruppe">
+          <div aria-hidden="true" style={{ display:"grid", gridTemplateColumns: ANGEBOT_SPALTEN, gap:16, fontSize:13, color:"var(--text2)" }}>
+            <span>Angebot</span><span>Empfänger</span><span>Datum</span><span style={{ textAlign:"right" }}>Positionen</span><span>Status</span><span style={{ textAlign:"right" }}>Brutto</span>
+          </div>
+          {angebote.map(a => {
+            const netto = nettoSumme(a.positionen);
+            const gesamt = netto * (1 - (a.rabatt||0)/100) * (1 + (a.mwst||19)/100);
+            const [sLabel, sFarbe] = STATUS_DESK[a.status] || [a.status, "var(--muted)"];
+            const freigabe = FREIGABE_DESK[a.interne_freigabe?.status];
+            const u = a.status === "angenommen" && !a.nachtrag_zu ? nachtragUebersicht(a, angebote) : null;
+            return (
+              <div key={a.id} onClick={() => setAktAngebot(a)} role="button" tabIndex={0} onKeyDown={e => { if (e.key === "Enter") setAktAngebot(a); }}
+                style={{ display:"grid", gridTemplateColumns: ANGEBOT_SPALTEN, gap:16, alignItems:"center", cursor:"pointer" }}>
+                <span style={{ minWidth:0 }}>
+                  <span style={{ display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.titel}</span>
+                  <span style={{ display:"block", fontSize:13, color:"var(--muted)" }}>
+                    {[a.nachtrag_zu ? `Nachtrag · ${STATUS_LABEL[nachtragStatus(a)]}` : null,
+                      a.gueltig_bis ? `gültig bis ${new Date(a.gueltig_bis).toLocaleDateString("de-DE")}` : null,
+                      u?.anzahl ? `${u.anzahl} Nachträge, ${Math.round(u.beauftragt).toLocaleString("de-DE")} € beauftragt` : null,
+                      a.entschieden_am ? `online ${a.status === "angenommen" ? "angenommen" : "abgelehnt"} am ${new Date(a.entschieden_am).toLocaleDateString("de-DE")}` : null,
+                    ].filter(Boolean).join(" · ")}
+                    {a.status === "angenommen" && !a.nachtrag_zu && (
+                      <button onClick={e => { e.stopPropagation(); nachtragAnlegen(a); }}
+                        style={{ all:"unset", cursor:"pointer", color:"var(--text)", textDecoration:"underline", textUnderlineOffset:3, marginLeft:8 }}>
+                        Nachtrag anlegen
+                      </button>
+                    )}
+                  </span>
+                </span>
+                <span style={{ color:"var(--text2)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.empfaenger || "–"}</span>
+                <span className="num" style={{ fontFamily:"var(--font-zahl)", fontSize:13, color:"var(--text2)" }}>{new Date(a.datum).toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" })}</span>
+                <span className="num" style={{ fontFamily:"var(--font-zahl)", fontSize:13, color:"var(--text2)", textAlign:"right" }}>{a.positionen.length}</span>
+                <span style={{ fontSize:13, color:"var(--text2)" }}>
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}>
+                    <span aria-hidden="true" style={{ width:6, height:6, borderRadius:3, background:sFarbe }} />{sLabel}
+                  </span>
+                  {freigabe && <span style={{ display:"block", fontSize:12, color:freigabe[1] }}>{freigabe[0]}</span>}
+                </span>
+                <span className="num" style={{ fontFamily:"var(--font-zahl)", textAlign:"right" }}>
+                  {gesamt.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {!istDesktop && angebote.map(a => {
         const netto   = nettoSumme(a.positionen);
         const gesamt  = netto * (1 - (a.rabatt||0)/100) * (1 + (a.mwst||19)/100);
         const STATUS  = {
@@ -316,3 +387,6 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
     </div>
   );
 }
+
+// Desktop-Tabelle: Angebot · Empfänger · Datum · Positionen · Status · Brutto
+const ANGEBOT_SPALTEN = "minmax(0, 1fr) 200px 96px 88px 152px 128px";

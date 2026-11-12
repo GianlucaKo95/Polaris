@@ -140,8 +140,32 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
 
   return (
     <div>
-      {/* Übersicht */}
-      <div style={{ background:"var(--surface)", borderRadius:16, padding:13,
+      {/* Übersicht — Desktop: vier Kennzahlen und eine ruhige Auslastungslinie */}
+      {istDesktop && (
+        <div style={{ marginBottom:24 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:16 }}>
+            {[
+              ["Budget gesamt", euro(budgetGesamt), null],
+              ["Ist bisher", euro(istGesamt), `${stundenGesamt.toLocaleString("de-DE", { minimumFractionDigits:1, maximumFractionDigits:1 })} h × ${stundensatz} €/h`],
+              ["Rest-Budget", euro(restBudget), restBudget < 0 ? "über Budget" : null],
+              ["Auslastung", `${auslastung} %`, budgetGesamt > 0 ? null : "noch kein Budget"],
+            ].map(([l, v, u], i) => (
+              <div key={l} style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 20px" }}>
+                <div style={{ fontSize:13, color:"var(--text2)" }}>{l}</div>
+                <div className="num" style={{ fontFamily:"var(--font-zahl)", fontSize:24, lineHeight:"32px", marginTop:8,
+                  color: (i === 2 && restBudget < 0) || (i === 3 && auslastung > 90) ? "var(--red)" : "var(--text)" }}>{v}</div>
+                <div style={{ fontSize:13, color: i === 2 && restBudget < 0 ? "var(--red)" : "var(--muted)", marginTop:4, minHeight:20 }}>{u}</div>
+              </div>
+            ))}
+          </div>
+          {budgetGesamt > 0 && (
+            <div aria-hidden="true" style={{ height:4, borderRadius:2, background:"var(--surface2)", marginTop:16, overflow:"hidden" }}>
+              <div style={{ height:"100%", width:`${Math.min(100, auslastung)}%`, background: auslastung > 90 ? "var(--red)" : "var(--akzent)" }} />
+            </div>
+          )}
+        </div>
+      )}
+      {!istDesktop && <div style={{ background:"var(--surface)", borderRadius:16, padding:13,
         marginBottom:12, border:"1.5px solid var(--border)" }}>
         <div style={{ color:"var(--text)", fontWeight:700, fontSize:15,
           marginBottom:10, display:"flex", alignItems:"center", gap:7 }}><Euro size={16} /> Kostenübersicht</div>
@@ -181,7 +205,7 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
               width:`${auslastung}%`, transition:"width 0.5s" }} />
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Kalkulationsübersicht (Soll) — nur anzeigen, wenn es überhaupt
           kalkulierte Positionen gibt, sonst unnötige Leerkarte für Nutzer,
@@ -254,8 +278,8 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
         </div>
       )}
 
-      {/* Stundensatz */}
-      <div style={{ background:"var(--surface)", borderRadius:12, padding:10,
+      {/* Stundensatz (Desktop: im Kopf der Budget-Tabelle) */}
+      {!istDesktop && <div style={{ background:"var(--surface)", borderRadius:12, padding:10,
         marginBottom:10, border:"1.5px solid var(--border)" }}>
         <Label>Stundensatz (€/h)</Label>
         <input type="number" value={stundensatz}
@@ -264,7 +288,7 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
         <div style={{ color:"var(--muted)", fontSize:11, marginTop:4 }}>
           Basis für Ist-Kostenberechnung aus GPS-Zeiterfassung
         </div>
-      </div>
+      </div>}
 
       {/* Vorschlag: Budget aus angenommenem Angebot übernehmen */}
       {angenommeneAngebote.length > 0 && (
@@ -299,7 +323,59 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
         </div>
       )}
 
-      {/* Budget-Positionen */}
+      {/* Budget-Positionen — Desktop: Tabelle mit Feldern, die erst beim Zeigen als Feld erscheinen */}
+      {istDesktop && (
+        <div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, marginBottom:12 }}>
+            <h2 style={{ margin:0, fontSize:16, lineHeight:"24px", fontWeight:500 }}>Budget-Positionen</h2>
+            <label style={{ display:"flex", alignItems:"center", gap:8, color:"var(--text2)" }} title="Basis für die Ist-Kosten aus der Zeiterfassung">
+              Stundensatz
+              <input type="number" className="desk-feld" value={stundensatz} onChange={e => setStundensatz(Number(e.target.value))}
+                style={{ width:72, textAlign:"right", fontFamily:"var(--font-zahl)", border:"1px solid var(--border2)" }} />
+              €/h
+            </label>
+          </div>
+          <div className="listen-gruppe lv-tabelle">
+            <div aria-hidden="true" style={{ display:"grid", gridTemplateColumns: KOSTEN_SPALTEN, gap:16, fontSize:13, color:"var(--text2)" }}>
+              <span>Position</span><span style={{ textAlign:"right" }}>Menge</span><span>Einheit</span><span style={{ textAlign:"right" }}>Preis je Einheit</span><span style={{ textAlign:"right" }}>Budget</span>
+            </div>
+            {budgetPos.map((pos, i) => {
+              const istGeld = pos.einheit === "€";
+              const zahl = { textAlign:"right", fontFamily:"var(--font-zahl)", width:"100%" };
+              return (
+                <div key={pos.id} style={{ display:"grid", gridTemplateColumns: KOSTEN_SPALTEN, gap:16, alignItems:"center" }}>
+                  <span>{pos.bezeichnung}</span>
+                  {istGeld ? <span /> : (
+                    <input type="number" className="desk-feld" aria-label={`Menge ${pos.bezeichnung}`} value={pos.menge || ""} placeholder="0"
+                      onChange={e => positionAendern(i, "menge", Number(e.target.value))} style={zahl} />
+                  )}
+                  <span style={{ color:"var(--text2)" }}>{istGeld ? "pauschal" : pos.einheit}</span>
+                  {istGeld ? (
+                    <input type="number" className="desk-feld" aria-label={`Betrag ${pos.bezeichnung}`} value={pos.budget || ""} placeholder="0"
+                      onChange={e => positionAendern(i, "budget", Number(e.target.value))} style={zahl} />
+                  ) : (
+                    <input type="number" className="desk-feld" aria-label={`Preis je ${pos.einheit} ${pos.bezeichnung}`} value={pos.einheitspreis || ""} placeholder="0"
+                      onChange={e => positionAendern(i, "einheitspreis", Number(e.target.value))} style={zahl} />
+                  )}
+                  <span className="num" style={{ textAlign:"right", fontFamily:"var(--font-zahl)" }}>{euro(pos.budget || 0)}</span>
+                </div>
+              );
+            })}
+            <div style={{ display:"grid", gridTemplateColumns: KOSTEN_SPALTEN, gap:16, alignItems:"center" }}>
+              <span style={{ fontWeight:500 }}>Summe</span><span /><span /><span />
+              <span className="num" style={{ textAlign:"right", fontFamily:"var(--font-zahl)", fontWeight:500 }}>{euro(budgetGesamt)}</span>
+            </div>
+          </div>
+          <div style={{ display:"flex", justifyContent:"flex-end", marginTop:16 }}>
+            <button onClick={jetztSpeichern} disabled={speichern}
+              style={{ height:40, padding:"0 16px", borderRadius:8, border:"none", background:"var(--text)", color:"var(--surface)",
+                fontFamily:"inherit", fontSize:14, fontWeight:500, cursor: speichern ? "default" : "pointer", display:"flex", alignItems:"center", gap:8 }}>
+              {gespeichertOk ? <><Check size={16} strokeWidth={1.5} /> Gespeichert</> : speichern ? <><Spinner size={14} /> Speichert</> : "Budget speichern"}
+            </button>
+          </div>
+        </div>
+      )}
+      {!istDesktop && <>
       <div style={{ color:"var(--text)", fontWeight:700, fontSize:14,
         marginBottom:7 }}>Budget-Positionen</div>
       {budgetPos.map((pos,i) => {
@@ -363,6 +439,10 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
           display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
         {gespeichertOk ? <><Check size={16} /> Gespeichert</> : speichern ? <><Spinner size={14} /> Speichert…</> : "Speichern"}
       </button>
+      </>}
     </div>
   );
 }
+
+// Desktop-Budgettabelle: Position · Menge · Einheit · Preis je Einheit · Budget
+const KOSTEN_SPALTEN = "minmax(0, 1fr) 120px 96px 144px 144px";

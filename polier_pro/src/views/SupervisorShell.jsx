@@ -1,5 +1,6 @@
 import { LogOut, Crown } from "lucide-react";
 import { SupervisorView } from "./SupervisorView.jsx";
+import { PolarisMarke } from "../components/PolarisMarke.jsx";
 
 // Komplett eigenständige Ansicht für profile.ist_supervisor = true — siehe
 // App.jsx, wo dieser Shell VOR jeder firma-/projekt-bezogenen Logik
@@ -18,7 +19,7 @@ export function SupervisorShell({ session, onAbmelden }) {
           <div style={{ display:"flex", alignItems:"center", gap:9 }}>
             <div style={{ fontWeight:800, fontSize:18, letterSpacing:-0.6,
               color:"#fff", lineHeight:1 }}>
-              <span style={{ color:"var(--yellow)" }}>★</span> POLARIS
+              {document.documentElement.dataset.layout === "desktop" ? <PolarisMarke groesse={32} wortGroesse={24} /> : <><span style={{ color:"var(--yellow)" }}>★</span> POLARIS</>}
             </div>
             <div style={{ background:"rgba(255,255,255,.1)", color:"var(--yellow)",
               borderRadius:20, padding:"2px 9px", fontSize:11, fontWeight:700,

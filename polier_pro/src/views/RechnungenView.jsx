@@ -452,7 +452,7 @@ export function RechnungenView({ projekt, angebote, baufortschritt, rechnungen, 
       {datevMeldung && <div style={{ fontSize:12, marginBottom:10, color: datevMeldung.startsWith("✓") ? "var(--green)" : "var(--ydark)" }}>{datevMeldung}</div>}
 
       {auftraege.length === 0 && (
-        <div style={{ textAlign:"center", padding:"35px 20px", color:"var(--muted)" }}>
+        <div className="desk-leer" style={{ textAlign:"center", padding:"35px 20px", color:"var(--muted)" }}>
           <div style={{ display:"flex", justifyContent:"center", marginBottom:9, color:"var(--muted)" }}><FileText size={40} /></div>
           <div style={{ fontWeight:700, color:"var(--text)", marginBottom:6 }}>
             Noch keine Aufträge

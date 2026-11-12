@@ -134,6 +134,11 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
   const risikoHeute = heuteStunden ? naechstesRisiko(heuteStunden) : null;
   const empfehlung = stundenDaten ? besteZeitfenster(stundenDaten) : null;
 
+  if (loading && document.documentElement.dataset.layout === "desktop") return (
+    <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 20px", marginBottom:16, color:"var(--text2)", minHeight:96, boxSizing:"border-box" }}>
+      Wetter · lädt
+    </div>
+  );
   if (loading) return (
     <div style={{ background: "var(--surface)", borderRadius: 12, padding:14, textAlign:"center", color: "var(--muted)" }}>
       Wetterdaten werden geladen…
@@ -150,6 +155,53 @@ export function WeatherView({ compact = false, ort = null, plz = null, projektId
     <div style={{ background: "var(--surface)", borderRadius: 12, padding:14, textAlign:"center", color: "var(--red)",
       display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
       <CircleX size={15} /> Wetterdaten nicht verfügbar
+    </div>
+  );
+
+  // Desktop: eine ruhige Tafel – links Ort, jetzt und Betonage-Lage, rechts
+  // die Woche als Spalten; Risikotage tragen einen roten Punkt statt Rahmen.
+  if (compact && document.documentElement.dataset.layout === "desktop") return (
+    <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 20px", marginBottom:16,
+      display:"grid", gridTemplateColumns:"minmax(240px, 1fr) auto", gap:24, alignItems:"start" }}>
+      <div>
+        <div style={{ fontSize:13, color:"var(--text2)" }}>Wetter · {loc.name}</div>
+        <div style={{ display:"flex", alignItems:"baseline", gap:12, marginTop:4 }}>
+          <span style={{ fontSize:28, lineHeight:"36px", fontWeight:500, fontFamily:"var(--font-zahl)" }}>{weather.temp}°</span>
+          <span style={{ fontSize:13, color:"var(--text2)", display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ display:"inline-flex", alignItems:"center", gap:4 }}><Wind size={14} strokeWidth={1.5} /> {weather.wind} km/h</span>
+            <span style={{ display:"inline-flex", alignItems:"center", gap:4 }}><Droplet size={14} strokeWidth={1.5} /> {weather.humidity} %</span>
+            <span style={{ display:"inline-flex", alignItems:"center", gap:4 }}><CloudRain size={14} strokeWidth={1.5} /> {weather.rain} mm</span>
+          </span>
+        </div>
+        {hatOffeneBetonage && (
+          <div style={{ marginTop:12, display:"flex", alignItems:"center", gap:8, color: ok ? "var(--green)" : "var(--akzent)" }}>
+            <span aria-hidden="true" style={{ width:8, height:8, borderRadius:4, background:"currentColor" }} />
+            {ok ? "Betonage heute möglich" : "Betonage heute prüfen"}
+          </div>
+        )}
+        {hatOffeneBetonage && warn.length > 0 && (
+          <div style={{ marginTop:4, fontSize:13, color:"var(--text2)" }}>
+            {warn.join(" · ")}
+            {risikoHeute && <> · ab {risikoHeute.stunde}:00 Uhr {risikoHeute.gruende.join(", ")}</>}
+          </div>
+        )}
+      </div>
+      <div role="list" aria-label="Vorhersage" style={{ display:"flex", gap:4 }}>
+        {weather.forecast.map((f,i) => {
+          const risiko = tagesRisiko(f).length > 0;
+          return (
+            <div role="listitem" key={i} title={risiko ? tagesRisiko(f).join(", ") : undefined}
+              style={{ width:56, padding:"8px 0", borderRadius:8, textAlign:"center", background: i === 0 ? "var(--surface2)" : "transparent" }}>
+              <div style={{ fontSize:12, color:"var(--text2)", display:"flex", alignItems:"center", justifyContent:"center", gap:4 }}>
+                {f.day}{risiko && <span aria-label="Risiko" style={{ width:6, height:6, borderRadius:3, background:"var(--red)" }} />}
+              </div>
+              <div style={{ fontFamily:"var(--font-zahl)", fontSize:14, marginTop:4 }}>{f.max}°</div>
+              <div style={{ fontFamily:"var(--font-zahl)", fontSize:12, color:"var(--muted)" }}>{f.min}°</div>
+              <div style={{ fontFamily:"var(--font-zahl)", fontSize:12, color: f.rain > 0 ? "var(--blue)" : "var(--muted)", marginTop:4 }}>{f.rain > 0 ? `${f.rain} mm` : "–"}</div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 

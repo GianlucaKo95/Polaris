@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PolarisMarke } from "./PolarisMarke.jsx";
+import { emojiAusTextknoten } from "../lib/utils.js";
 import { LogOut, Moon, Sun, Search, User, Palmtree } from "lucide-react";
 
 // Desktop-Rahmen (ab 1024 px): Seitenleiste nach Arbeitsbereichen, Kopf mit
@@ -11,6 +12,29 @@ export function DesktopShell({
   firmenName, nutzerName, rolleLabel, onProfil, onAbwesenheit, dark, onThemeWechsel, onAbmelden, verbunden, children,
 }) {
   const [suche, setSuche] = useState(false);
+
+  // Die älteren Ansichten setzen Emojis als Symbole (🔴 Status, 🏗️ Gewerk,
+  // 👷 Rolle). Im Desktop-Rahmen tragen Wort und Farbe die Bedeutung: Emojis
+  // aus allen Textknoten entfernen (auch Dialoge, die per Portal am <body>
+  // hängen), auch nach jedem Neuzeichnen. Der Rahmen gibt es nur auf dem Desktop.
+  useEffect(() => {
+    const wurzel = document.body;
+    const knoten = n => {
+      if (n.nodeType === 3) { const neu = emojiAusTextknoten(n.nodeValue); if (neu !== n.nodeValue) n.nodeValue = neu; return; }
+      if (n.nodeType !== 1 || n.isContentEditable) return;
+      const w = document.createTreeWalker(n, NodeFilter.SHOW_TEXT);
+      for (let t = w.nextNode(); t; t = w.nextNode()) { const neu = emojiAusTextknoten(t.nodeValue); if (neu !== t.nodeValue) t.nodeValue = neu; }
+    };
+    knoten(wurzel);
+    const beobachter = new MutationObserver(liste => {
+      for (const m of liste) {
+        if (m.type === "characterData") knoten(m.target);
+        else m.addedNodes.forEach(knoten);
+      }
+    });
+    beobachter.observe(wurzel, { subtree: true, childList: true, characterData: true });
+    return () => beobachter.disconnect();
+  }, []);
 
   useEffect(() => {
     const taste = e => {

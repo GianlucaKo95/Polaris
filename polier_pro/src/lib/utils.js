@@ -83,6 +83,13 @@ const EMOJI = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}]️?(‍[\p{Extende
 export function ohneEmoji(text) {
   return String(text ?? "").replace(EMOJI, "").replace(/\s{2,}/g, " ").trim();
 }
+// Für Textknoten im Desktop-Rahmen (DesktopShell): Emoji samt folgendem
+// Leerzeichen entfernen, sonst nichts – kein trim, damit Abstände zu
+// benachbarten Elementen bleiben.
+const EMOJI_KNOTEN = new RegExp(EMOJI.source + " ?", "gu");
+export function emojiAusTextknoten(text) {
+  return String(text ?? "").replace(EMOJI_KNOTEN, "");
+}
 // Anzeigetext je Layout: auf dem Desktop ohne Emojis, auf dem Handy unverändert.
 export function layoutText(text) {
   return typeof document !== "undefined" && document.documentElement.dataset.layout === "desktop" ? ohneEmoji(text) : text;

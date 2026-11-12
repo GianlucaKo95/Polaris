@@ -65,7 +65,7 @@ export function LeistungView({ projekt, angebote = [], baufortschritt = [], zeit
   }
 
   if (auftraege.length === 0) {
-    return <div style={{ color:"var(--muted)", textAlign:"center", padding:30, fontSize:13 }}>
+    return <div className="desk-leer" style={{ color:"var(--muted)", textAlign:"center", padding:30, fontSize:13 }}>
       Noch kein angenommenes Angebot auf dieser Baustelle — Soll-Ist braucht einen Auftrag.
     </div>;
   }

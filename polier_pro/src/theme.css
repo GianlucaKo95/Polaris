@@ -259,13 +259,13 @@ input, textarea, select {
 :root[data-layout="desktop"] .desk-inhalt [style*="font-size: 11px"],
 :root[data-layout="desktop"] .desk-inhalt [style*="font-size: 11.5px"] { font-size: 12px !important; }
 :root[data-layout="desktop"] .desk-inhalt .feld-label { font-size: 13px !important; font-weight: 400 !important; color: var(--text2) !important; margin-bottom: 4px !important; }
-:root[data-layout="desktop"] .desk-inhalt input:not(.desk-feld):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([style*="border: none"]),
+:root[data-layout="desktop"] .desk-inhalt input:not(.desk-feld):not(.ohne-rahmen):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([style*="border: none"]),
 :root[data-layout="desktop"] .desk-inhalt select:not(.desk-feld):not([style*="border: none"]),
 :root[data-layout="desktop"] .desk-inhalt textarea:not(.desk-feld):not([style*="border: none"]) {
   box-sizing: border-box; min-height: 36px; padding: 7px 10px !important; font-size: 14px !important; line-height: 20px;
   border: 1px solid var(--border2) !important; border-radius: 8px !important; background-color: var(--surface);
   transition: border-color 120ms ease-out; }
-:root[data-layout="desktop"] .desk-inhalt input:not(.desk-feld):focus,
+:root[data-layout="desktop"] .desk-inhalt input:not(.desk-feld):not(.ohne-rahmen):focus,
 :root[data-layout="desktop"] .desk-inhalt select:not(.desk-feld):focus,
 :root[data-layout="desktop"] .desk-inhalt textarea:not(.desk-feld):focus { outline: none; border-color: var(--akzent) !important; }
 :root[data-layout="desktop"] .desk-inhalt input[type="checkbox"], :root[data-layout="desktop"] .desk-inhalt input[type="radio"] { accent-color: var(--text); }
@@ -289,3 +289,44 @@ input, textarea, select {
 .anmelde-feld { transition: border-color 120ms ease-out; }
 .anmelde-feld:hover { border-color: var(--muted) !important; }
 .anmelde-feld:focus { border-color: var(--akzent) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--akzent) 15%, transparent); }
+
+/* ── Desktop-Feinschliff 1.70 ────────────────────────────────────────────
+   Klassen, die die Handy-Ansicht nicht verändern (Regeln nur im Desktop-Inhalt). */
+/* Liste aus einzelnen Handy-Karten → eine Tafel mit Zeilen und Haarlinien */
+:root[data-layout="desktop"] .desk-inhalt .listen-gruppe { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+:root[data-layout="desktop"] .desk-inhalt .listen-gruppe > * { background: none !important; border: none !important; border-radius: 0 !important; margin: 0 !important; box-shadow: none !important; padding: 12px 16px !important; }
+:root[data-layout="desktop"] .desk-inhalt .listen-gruppe > * + * { border-top: 1px solid var(--border) !important; }
+:root[data-layout="desktop"] .desk-inhalt .listen-gruppe > [style*="cursor: pointer"] { transition: background-color 120ms ease-out; }
+:root[data-layout="desktop"] .desk-inhalt .listen-gruppe > [style*="cursor: pointer"]:hover { background: var(--bg) !important; }
+/* Kleine Bearbeiten-/Löschen-Knöpfe in Zeilen: leise Symbolknöpfe */
+:root[data-layout="desktop"] .desk-inhalt .zeilen-knopf { width: 32px; height: 32px; padding: 0 !important; display: inline-flex !important; align-items: center; justify-content: center;
+  background: none !important; border: none !important; border-radius: 8px !important; color: var(--muted) !important; transition: background-color 120ms ease-out, color 120ms ease-out; }
+:root[data-layout="desktop"] .desk-inhalt .zeilen-knopf:hover { background: var(--surface2) !important; color: var(--text) !important; }
+:root[data-layout="desktop"] .desk-inhalt .zeilen-knopf.loeschen:hover { color: var(--red) !important; }
+:root[data-layout="desktop"] .desk-inhalt .zeilen-knopf svg { width: 16px; height: 16px; stroke-width: 1.5; }
+/* Unterreiter: auch Gitter-Varianten als Reihe, ohne Symbole */
+:root[data-layout="desktop"] .desk-inhalt .unter-reiter { display: flex !important; flex-wrap: wrap; }
+:root[data-layout="desktop"] .desk-inhalt .unter-reiter > button { flex: none !important; }
+:root[data-layout="desktop"] .desk-inhalt .unter-reiter > button svg { display: none; }
+/* Umschalter innerhalb einer Seite (Nutzer/Einladungen, Liste/Kanban): leise Segmente wie „Laufend · Archiv“ */
+:root[data-layout="desktop"] .desk-inhalt .filter-reiter { display: inline-flex !important; gap: 4px !important; width: auto !important; margin-bottom: 16px !important; }
+:root[data-layout="desktop"] .desk-inhalt .filter-reiter > button { flex: none !important; height: 32px; padding: 0 12px !important; border: none !important; border-radius: 8px !important;
+  background: transparent !important; color: var(--text2) !important; font-size: 14px !important; font-weight: 400 !important; box-shadow: none !important; }
+:root[data-layout="desktop"] .desk-inhalt .filter-reiter > button[aria-pressed="true"] { background: var(--surface2) !important; color: var(--text) !important; font-weight: 500 !important; }
+:root[data-layout="desktop"] .desk-inhalt .filter-reiter > button svg { display: none; }
+/* Buttons über die ganze Breite (Handy): auf dem Desktop so breit wie ihr Text */
+:root[data-layout="desktop"] .desk-inhalt .desk-knopf-auto { display: inline-flex !important; width: auto !important; height: 40px; padding: 0 16px !important; font-size: 14px !important; border-radius: 8px !important; }
+:root[data-layout="desktop"] .desk-inhalt .desk-rechts { display: flex !important; justify-content: flex-end; }
+:root[data-layout="desktop"] .desk-inhalt .desk-abstand { margin-bottom: 24px !important; }
+:root[data-layout="desktop"] .desk-inhalt .desk-ohne-rand { padding: 0 !important; }
+/* Leere Zustände: eine ruhige Tafel, linksbündig */
+:root[data-layout="desktop"] .desk-inhalt .desk-leer { text-align: left !important; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px 20px !important; color: var(--text2) !important; font-size: 14px !important; }
+:root[data-layout="desktop"] .desk-inhalt .desk-leer > svg:first-child, :root[data-layout="desktop"] .desk-inhalt .desk-leer > div:first-child > svg { display: none; }
+/* Kennzahl-Kacheln älterer Ansichten wie im Cockpit: Bezeichnung, große Zahl */
+:root[data-layout="desktop"] .desk-inhalt .desk-kennzahl { padding: 16px 20px !important; border: 1px solid var(--border) !important; border-radius: 12px !important; }
+:root[data-layout="desktop"] .desk-inhalt .desk-kennzahl > div:nth-last-child(2) { font-size: 13px !important; color: var(--text2) !important; font-weight: 400 !important; margin-bottom: 8px !important; }
+:root[data-layout="desktop"] .desk-inhalt .desk-kennzahl > div:last-child { font-size: 24px !important; line-height: 32px; font-weight: 400 !important; font-family: var(--font-zahl); }
+:root[data-layout="desktop"] .desk-inhalt .desk-leer > div:first-child:has(> svg:only-child) { display: none !important; }
+:root[data-layout="desktop"] .desk-inhalt .desk-leer > div { margin-top: 0 !important; }
+/* Gestrichelte graue Gruppen (Zuschläge, Mutter-LV, Lohn & Geräte): ruhige Tafel */
+:root[data-layout="desktop"] .desk-inhalt div[style*="dashed var(--border)"] { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: 12px !important; padding: 16px 20px !important; }

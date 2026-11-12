@@ -3,6 +3,7 @@ import { CircleX, ArrowRight, CircleCheckBig, PartyPopper, AtSign } from "lucide
 import { supabase, sbClientMitToken, sbSignIn, sbEinladungBenutzernameRegistrieren } from "../lib/supabase.js";
 import { ROLLEN } from "../config/konstanten.js";
 import { Label, inputStyle } from "../components/Label.jsx";
+import { PolarisMarke } from "../components/PolarisMarke.jsx";
 
 export function EinladungScreen({ token, onErfolg }) {
   const [einladung,    setEinladung]    = useState(null);
@@ -162,7 +163,7 @@ export function EinladungScreen({ token, onErfolg }) {
 
       <div style={{ fontWeight:900, fontSize:24, letterSpacing:-1,
         color:"var(--text)", marginBottom:17, textAlign:"center" }}>
-        <span style={{ color:"var(--yellow)" }}>★</span> POLARIS
+        {document.documentElement.dataset.layout === "desktop" ? <PolarisMarke groesse={32} wortGroesse={24} /> : <><span style={{ color:"var(--yellow)" }}>★</span> POLARIS</>}
       </div>
 
       <div style={{ background:"var(--surface)", borderRadius:20, padding:20,

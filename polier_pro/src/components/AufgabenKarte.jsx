@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, CalendarX, User, Ruler, Camera, TriangleAlert } from "lucide-react";
+import { Calendar, CalendarX, User, Ruler, Camera, TriangleAlert, Check, X } from "lucide-react";
 import { AUFGABEN_TYPEN, AUFGABEN_STATUS, AUFGABEN_PRIO } from "../config/konstanten.js";
 import { SwipeToDelete } from "./SwipeToDelete.jsx";
 import { MangelBehebenDialog } from "./MangelBehebenDialog.jsx";
@@ -38,6 +38,68 @@ export function AufgabenKarte({ aufgabe, onClick, kolonnen, onDelete, onToggleEr
     : istVorschlagenFlow
       ? (aufgabe.ist_mangel ? () => setZeigeMangelDialog(true) : () => onVorschlagen(aufgabe))
       : undefined;
+
+  // Desktop: eine Tabellenzeile (siehe AufgabenTabellenKopf) statt Karte
+  if (typeof document !== "undefined" && document.documentElement.dataset.layout === "desktop") {
+    const statusFarbe = { offen:"var(--muted)", in_arbeit:"var(--akzent)", zur_pruefung:"var(--blue)", abgeschlossen:"var(--green)", blockiert:"var(--red)" }[aufgabe.status] || "var(--muted)";
+    const marke = (text, farbe) => <span style={{ fontSize:12, color:farbe, whiteSpace:"nowrap" }}>{text}</span>;
+    return (
+      <>
+      <div onClick={onClick} role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined}
+        onKeyDown={onClick ? e => { if (e.key === "Enter") onClick(); } : undefined}
+        style={{ display:"grid", gridTemplateColumns: AUFGABEN_SPALTEN, gap:16, alignItems:"center", cursor: onClick ? "pointer" : "default", minHeight:24 }}>
+        {wartetAufBestaetigung && onEntscheiden ? (
+          <span onClick={e => e.stopPropagation()} style={{ display:"flex", gap:2, marginLeft:-6 }}>
+            <button className="zeilen-knopf" onClick={() => onEntscheiden(aufgabe, true)} title="Bestätigen" aria-label="Bestätigen"
+              style={{ color:"var(--green)" }}><Check size={16} strokeWidth={1.5} /></button>
+            <button className="zeilen-knopf loeschen" onClick={() => onEntscheiden(aufgabe, false)} title="Ablehnen, zurück auf Offen" aria-label="Ablehnen"><X size={16} strokeWidth={1.5} /></button>
+          </span>
+        ) : (
+          <span onClick={checkboxKlick ? e => { e.stopPropagation(); checkboxKlick(); } : undefined}
+            role={checkboxKlick ? "checkbox" : undefined} aria-checked={checkboxKlick ? erledigt : undefined}
+            title={istVorschlagenFlow ? "Als erledigt vorschlagen" : erledigt ? "Wieder öffnen" : "Erledigt"}
+            style={{ width:16, height:16, borderRadius:4, boxSizing:"border-box", cursor: checkboxKlick ? "pointer" : "default",
+              border:`1px solid ${erledigt ? "var(--text2)" : "var(--border2)"}`, background: erledigt ? "var(--text2)" : "var(--surface)",
+              color:"var(--surface)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            {erledigt && <Check size={12} strokeWidth={2} />}
+          </span>
+        )}
+        <span style={{ minWidth:0 }}>
+          <span style={{ display:"flex", alignItems:"baseline", gap:8, minWidth:0 }}>
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color: erledigt ? "var(--muted)" : "var(--text)" }}>
+              {aufgabe.titel || "Unbenannte Aufgabe"}
+            </span>
+            {aufgabe.prioritaet === "kritisch" && !erledigt && marke("Kritisch", "var(--red)")}
+            {aufgabe.ist_mangel && marke("Mangel", "var(--red)")}
+            {aufgabe.gemeldet_von_kunde && marke("vom Kunden", "var(--blue)")}
+            {aufgabe.fotos?.length > 0 && <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, color:"var(--muted)" }}><Camera size={12} strokeWidth={1.5} />{aufgabe.fotos.length}</span>}
+          </span>
+          {aufgabe.beschreibung && !erledigt && (
+            <span style={{ display:"block", fontSize:13, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{aufgabe.beschreibung}</span>
+          )}
+        </span>
+        <span style={{ color:"var(--text2)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{aufgabe.zustaendig || "–"}</span>
+        <span className="num" style={{ fontFamily:"var(--font-zahl)", fontSize:13, color: ueberfaellig ? "var(--red)" : "var(--text2)" }}>
+          {aufgabe.faellig_am ? new Date(aufgabe.faellig_am).toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" }) : "–"}
+        </span>
+        <span className="num" title={produktivitaet ? produktivitaet.label : undefined}
+          style={{ fontFamily:"var(--font-zahl)", fontSize:13, textAlign:"right",
+            color: produktivitaet && abweichungProzent > 15 ? "var(--red)" : produktivitaet && abweichungProzent > 0 ? "var(--akzent)" : "var(--text2)" }}>
+          {sollStunden > 0 ? `${istStunden.toLocaleString("de-DE", { maximumFractionDigits:1 })} / ${sollStunden} h` : "–"}
+        </span>
+        <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:13, color:"var(--text2)", whiteSpace:"nowrap" }}>
+          <span aria-hidden="true" style={{ width:6, height:6, borderRadius:3, background: statusFarbe, flexShrink:0 }} />{status.label}
+        </span>
+      </div>
+      {zeigeMangelDialog && (
+        <MangelBehebenDialog
+          onAbbrechen={() => setZeigeMangelDialog(false)}
+          onBestaetigen={fotos => { setZeigeMangelDialog(false); onVorschlagen(aufgabe, fotos); }}
+        />
+      )}
+      </>
+    );
+  }
 
   return (
     <>
@@ -153,5 +215,15 @@ export function AufgabenKarte({ aufgabe, onClick, kolonnen, onDelete, onToggleEr
       />
     )}
     </>
+  );
+}
+
+// Desktop-Spalten: Erledigt · Aufgabe · Zuständig · Fällig · Stunden Ist/Soll · Status
+export const AUFGABEN_SPALTEN = "40px minmax(0, 1fr) 200px 96px 112px 104px";
+export function AufgabenTabellenKopf() {
+  return (
+    <div aria-hidden="true" style={{ display:"grid", gridTemplateColumns: AUFGABEN_SPALTEN, gap:16, fontSize:13, color:"var(--text2)" }}>
+      <span /><span>Aufgabe</span><span>Zuständig</span><span>Fällig</span><span style={{ textAlign:"right" }}>Ist / Soll</span><span>Status</span>
+    </div>
   );
 }

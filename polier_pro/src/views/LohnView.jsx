@@ -72,7 +72,7 @@ export function LohnView({ session, firmaId, projekte = [], einstellungen: gespe
     borderRadius:10, padding:"9px 12px", fontWeight:800, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6, fontSize:13 });
 
   return (
-    <div style={{ padding:"0 2px" }}>
+    <div className="desk-ohne-rand" style={{ padding:"0 2px" }}>
       <div className="seiten-kopf" style={{ color:"var(--text)", fontWeight:700, fontSize:15, marginBottom:4, display:"flex", alignItems:"center", gap:7 }}>
         <Wallet size={16} /> Lohnvorerfassung
       </div>

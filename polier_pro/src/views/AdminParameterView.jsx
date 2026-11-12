@@ -160,9 +160,9 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
       {/* Tab-Toggle — 3er-Grid statt einer Reihe: bei mehreren Tabs lief eine
           gemeinsame flex:1-Reihe auf schmalen Bildschirmen aus dem
           sichtbaren Bereich heraus (der letzte Tab war nicht mehr erreichbar). */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:12 }}>
+      <div className="unter-reiter" role="tablist" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:12 }}>
         {[["preise",Euro,"Einheitspreise"],["grundlagen",HardHat,"Lohn & Geräte"],["kalkpreise",Calculator,"Kalkulationspreise"],["stammpositionen",Layers,"Stammpositionen"],["freigabe",ShieldCheck,"Freigaberegeln"],["co2",Leaf,"CO₂"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
-          <button key={k} onClick={() => setAktiv(k)}
+          <button key={k} role="tab" aria-selected={aktiv===k} onClick={() => setAktiv(k)}
             style={{ background: aktiv===k ? "var(--yellow)" : "var(--surface2)",
               color: aktiv===k ? "#1a1200" : "var(--muted)",
               border:`1.5px solid ${aktiv===k ? "var(--yellow)" : "var(--border)"}`,
@@ -190,7 +190,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
             </button>
           </div>
 
-          {einheitspreise.map(p => (
+          <div className="listen-gruppe">{einheitspreise.map(p => (
             <div key={p.id} style={{ background:"var(--surface)", borderRadius:12,
               padding:"9px 14px", marginBottom:6,
               border:"1.5px solid var(--border)" }}>
@@ -205,18 +205,18 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
                   </div>
                 </div>
                 <div style={{ display:"flex", gap:6 }}>
-                  <button onClick={() => setEditPreis(p)}
+                  <button className="zeilen-knopf" aria-label="Bearbeiten" title="Bearbeiten" onClick={() => setEditPreis(p)}
                     style={{ background:"var(--surface2)", border:"1px solid var(--border)",
                       color:"var(--muted)", borderRadius:8, padding:"4px 10px",
                       cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><Pencil size={13} /></button>
-                  <button onClick={() => preisLoeschen(p.id)}
+                  <button className="zeilen-knopf loeschen" aria-label="Löschen" title="Löschen" onClick={() => preisLoeschen(p.id)}
                     style={{ background:"var(--rbg)", border:"1px solid var(--red)",
                       color:"var(--red)", borderRadius:8, padding:"4px 10px",
                       cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><X size={13} /></button>
                 </div>
               </div>
             </div>
-          ))}
+          ))}</div>
         </div>
       )}
 
@@ -301,7 +301,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
               <div key={kKey} style={{ marginBottom:14 }}>
                 <div style={{ color:"var(--muted)", fontSize:11.5, fontWeight:700,
                   textTransform:"uppercase", letterSpacing:0.3, marginBottom:6 }}>{kLabel}</div>
-                {gruppe.map(p => (
+                <div className="listen-gruppe">{gruppe.map(p => (
                   <div key={p.id} style={{ background:"var(--surface)", borderRadius:12,
                     padding:"9px 14px", marginBottom:6,
                     border:"1.5px solid var(--border)" }}>
@@ -317,18 +317,18 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
                         </div>
                       </div>
                       <div style={{ display:"flex", gap:6 }}>
-                        <button onClick={() => setEditKalkPreis(p)}
+                        <button className="zeilen-knopf" aria-label="Bearbeiten" title="Bearbeiten" onClick={() => setEditKalkPreis(p)}
                           style={{ background:"var(--surface2)", border:"1px solid var(--border)",
                             color:"var(--muted)", borderRadius:8, padding:"4px 10px",
                             cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><Pencil size={13} /></button>
-                        <button onClick={() => kalkPreisLoeschen(p.id)}
+                        <button className="zeilen-knopf loeschen" aria-label="Löschen" title="Löschen" onClick={() => kalkPreisLoeschen(p.id)}
                           style={{ background:"var(--rbg)", border:"1px solid var(--red)",
                             color:"var(--red)", borderRadius:8, padding:"4px 10px",
                             cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><X size={13} /></button>
                       </div>
                     </div>
                   </div>
-                ))}
+                ))}</div>
               </div>
             );
           })}
@@ -364,12 +364,12 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
             </button>
           </div>
           {stammpositionen.length === 0 && (
-            <div style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"20px 0", lineHeight:1.5 }}>
+            <div className="desk-leer" style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"20px 0", lineHeight:1.5 }}>
               Noch keine Stammpositionen. Eine Stammposition ist eine Leistung mit Rezeptur je Einheit,
               z.B. „Perimeterdämmung XPS 120 mm“ je m²: 0,25 h Facharbeiter + 1,05 m² XPS-Platte.
             </div>
           )}
-          {stammpositionen.map(sp => (
+          {stammpositionen.length > 0 && <div className="listen-gruppe">{stammpositionen.map(sp => (
             <div key={sp.id} style={{ background:"var(--surface)", borderRadius:12,
               padding:"9px 14px", marginBottom:6, border:"1.5px solid var(--border)" }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
@@ -384,18 +384,18 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
                   </div>
                 </div>
                 <div style={{ display:"flex", gap:6 }}>
-                  <button onClick={() => setStammFormular(sp)}
+                  <button className="zeilen-knopf" aria-label="Bearbeiten" title="Bearbeiten" onClick={() => setStammFormular(sp)}
                     style={{ background:"var(--surface2)", border:"1px solid var(--border)",
                       color:"var(--muted)", borderRadius:8, padding:"4px 10px",
                       cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><Pencil size={13} /></button>
-                  <button onClick={() => setStammpositionen(prev => prev.filter(x => x.id !== sp.id))}
+                  <button className="zeilen-knopf loeschen" aria-label="Löschen" title="Löschen" onClick={() => setStammpositionen(prev => prev.filter(x => x.id !== sp.id))}
                     style={{ background:"var(--rbg)", border:"1px solid var(--red)",
                       color:"var(--red)", borderRadius:8, padding:"4px 10px",
                       cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><X size={13} /></button>
                 </div>
               </div>
             </div>
-          ))}
+          ))}</div>}
         </div>
       )}
 
@@ -515,7 +515,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
                     style={{ background:"var(--surface2)", border:"1px solid var(--border)",
                       color:"var(--text)", borderRadius:8, padding:"4px 8px",
                       cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><Coins size={13} /></button>
-                  <button onClick={() => setLvVorlagen(prev => prev.filter(x=>x.id!==v.id))}
+                  <button className="zeilen-knopf loeschen" aria-label="Löschen" title="Löschen" onClick={() => setLvVorlagen(prev => prev.filter(x=>x.id!==v.id))}
                     style={{ background:"var(--rbg)", border:"1px solid var(--red)",
                       color:"var(--red)", borderRadius:8, padding:"4px 10px",
                       cursor:"pointer", fontSize:12, fontFamily:"inherit", display:"flex" }}><X size={13} /></button>

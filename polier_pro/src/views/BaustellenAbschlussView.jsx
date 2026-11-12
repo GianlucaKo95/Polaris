@@ -270,13 +270,13 @@ export function BaustellenAbschlussView({ projekt, aufgaben = [], tagesberichte 
             Restpunkte und die chronologische Historie. Die Baustelle wird danach
             archiviert.
           </div>
-          <button onClick={generieren} disabled={laden}
+          <button onClick={generieren} disabled={laden} className="desk-knopf-auto"
             style={{ width:"100%", background: laden ? "var(--surface2)" : "var(--yellow)",
               color: laden ? "var(--muted)" : "#1a1200", border:"none",
               borderRadius:12, padding:14, fontWeight:800, fontSize:14,
               cursor: laden ? "default" : "pointer", fontFamily:"inherit",
               display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-            {laden ? <><Spinner size={14} /> KI erstellt Abschlussakte…</> : <><Sparkles size={15} /> Abschlussakte erstellen</>}
+            {laden ? <><Spinner size={14} /> KI erstellt Abschlussakte…</> : <>{document.documentElement.dataset.layout !== "desktop" && <Sparkles size={15} />} Abschlussakte erstellen</>}
           </button>
         </div>
       )}

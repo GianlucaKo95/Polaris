@@ -16,7 +16,7 @@ export function VorlagenUploadPanel({ beschreibung, analysiereFn, session, vorla
         {beschreibung}
       </div>
 
-      <label style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+      <label className="desk-knopf-auto" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7,
         background:"var(--surface2)", border:"1.5px dashed var(--border)",
         borderRadius:10, padding:14, cursor: laedt ? "default" : "pointer",
         color:"var(--text)", fontSize:13, fontWeight:700, marginBottom:10 }}>

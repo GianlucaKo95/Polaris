@@ -141,6 +141,7 @@ export function StundenExportView({ profil, session, projekte, eigeneFirma, darf
     setVorschauRows(baueRows());
   }
 
+  const d = document.documentElement.dataset.layout === "desktop";
   return (
     <div>
       <div className="seiten-kopf" style={{ color:"var(--text)", fontWeight:800, fontSize:16, marginBottom:10,
@@ -148,7 +149,7 @@ export function StundenExportView({ profil, session, projekte, eigeneFirma, darf
         <ChartColumn size={17} /> Stunden-Export
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+      <div style={{ display:"grid", gridTemplateColumns: d ? "176px 176px auto" : "1fr 1fr", gap: d ? 8 : 10, marginBottom: d ? 24 : 10, alignItems:"end", justifyContent:"start" }}>
         <div>
           <Label>Von</Label>
           <input type="date" value={vonDatum} onChange={e=>setVonDatum(e.target.value)}
@@ -159,15 +160,22 @@ export function StundenExportView({ profil, session, projekte, eigeneFirma, darf
           <input type="date" value={bisDatum} onChange={e=>setBisDatum(e.target.value)}
             style={inputStyle()} />
         </div>
+        {d && (
+          <button onClick={ladeZeitraum} disabled={laden}
+            style={{ height:36, padding:"0 12px", borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface)", color:"var(--text)",
+              fontFamily:"inherit", fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
+            <Search size={16} strokeWidth={1.5} /> {laden ? "Lädt" : "Zeitraum laden"}
+          </button>
+        )}
       </div>
 
-      <button onClick={ladeZeitraum} disabled={laden}
+      {!d && <button onClick={ladeZeitraum} disabled={laden}
         style={{ width:"100%", background:"var(--surface2)", color:"var(--text)",
           border:"1.5px solid var(--border)", borderRadius:12, padding:13,
           fontWeight:700, cursor:"pointer", fontSize:14, fontFamily:"inherit",
           marginBottom:16, display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
         {laden ? "Lädt…" : <><Search size={14} /> Zeitraum laden</>}
-      </button>
+      </button>}
 
       {geladen && (
         <>
@@ -202,7 +210,7 @@ export function StundenExportView({ profil, session, projekte, eigeneFirma, darf
           </div>
 
           {sichtbareBuchungen.length > 0 && (
-            <button onClick={vorschauOeffnen}
+            <button onClick={vorschauOeffnen} className="desk-knopf-auto"
               style={{ width:"100%", background:"var(--yellow)", color:"#1a1200",
                 border:"none", borderRadius:12, padding:14, fontWeight:800,
                 fontSize:15, cursor:"pointer", fontFamily:"inherit",
