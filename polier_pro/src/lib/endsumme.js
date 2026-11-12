@@ -65,3 +65,23 @@ export function endsummeAnwenden(positionen, endsumme, kalkulationspreise) {
     return { ...p, kalk, ep: kalkulationEp(kalk, kalkulationspreise, p.menge) };
   });
 }
+
+// Zielsumme vorgeben (Schlussblatt): welcher Satz für Wagnis und Gewinn
+// ergibt bei gegebenen EKT, BGK und AGK genau die gewünschte Netto-
+// Angebotssumme? Festpreise (Positionen ohne Kalkulation) bleiben, wie sie
+// sind. Negative Sätze sind erlaubt, werden aber markiert: unter null wird
+// der Gewinn aufgezehrt, unter −(AGK) wird nicht einmal die Herstellung
+// gedeckt.
+export function wgFuerZielsumme(positionen, endsumme, kalkulationspreise, ziel) {
+  const e = endsummeBerechnen(positionen, { ...(endsumme || LEERE_ENDSUMME), wgProzent: 0 }, kalkulationspreise);
+  const basis = e.hk + e.agk;
+  if (!(basis > 0) || !(Number(ziel) > 0)) return null;
+  const wg = ((Number(ziel) - e.festpreise) / basis - 1) * 100;
+  const rund = Math.round(wg * 10000) / 10000;
+  return {
+    wgProzent: rund,
+    hinweis: Number(ziel) - e.festpreise < e.hk ? "unter Herstellkosten" : rund < 0 ? "unter Selbstkosten, kein Gewinn" : null,
+    selbstkosten: basis + e.festpreise,
+    herstellkosten: e.hk + e.festpreise,
+  };
+}

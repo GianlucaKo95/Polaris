@@ -14,7 +14,7 @@ import { katalogBauen, QUELLEN_LABEL } from "../lib/katalog.js";
 import { angebotPruefen, vergleichswerteAusAngeboten, AMPEL_FARBE } from "../lib/plausibilitaet.js";
 import { freigabePflicht } from "../lib/angebotRegeln.js";
 import { mittellohnBerechnen } from "../lib/kalkulationsgrundlagen.js";
-import { endsummeBerechnen, endsummeAnwenden, LEERE_ENDSUMME } from "../lib/endsumme.js";
+import { endsummeBerechnen, endsummeAnwenden, wgFuerZielsumme, LEERE_ENDSUMME } from "../lib/endsumme.js";
 import { NACHTRAG_GRUENDE, NACHTRAG_STATUS, begruendungPrompt, mehrkostenanzeigeHtml } from "../lib/nachtrag.js";
 import { kiText } from "../lib/ai.js";
 import { terminplanAusAngebot } from "../lib/terminplan.js";
@@ -32,6 +32,8 @@ import { gaebX84Schreiben } from "../lib/gaebX84.js";
 import { efbAuswerten, efbHtml } from "../lib/efb.js";
 import { Co2Panel } from "../components/Co2Panel.jsx";
 import { useIstDesktop } from "../hooks/useIstDesktop.js";
+import { PreisstandPanel } from "../components/PreisstandPanel.jsx";
+import { preisstandAnlegen, preiseFuer, zuschlaegeFuer, istEingefroren, einfrieren } from "../lib/preisstand.js";
 import { Menue } from "../components/Menue.jsx";
 import { LvTabelle } from "../components/LvTabelle.jsx";
 import { Kalkulationsaufriss } from "../components/Kalkulationsaufriss.jsx";
@@ -50,9 +52,19 @@ import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 // der die für Beton erfasste Menge passt — Bewehrung braucht hier keinen
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise = [], stammpositionen = [], standardZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen = null, co2Faktoren = [], projekt, eigeneFirma, firmaId, profil, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise: firmenpreise = [], stammpositionen = [], standardZuschlaege: firmenZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen = null, co2Faktoren = [], projekt, eigeneFirma, firmaId, profil, session }) {
   const istDesktop = useIstDesktop();
-  const [a,         setARoh]      = useState(angebot);
+  // Preisstand je Angebot (lib/preisstand.js): beim ersten Öffnen aus den
+  // Firmenpreisen bzw. aus der Urkalkulation des Hauptauftrags kopiert.
+  const [a,         setARoh]      = useState(() => angebot.preisstand ? angebot : {
+    ...angebot,
+    preisstand: preisstandAnlegen({ firmenpreise, grundlagen: kalkulationsgrundlagen, zuschlaege: firmenZuschlaege, hauptauftrag: nachtragZu,
+      heute: new Date().toLocaleDateString("sv-SE"), nachtraeglich: !!angebot.id && !nachtragZu }),
+  });
+  // Ab hier rechnet der ganze Editor mit den Preisen dieses Angebots
+  const kalkulationspreise = preiseFuer(a, firmenpreise);
+  const standardZuschlaege = zuschlaegeFuer(a, firmenZuschlaege);
+  const preiseEingefroren = istEingefroren(a);
   const [ansicht,   setAnsicht]   = useState("positionen"); // positionen | einstellungen
   // Desktop: ausgewählte LV-Zeile und Inhalt des Seitenfelds (position | angebot)
   const [auswahlId, setAuswahlId] = useState(null);
@@ -112,6 +124,20 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   // digital angenommenes) Angebot darf lokal gar nicht erst veränderbar
   // sein, egal über welches Feld/welche Funktion der Versuch kommt.
   const setA = updater => { if (!gesperrt) setARoh(updater); };
+
+  // Preisstand ändern: alle kalkulierten Positionen rechnen ihren EP neu
+  function preisstandAendern(ps) {
+    if (preiseEingefroren) return;
+    setA(x => ({ ...x, preisstand: ps, positionen: x.positionen.map(p => p.kalk ? { ...p, ep: kalkulationEp(p.kalk, ps.kalkulationspreise, p.menge) } : p) }));
+  }
+  function zuschlaegeAnwenden(z) {
+    if (preiseEingefroren) return;
+    setA(x => ({ ...x, positionen: x.positionen.map(p => {
+      if (!p.kalk) return p;
+      const kalk = { ...p.kalk, zuschlagLohn: z.zuschlagLohn ?? 0, zuschlagMaterial: z.zuschlagMaterial ?? 0, zuschlagGeraet: z.zuschlagGeraet ?? 0, zuschlagFremdleistung: z.zuschlagFremdleistung ?? 0 };
+      return { ...p, kalk, ep: kalkulationEp(kalk, x.preisstand?.kalkulationspreise || firmenpreise, p.menge) };
+    }) }));
+  }
 
   function addPosition(pos) {
     const id = Date.now();
@@ -361,7 +387,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   async function efbExportieren() {
     const auswertung = efbAuswerten(a.positionen, kalkulationspreise);
     setEfbInfo({ warnungen: auswertung.warnungen });
-    await druckePDF(efbHtml(auswertung, { angebot: a, eigeneFirma, projekt, aufteilung: standardZuschlaege?.aufteilung, mittellohn: mittellohnBerechnen(kalkulationsgrundlagen?.mittellohn),
+    await druckePDF(efbHtml(auswertung, { angebot: a, eigeneFirma, projekt, aufteilung: standardZuschlaege?.aufteilung, mittellohn: mittellohnBerechnen(a.preisstand?.mittellohn || kalkulationsgrundlagen?.mittellohn),
       endsumme: a.endsumme ? endsummeBerechnen(a.positionen, a.endsumme, kalkulationspreise) : null }),
       "EFB_" + a.titel.replace(/ /g, "_") + ".pdf");
   }
@@ -487,7 +513,8 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
     if (gesperrt) return;
     setSpeichertLaedt(true);
     try {
-      await onSave(a);
+      // Mit der Annahme wird der Preisstand zur Urkalkulation (die Datenbank hält ihn zusätzlich per Trigger fest)
+      await onSave(a.status === "angenommen" ? { ...a, preisstand: einfrieren(a.preisstand, new Date().toLocaleDateString("sv-SE")) } : a);
     } finally {
       setSpeichertLaedt(false);
     }
@@ -906,7 +933,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
   const seitenfeldKopf = () => (
     <div role="tablist" style={{ display:"flex", gap:24, borderBottom:"1px solid var(--border)", margin:"0 -20px 16px", padding:"0 20px",
       position:"sticky", top:0, background:"var(--surface)", zIndex:2 }}>
-      {[["position", "Position"], ["angebot", "Angebot"]].map(([k, l]) => (
+      {[["position", "Position"], ["preise", "Preise"], ["angebot", "Angebot"]].map(([k, l]) => (
         <button key={k} role="tab" aria-selected={rechts === k} className="desk-reiter" onClick={() => setRechts(k)}
           style={{ height:44, padding:0, background:"none", border:"none", borderRadius:0, borderBottom:`2px solid ${rechts === k ? "var(--text)" : "transparent"}`,
             marginBottom:-1, color: rechts === k ? "var(--text)" : "var(--text2)", fontFamily:"inherit", fontSize:14,
@@ -942,6 +969,12 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
       </>
     );
   };
+
+  const preisePanel = (
+    <PreisstandPanel preisstand={a.preisstand} firmenpreise={firmenpreise} firmenMittellohn={kalkulationsgrundlagen?.mittellohn}
+      eingefroren={preiseEingefroren} positionen={a.positionen} onAendern={preisstandAendern} onZuschlaegeAnwenden={zuschlaegeAnwenden}
+      projekt={projekt} eigeneFirma={eigeneFirma} angebotTitel={a.titel} />
+  );
 
   // Eine LV-Zeile als Karte: auf dem Handy die Liste, auf dem Desktop das
   // Seitenfeld der ausgewählten Tabellenzeile (imPanel).
@@ -1429,7 +1462,14 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
           <div style={istDesktop ? { flex:"0 0 360px", position:"sticky", top:16, maxHeight:"calc(100vh - 32px)", overflowY:"auto", boxSizing:"border-box", background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"0 20px 20px" } : undefined}>
             {istDesktop && seitenfeldKopf()}
             {istDesktop && rechts === "position" && seitenfeldPosition()}
+            {istDesktop && rechts === "preise" && preisePanel}
             <div style={istDesktop && rechts !== "angebot" ? { display:"none" } : undefined}>
+            {!istDesktop && (
+              <details style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"10px 12px", marginBottom:12 }}>
+                <summary style={{ cursor:"pointer", fontWeight:600 }}>Preise dieses Angebots</summary>
+                <div style={{ marginTop:8 }}>{preisePanel}</div>
+              </details>
+            )}
             {(istDesktop ? [] : [
               ["Titel","titel","Angebot Bodenplatte"],
               ["Empfänger","empfaenger","Auftraggeber GmbH"],
@@ -1558,7 +1598,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 
             {/* Kalkulationsverfahren: Zuschlagskalkulation (Standard, Sätze
                 je Position) oder Endsumme (lib/endsumme.js, EFB 222). */}
-            {!gesperrt && (() => {
+            {!gesperrt && !preiseEingefroren && (() => {
               const es = a.endsumme;
               const erg = es ? endsummeBerechnen(a.positionen, es, kalkulationspreise) : null;
               const setEs = aend => setA(x => ({ ...x, endsumme: { ...(x.endsumme || LEERE_ENDSUMME), ...aend } }));
@@ -1600,6 +1640,27 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                           <option value="lohn">Lohn</option><option value="alle">alle Kosten</option>
                         </select></div>
                     </div>
+                    {/* Schlussblatt: Zielsumme vorgeben → W&G-Satz rückrechnen (lib/endsumme.js) */}
+                    {(() => {
+                      const z = es.zielsumme ? wgFuerZielsumme(a.positionen, es, kalkulationspreise, es.zielsumme) : null;
+                      return (
+                        <div style={{ marginTop:8 }}>
+                          <div style={{ color:"var(--muted)", fontSize:10, marginBottom:3 }}>Zielsumme netto (optional)</div>
+                          <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:6 }}>
+                            <input type="number" value={es.zielsumme || ""} placeholder="z. B. 485000" onChange={e => setEs({ zielsumme: Number(e.target.value) || null })}
+                              style={{ ...inputStyle(), padding:"7px 9px", fontSize:12 }} aria-label="Zielsumme netto" />
+                            <button disabled={!z} onClick={() => setEs({ wgProzent: z.wgProzent })}
+                              style={{ background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text)", borderRadius:6, padding:"0 10px", cursor:"pointer", fontSize:12, fontFamily:"inherit" }}>
+                              W&amp;G daraus</button>
+                          </div>
+                          {z && (
+                            <div style={{ fontSize:12, marginTop:4, color: z.hinweis ? "var(--red)" : "var(--muted)" }}>
+                              ergibt W&amp;G {z.wgProzent.toLocaleString("de-DE", { maximumFractionDigits: 2 })} %{z.hinweis && ` · ${z.hinweis}`} · Selbstkosten {z.selbstkosten.toLocaleString("de-DE", { maximumFractionDigits: 0 })} €
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {erg && (
                       <div style={{ fontSize:12, marginTop:8, lineHeight:1.6, color:"var(--text)" }}>
                         EKT {eur(erg.ektSumme)} € + BGK {eur(erg.bgk)} € = HK {eur(erg.hk)} € · AGK {eur(erg.agk)} € · W&amp;G {eur(erg.wg)} €

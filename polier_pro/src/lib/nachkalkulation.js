@@ -13,6 +13,7 @@
 // gleich. Für eine Aussage braucht es eine Mindestmenge an Daten
 // (MIN_SOLL_STUNDEN); vorher wird kein Faktor vorgeschlagen.
 
+import { preiseFuer } from "./preisstand.js";
 export const MIN_SOLL_STUNDEN = 40;
 
 function lohnstunden(kalk, kalkulationspreise) {
@@ -31,7 +32,7 @@ export function leistungsfaktor({ angebote, fortschritt, zeitbuchungen, kalkulat
     for (const p of a.positionen || []) {
       if (!p.kalk) continue;
       const prozent = bf.get(p.id) || 0;
-      const std = lohnstunden(p.kalk, kalkulationspreise);
+      const std = lohnstunden(p.kalk, preiseFuer(a, kalkulationspreise)); // Urkalkulation des Angebots
       soll += std * prozent / 100;
       if (p.stammpositionId && std > 0 && prozent > 0) stammIds.add(p.stammpositionId);
     }

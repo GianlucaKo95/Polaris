@@ -326,3 +326,24 @@ begin
     end if;
   end loop;
 end $$;
+
+-- ═══ Preisstand je Angebot und Urkalkulation (1.75) ════════════════════
+-- Kopie der Kalkulationspreise, des Mittellohns und der Zuschläge im
+-- Angebot (lib/preisstand.js). Ab Annahme ist er die Urkalkulation: der
+-- Trigger hält ihn fest, auch wenn ein Client ihn noch überschreiben will.
+alter table angebote add column if not exists preisstand jsonb;
+create or replace function angebote_urkalkulation_festhalten() returns trigger language plpgsql as $$
+begin
+  if old.status = 'angenommen' and old.preisstand is not null then
+    new.preisstand := old.preisstand;
+    if new.preisstand ->> 'eingefroren_am' is null then
+      new.preisstand := jsonb_set(new.preisstand, '{eingefroren_am}', to_jsonb(to_char(now(), 'YYYY-MM-DD')));
+    end if;
+  elsif new.status = 'angenommen' and new.preisstand is not null and new.preisstand ->> 'eingefroren_am' is null then
+    new.preisstand := jsonb_set(new.preisstand, '{eingefroren_am}', to_jsonb(to_char(now(), 'YYYY-MM-DD')));
+  end if;
+  return new;
+end $$;
+drop trigger if exists angebote_urkalkulation on angebote;
+create trigger angebote_urkalkulation before update on angebote
+  for each row execute function angebote_urkalkulation_festhalten();

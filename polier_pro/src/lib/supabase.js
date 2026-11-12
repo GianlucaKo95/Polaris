@@ -896,6 +896,7 @@ export async function sbAngebotSpeichern(a, projektId, session, istNeu) {
   if (a.interne_freigabe !== undefined) optional.interne_freigabe = a.interne_freigabe;
   if (a.endsumme !== undefined) optional.endsumme = a.endsumme;
   if (a.nachtrag_info !== undefined) optional.nachtrag_info = a.nachtrag_info;
+  if (a.preisstand !== undefined) optional.preisstand = a.preisstand; // Projektpreise / Urkalkulation (lib/preisstand.js)
   try {
     const client = sbClientMitToken(session);
     const schreiben = p => istNeu

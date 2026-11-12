@@ -125,3 +125,19 @@ test("kalkulationAufriss: Teile ergeben den GP, Rabatt wirkt anteilig, direkte P
   assert.ok(Math.abs(r.summe - (gesamt * 0.9 + 100)) < 1e-9);
   assert.ok(Math.abs(r.zuschlag - (gesamt - 700) * 0.9) < 1e-9);
 });
+
+import { wgFuerZielsumme, endsummeBerechnen } from "./endsumme.js";
+test("Zielsumme: W&G-Satz so, dass die Angebotssumme genau passt", () => {
+  const preise = [{ id: 1, preis: 50 }, { id: 2, preis: 100 }];
+  const pos = [
+    { bez: "A", menge: 1, ep: 0, kalk: { lohnposten: [{ stammId: 1, menge: 100 }], materialposten: [{ stammId: 2, menge: 10 }], geraetPosten: [], fremdleistung: 0 } },
+    { bez: "Festpreis", menge: 1, ep: 2000 },
+  ];
+  const es = { bgk: [{ bez: "Kran", betrag: 3000 }], agkProzent: 10, wgProzent: 0, umlageAuf: "lohn" };
+  const z = wgFuerZielsumme(pos, es, preise, 15000);
+  const e = endsummeBerechnen(pos, { ...es, wgProzent: z.wgProzent }, preise);
+  assert.ok(Math.abs(e.gesamt - 15000) < 0.01);
+  assert.equal(z.hinweis, null);
+  assert.equal(wgFuerZielsumme(pos, es, preise, 11500).hinweis, "unter Selbstkosten, kein Gewinn");
+  assert.equal(wgFuerZielsumme(pos, es, preise, 10000).hinweis, "unter Herstellkosten");
+});

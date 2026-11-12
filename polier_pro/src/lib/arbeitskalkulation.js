@@ -13,6 +13,7 @@
 //   Prognose        = Ist ÷ Leistungsstand (Stunden bei Fertigstellung)
 //   Mehr-/Minderkosten = (Prognose − Soll gesamt) × Kalkulationslohn
 
+import { preiseFuer } from "./preisstand.js";
 import { istTitel } from "./lv.js";
 
 function lohnstunden(kalk, kalkulationspreise) {
@@ -43,17 +44,18 @@ export function sollIstJePosition({ angebote, fortschritt, verteilung, kalkulati
   }
   const zeilen = [];
   for (const a of angebote || []) {
+    const preise = preiseFuer(a, kalkulationspreise); // Urkalkulation des Angebots
     for (const p of a.positionen || []) {
       if (istTitel(p) || !p.bez) continue;
       const key = `${a.id}:${p.id}`;
-      const soll = p.kalk ? lohnstunden(p.kalk, kalkulationspreise) : 0;
+      const soll = p.kalk ? lohnstunden(p.kalk, preise) : 0;
       const prozent = prozentNach.get(key) || 0;
       const ist = istNach.get(key) || 0;
       if (!soll && !ist) continue;
       const sollErbracht = soll * prozent / 100;
       const faktor = sollErbracht > 0 && ist > 0 ? ist / sollErbracht : null;
       const prognose = prozent > 0 ? ist / (prozent / 100) : null;
-      const satz = lohnsatz(p.kalk, kalkulationspreise);
+      const satz = lohnsatz(p.kalk, preise);
       zeilen.push({
         angebotId: a.id, positionId: p.id, oz: p.oz || "", bez: p.bez, stammpositionId: p.stammpositionId || null,
         soll, prozent, sollErbracht, ist, faktor, prognose,
