@@ -335,3 +335,7 @@ input, textarea, select {
 .eigen-felder input:focus, .eigen-felder select:focus, .eigen-felder textarea:focus { outline: none; border-color: var(--akzent) !important; }
 .eigen-felder input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .eigen-felder input[type="number"] { -moz-appearance: textfield; }
+/* Planung: leere Zelle zeigt beim Zeigen, dass sie belegbar ist */
+.plan-zelle { transition: background-color 120ms ease-out; }
+.plan-zelle:hover { background: var(--bg) !important; }
+.plan-zelle:focus-visible { outline: 2px solid var(--akzent); outline-offset: -2px; }

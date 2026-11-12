@@ -246,3 +246,35 @@ begin
     );
   end if;
 end $$;
+
+-- ═══ Personal- und Geräteplanung (1.73) ═════════════════════════════════
+-- Je Ressource (Kolonne nach Namen oder Gerät) und Kalenderwoche eine
+-- Baustelle. Logik: src/lib/planung.js.
+create table if not exists einsatzplan (
+  id              bigserial primary key,
+  firma_id        int not null references firmen(id) on delete cascade,
+  art             text not null,                 -- kolonne | geraet
+  ressource       text not null,                 -- "kolonne:<name klein>" | "geraet:<id>"
+  ressource_name  text default '',
+  projekt_id      bigint not null references projekte(id) on delete cascade,
+  woche           date not null,                 -- Montag der Kalenderwoche
+  notiz           text default '',
+  created_at      timestamptz default now(),
+  unique (firma_id, ressource, woche)
+);
+create index if not exists einsatzplan_woche on einsatzplan(firma_id, woche);
+alter table einsatzplan enable row level security;
+do $$
+begin
+  if not exists (select 1 from pg_policies where tablename = 'einsatzplan' and policyname = 'einsatzplan_lesen') then
+    create policy "einsatzplan_lesen" on einsatzplan for select using (firma_id = eigene_firma_id());
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'einsatzplan' and policyname = 'einsatzplan_schreiben') then
+    create policy "einsatzplan_schreiben" on einsatzplan for all using (
+      firma_id = eigene_firma_id() and eigene_rolle() in ('administrator','geschaeftsfuehrer','bauleiter')
+    ) with check (
+      firma_id = eigene_firma_id() and eigene_rolle() in ('administrator','geschaeftsfuehrer','bauleiter')
+      and projekt_id in (select id from projekte where firma_id = eigene_firma_id())
+    );
+  end if;
+end $$;
