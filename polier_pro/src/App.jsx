@@ -3,8 +3,9 @@ import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
   CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight, ChevronLeft,
   Building2, Calendar, Euro, CloudSun, ChartColumn, FileText, Settings,
   UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree, Archive,
-  ChartLine, Receipt, Landmark, Wallet, Database } from "lucide-react";
+  ChartLine, Receipt, Landmark, Wallet, Database, Forklift } from "lucide-react";
 import { useIstDesktop } from "./hooks/useIstDesktop.js";
+import { useGeraete } from "./hooks/useGeraete.js";
 import { DesktopShell } from "./components/DesktopShell.jsx";
 import { useFirmenUebersicht } from "./hooks/useFirmenUebersicht.js";
 import { BaustellenListeView } from "./views/BaustellenListeView.jsx";
@@ -62,6 +63,7 @@ const KiFrageView            = React.lazy(() => import("./views/KiFrageView.jsx"
 const BaustellenAbschlussView = React.lazy(() => import("./views/BaustellenAbschlussView.jsx").then(m => ({ default: m.BaustellenAbschlussView })));
 const SimulationView         = React.lazy(() => import("./views/SimulationView.jsx").then(m => ({ default: m.SimulationView })));
 const KostenView             = React.lazy(() => import("./views/KostenView.jsx").then(m => ({ default: m.KostenView })));
+const GeraeteView            = React.lazy(() => import("./views/GeraeteView.jsx").then(m => ({ default: m.GeraeteView })));
 const FinanzenView           = React.lazy(() => import("./views/FinanzenView.jsx").then(m => ({ default: m.FinanzenView })));
 const CockpitView            = React.lazy(() => import("./views/CockpitView.jsx").then(m => ({ default: m.CockpitView })));
 const LohnView               = React.lazy(() => import("./views/LohnView.jsx").then(m => ({ default: m.LohnView })));
@@ -384,6 +386,7 @@ export default function PolierApp() {
   const [co2Faktoren, setCo2Faktoren, co2FaktorenStatus] = useFirmaSpalte(firma?.id, auth.session, "co2_faktoren", []);
   // Lohnvorerfassung: Lohnarten, Personalnummern, Sollzeiten (lib/lohnvorerfassung.js).
   const [lohnEinstellungen, setLohnEinstellungen, lohnEinstellungenStatus] = useFirmaSpalte(firma?.id, auth.session, "lohn_einstellungen", null);
+  const geraeteApi = useGeraete(auth.session, firma?.id);
   function grundlagenAendern(neu) {
     setKalkulationsgrundlagen(neu);
     setKalkulationspreise(prev => kalkulationspreiseAbleiten(prev, neu));
@@ -1072,6 +1075,8 @@ export default function PolierApp() {
     { id:"rechnungen",    icon:"🧾",  label:"Rechnungen",  rollen:["administrator","geschaeftsfuehrer"] },
     // Offene Posten, Eingangsrechnungen, Mahnungen, DATEV (views/FinanzenView.jsx).
     { id:"finanzen",      icon:"🏦",  label:"Finanzen",    rollen:["administrator","geschaeftsfuehrer"] },
+    // Inventar, Standort, Prüffristen, interne Miete (views/GeraeteView.jsx, lib/geraete.js).
+    { id:"geraete",       icon:"🚜",  label:"Geräte",      rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     // Stunden je LV-Position, Leistungsstand, Soll-Ist und Prognose
     // (views/LeistungView.jsx, lib/arbeitskalkulation.js).
     { id:"leistung",      icon:"📊",  label:"Soll-Ist",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
@@ -1111,7 +1116,7 @@ export default function PolierApp() {
   const TAB_ICONS = { dashboard:LayoutGrid, aufgaben:CircleCheckBig, tagebuch:NotebookPen,
     kolonnen:Users, stempeln:Clock, gantt:Calendar, kosten:Euro, wetter:CloudSun,
     stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, firmen:Building2, profil:User, ki_frage:Sparkles, simulation:FlaskConical, abwesenheiten:Palmtree, abschluss:Archive,
-    leistung:ChartLine, rechnungen:Receipt, finanzen:Landmark, lohn:Wallet };
+    leistung:ChartLine, rechnungen:Receipt, finanzen:Landmark, lohn:Wallet, geraete:Forklift };
 
   // Inhalt des aktiven Tabs — von der Handy-Ansicht und vom Desktop-Rahmen genutzt.
   function tabInhalt() {
@@ -1173,7 +1178,7 @@ export default function PolierApp() {
             Tab-Wechsel weg von "kosten") der Stand der vorherigen Baustelle
             stehen, "Speichern" hätte dann sogar das falsche Projekt
             überschrieben. Der key erzwingt einen frischen Mount pro Baustelle. */}
-        {tab === "kosten"        && <KostenView key={projekt?.id} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} angebote={angebote} kalkulationspreise={kalkulationspreise} baufortschritt={baufortschritt} stammpositionen={stammpositionen} setStammpositionen={stammpositionenStatus === "ok" ? setStammpositionen : null} istAdmin={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
+        {tab === "kosten"        && <KostenView key={projekt?.id} projekt={projekt} geraete={geraeteApi.geraete} grundlagen={kalkulationsgrundlagen} land={lohnEinstellungen?.bundesland || "NW"} aufgaben={felder} kolonnen={kolonnen} zeitbuchungen={zeitbuchungen} angebote={angebote} kalkulationspreise={kalkulationspreise} baufortschritt={baufortschritt} stammpositionen={stammpositionen} setStammpositionen={stammpositionenStatus === "ok" ? setStammpositionen : null} istAdmin={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} session={auth.session} onKostenGespeichert={changes => updateProjekt(projekt.id, changes)} />}
         {tab === "stempeln"      && <StempeluhrView profil={aktiveProfil}
             projekte={aktiveProfil?.kolonne_id
               ? projekte.filter(p => (p.kolonnen||[]).some(k => k.id === aktiveProfil.kolonne_id)).length > 0
@@ -1189,6 +1194,9 @@ export default function PolierApp() {
             // "alle aus seiner Kolonne", nicht firmenweit.
             darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
         {tab === "finanzen"      && <FinanzenView session={auth.session} firmaId={firma?.id} projekte={projekte} eigeneFirma={eigeneFirma} datevEinstellungen={kalkulationsgrundlagen?.datev} />}
+        {tab === "geraete"       && <GeraeteView geraeteApi={geraeteApi} projekte={projekte} grundlagen={kalkulationsgrundlagen}
+            darfBearbeiten={["administrator","geschaeftsfuehrer","bauleiter","polier"].includes(aktiveRolle)}
+            darfStammdaten={["administrator","geschaeftsfuehrer","bauleiter"].includes(aktiveRolle)} land={lohnEinstellungen?.bundesland || "NW"} />}
         {tab === "lohn"          && <LohnView session={auth.session} firmaId={firma?.id} projekte={projekte} einstellungen={lohnEinstellungen}
             setEinstellungen={setLohnEinstellungen} status={lohnEinstellungenStatus} darfEinstellen={aktiveRolle === "administrator" || aktiveRolle === "geschaeftsfuehrer"} />}
         {tab === "ki_frage"      && <KiFrageView key={kiStartFrage} startFrage={kiStartFrage} projekt={projekt} aufgaben={felder} kolonnen={kolonnen} tagesberichte={aktProjektBerichte} kommentare={aktProjektKommentare} session={auth.session} />}
@@ -1216,7 +1224,7 @@ export default function PolierApp() {
     const erlaubt = id => TABS.some(t => t.id === id);
     const istBuero = ["administrator", "geschaeftsfuehrer", "bauleiter"].includes(aktiveRolle);
     const UNTERSEITEN = {
-      finanzen: ["finanzen"], lohn: ["lohn", "stunden"], stammdaten: ["admin_params"],
+      finanzen: ["finanzen"], lohn: ["lohn", "stunden"], geraete: ["geraete"], stammdaten: ["admin_params"],
       einstellungen: ["firmen", "nutzer"], profil: ["profil"], abwesenheiten: ["abwesenheiten"],
     };
     const LABEL = { lohn: "Lohnvorerfassung", stunden: "Stunden-Export", firmen: "Unternehmen", nutzer: "Nutzer", dashboard: "Übersicht",
@@ -1230,6 +1238,7 @@ export default function PolierApp() {
       erlaubt("angebot") && { id: "angebote", label: "Angebote", Icon: FileText, zahl: freigaben || null },
       erlaubt("finanzen") && { id: "finanzen", label: "Finanzen", Icon: Landmark },
       (erlaubt("lohn") || erlaubt("stunden")) && { id: "lohn", label: "Lohn & Zeiten", Icon: Wallet },
+      erlaubt("geraete") && { id: "geraete", label: "Geräte", Icon: Forklift },
       erlaubt("admin_params") && { id: "stammdaten", label: "Stammdaten", Icon: Database },
       (erlaubt("firmen") || erlaubt("nutzer")) && { id: "einstellungen", label: "Einstellungen", Icon: Settings },
     ].filter(Boolean);
@@ -1292,10 +1301,11 @@ export default function PolierApp() {
       inhalt = <AngeboteListeView projekte={projekte} firmenDaten={firmenDaten}
         onOeffnen={(projektId, angebotId) => { setAngebotOeffnen(angebotId); baustelleOeffnen(projektId, "angebot"); }} />;
     } else {
-      const TITEL = { finanzen: "Finanzen", lohn: "Lohn & Zeiten", stammdaten: "Stammdaten", einstellungen: "Einstellungen", profil: "Mein Profil", abwesenheiten: "Abwesenheit" };
+      const TITEL = { finanzen: "Finanzen", lohn: "Lohn & Zeiten", geraete: "Geräte", stammdaten: "Stammdaten", einstellungen: "Einstellungen", profil: "Mein Profil", abwesenheiten: "Abwesenheit" };
       titel = TITEL[seite];
       const unter = (UNTERSEITEN[seite] || []).filter(erlaubt);
       if (unter.length > 1) { reiter = unter.map(id => ({ id, label: label(id) })); aktiverReiter = tab; onReiter = setTab; }
+      if (seite === "geraete") untertitel = "Standort, Prüffristen und interne Miete";
       if (seite === "stammdaten") untertitel = "Stammpositionen, Preise, Vorlagen und Regeln für die Kalkulation";
       inhalt = unter.includes(tab) ? tabInhalt() : null;
     }

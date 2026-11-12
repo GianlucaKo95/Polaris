@@ -259,9 +259,9 @@ input, textarea, select {
 :root[data-layout="desktop"] .desk-inhalt [style*="font-size: 11px"],
 :root[data-layout="desktop"] .desk-inhalt [style*="font-size: 11.5px"] { font-size: 12px !important; }
 :root[data-layout="desktop"] .desk-inhalt .feld-label { font-size: 13px !important; font-weight: 400 !important; color: var(--text2) !important; margin-bottom: 4px !important; }
-:root[data-layout="desktop"] .desk-inhalt input:not(.desk-feld):not(.ohne-rahmen):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([style*="border: none"]),
-:root[data-layout="desktop"] .desk-inhalt select:not(.desk-feld):not([style*="border: none"]),
-:root[data-layout="desktop"] .desk-inhalt textarea:not(.desk-feld):not([style*="border: none"]) {
+:root[data-layout="desktop"] .desk-inhalt input:not(.desk-feld):not(.ohne-rahmen):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([style*="border: none"]):not(.eigen-felder *),
+:root[data-layout="desktop"] .desk-inhalt select:not(.desk-feld):not([style*="border: none"]):not(.eigen-felder *),
+:root[data-layout="desktop"] .desk-inhalt textarea:not(.desk-feld):not([style*="border: none"]):not(.eigen-felder *) {
   box-sizing: border-box; min-height: 36px; padding: 7px 10px !important; font-size: 14px !important; line-height: 20px;
   border: 1px solid var(--border2) !important; border-radius: 8px !important; background-color: var(--surface);
   transition: border-color 120ms ease-out; }
@@ -330,3 +330,8 @@ input, textarea, select {
 :root[data-layout="desktop"] .desk-inhalt .desk-leer > div { margin-top: 0 !important; }
 /* Gestrichelte graue Gruppen (Zuschläge, Mutter-LV, Lohn & Geräte): ruhige Tafel */
 :root[data-layout="desktop"] .desk-inhalt div[style*="dashed var(--border)"] { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: 12px !important; padding: 16px 20px !important; }
+
+/* Ansichten, die ihre Felder selbst im Desktop-Maß setzen (z. B. Geräte), tragen .eigen-felder und sind von der Feldregel oben ausgenommen */
+.eigen-felder input:focus, .eigen-felder select:focus, .eigen-felder textarea:focus { outline: none; border-color: var(--akzent) !important; }
+.eigen-felder input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.eigen-felder input[type="number"] { -moz-appearance: textfield; }

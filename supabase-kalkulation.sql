@@ -168,3 +168,40 @@ begin
     );
   end if;
 end $$;
+
+-- ═══ Geräteverwaltung (1.71) ═══════════════════════════════════════════
+-- Inventar mit Standort, Prüffristen, Wartung und Einsatzhistorie (für die
+-- interne Gerätemiete je Baustelle). Logik: src/lib/geraete.js.
+create table if not exists geraete (
+  id              bigserial primary key,
+  firma_id        int not null references firmen(id) on delete cascade,
+  inventarnr      text default '',
+  bezeichnung     text not null,
+  kategorie       text default '',
+  grundlage_id    bigint,                       -- Gerät aus firmen.kalkulationsgrundlagen.geraete (BGL-Stundensatz)
+  tagessatz       numeric(10,2),                -- interne Miete € je Arbeitstag; leer = Stundensatz × stunden_je_tag
+  stunden_je_tag  numeric(4,1) default 8,
+  status          text not null default 'verfuegbar',  -- verfuegbar | einsatz | werkstatt | ausgemustert
+  projekt_id      bigint references projekte(id) on delete set null,
+  pruefungen      jsonb not null default '[]'::jsonb,  -- [{ art, intervall_monate, zuletzt }]
+  wartungen       jsonb not null default '[]'::jsonb,  -- [{ datum, text, kosten }]
+  einsaetze       jsonb not null default '[]'::jsonb,  -- [{ projekt_id, von, bis }]
+  notiz           text default '',
+  created_at      timestamptz default now()
+);
+create index if not exists geraete_firma on geraete(firma_id);
+alter table geraete enable row level security;
+do $$
+begin
+  if not exists (select 1 from pg_policies where tablename = 'geraete' and policyname = 'geraete_lesen') then
+    create policy "geraete_lesen" on geraete for select using (firma_id = eigene_firma_id());
+  end if;
+  -- Umsetzen und Prüfung eintragen dürfen auch Bauleiter und Polier
+  if not exists (select 1 from pg_policies where tablename = 'geraete' and policyname = 'geraete_schreiben') then
+    create policy "geraete_schreiben" on geraete for all using (
+      firma_id = eigene_firma_id() and eigene_rolle() in ('administrator','geschaeftsfuehrer','bauleiter','polier')
+    ) with check (
+      firma_id = eigene_firma_id() and eigene_rolle() in ('administrator','geschaeftsfuehrer','bauleiter','polier')
+    );
+  end if;
+end $$;

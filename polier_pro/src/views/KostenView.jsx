@@ -5,6 +5,7 @@ import { sbProjektKostenSpeichern } from "../lib/supabase.js";
 import { Spinner } from "../components/Spinner.jsx";
 import { kalkulationSollAufschluesselung } from "../lib/kalkulation.js";
 import { useIstDesktop } from "../hooks/useIstDesktop.js";
+import { mieteJeBaustelle, summeMiete } from "../lib/geraete.js";
 import { leistungsfaktor, zeitansaetzeAnpassen } from "../lib/nachkalkulation.js";
 
 const STANDARD_POSITIONEN = [
@@ -58,7 +59,7 @@ function ausAngebotUebernehmen(angebot) {
   });
 }
 
-export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebote, kalkulationspreise = [], baufortschritt = [], stammpositionen = [], setStammpositionen = null, istAdmin = false, session, onKostenGespeichert }) {
+export function KostenView({ projekt, geraete = [], grundlagen = null, land = "NW", aufgaben, kolonnen, zeitbuchungen, angebote, kalkulationspreise = [], baufortschritt = [], stammpositionen = [], setStammpositionen = null, istAdmin = false, session, onKostenGespeichert }) {
   const istDesktop = useIstDesktop();
   const [budgetPos, setBudgetPos] = useState(
     (projekt?.budget_positionen?.length ? projekt.budget_positionen : STANDARD_POSITIONEN)
@@ -92,7 +93,11 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
 
   const istArbeit = stundenGesamt * stundensatz;
   const budgetGesamt = budgetPos.reduce((s,p) => s + (p.budget||0), 0);
-  const istGesamt = istArbeit; // Materialkosten kämen dazu
+  // Interne Gerätemiete: alle Einsätze auf dieser Baustelle bis heute (lib/geraete.js)
+  const heuteIso = new Date().toLocaleDateString("sv-SE");
+  const mieteZeilen = mieteJeBaustelle(geraete, grundlagen, { von: "2000-01-01", bis: heuteIso, land, projektId: projekt?.id });
+  const geraeteMiete = summeMiete(mieteZeilen);
+  const istGesamt = istArbeit + geraeteMiete; // Materialkosten kämen dazu
   const restBudget = budgetGesamt - istGesamt;
   const auslastung = budgetGesamt > 0
     ? Math.min(Math.round(istGesamt/budgetGesamt*100), 100) : 0;
@@ -146,7 +151,7 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:16 }}>
             {[
               ["Budget gesamt", euro(budgetGesamt), null],
-              ["Ist bisher", euro(istGesamt), `${stundenGesamt.toLocaleString("de-DE", { minimumFractionDigits:1, maximumFractionDigits:1 })} h × ${stundensatz} €/h`],
+              ["Ist bisher", euro(istGesamt), `${stundenGesamt.toLocaleString("de-DE", { minimumFractionDigits:1, maximumFractionDigits:1 })} h × ${stundensatz} €/h${geraeteMiete ? ` + Geräte ${euro(geraeteMiete)}` : ""}`],
               ["Rest-Budget", euro(restBudget), restBudget < 0 ? "über Budget" : null],
               ["Auslastung", `${auslastung} %`, budgetGesamt > 0 ? null : "noch kein Budget"],
             ].map(([l, v, u], i) => (
@@ -206,6 +211,30 @@ export function KostenView({ projekt, aufgaben, kolonnen, zeitbuchungen, angebot
           </div>
         </div>
       </div>}
+
+      {mieteZeilen.length > 0 && (
+        <div style={{ background:"var(--surface)", borderRadius: istDesktop ? 12 : 16, padding: istDesktop ? "16px 20px" : 13, marginBottom:12, border:"1px solid var(--border)" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
+            <span style={{ fontWeight:500 }}>Interne Gerätemiete</span>
+            <span style={{ fontFamily:"var(--font-zahl)", fontVariantNumeric:"tabular-nums", fontWeight:500 }}>{euro(geraeteMiete)}</span>
+          </div>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+            <tbody>
+              {mieteZeilen.map((z, i) => (
+                <tr key={i} style={{ borderTop:"1px solid var(--border)" }}>
+                  <td style={{ padding:"6px 0" }}>{z.bezeichnung}{z.inventarnr && <span style={{ color:"var(--muted)" }}> · {z.inventarnr}</span>}</td>
+                  <td style={{ padding:"6px 0", color:"var(--text2)", fontFamily:"var(--font-zahl)" }}>
+                    {new Date(z.von + "T12:00").toLocaleDateString("de-DE")} – {new Date(z.bis + "T12:00").toLocaleDateString("de-DE")}
+                  </td>
+                  <td style={{ padding:"6px 0", textAlign:"right", color:"var(--text2)", fontFamily:"var(--font-zahl)" }}>{z.tage} × {euro(z.satz)}</td>
+                  <td style={{ padding:"6px 0 6px 12px", textAlign:"right", fontFamily:"var(--font-zahl)", fontVariantNumeric:"tabular-nums" }}>{euro(z.betrag)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ fontSize:12, color:"var(--muted)", marginTop:8 }}>Arbeitstage Mo–Fr ohne Feiertage, Tagessatz aus der Geräteverwaltung. Ist bisher enthält die Miete</div>
+        </div>
+      )}
 
       {/* Kalkulationsübersicht (Soll) — nur anzeigen, wenn es überhaupt
           kalkulierte Positionen gibt, sonst unnötige Leerkarte für Nutzer,
