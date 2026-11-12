@@ -3,9 +3,10 @@ import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
   CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight, ChevronLeft,
   Building2, Calendar, Euro, CloudSun, ChartColumn, FileText, Settings,
   UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree, Archive,
-  ChartLine, Receipt, Landmark, Wallet, Database, Forklift } from "lucide-react";
+  ChartLine, Receipt, Landmark, Wallet, Database, Forklift, FileSignature } from "lucide-react";
 import { useIstDesktop } from "./hooks/useIstDesktop.js";
 import { useGeraete } from "./hooks/useGeraete.js";
+import { useFirmaTabelle } from "./hooks/useFirmaTabelle.js";
 import { DesktopShell } from "./components/DesktopShell.jsx";
 import { useFirmenUebersicht } from "./hooks/useFirmenUebersicht.js";
 import { BaustellenListeView } from "./views/BaustellenListeView.jsx";
@@ -63,6 +64,7 @@ const KiFrageView            = React.lazy(() => import("./views/KiFrageView.jsx"
 const BaustellenAbschlussView = React.lazy(() => import("./views/BaustellenAbschlussView.jsx").then(m => ({ default: m.BaustellenAbschlussView })));
 const SimulationView         = React.lazy(() => import("./views/SimulationView.jsx").then(m => ({ default: m.SimulationView })));
 const KostenView             = React.lazy(() => import("./views/KostenView.jsx").then(m => ({ default: m.KostenView })));
+const RegieView              = React.lazy(() => import("./views/RegieView.jsx").then(m => ({ default: m.RegieView })));
 const GeraeteView            = React.lazy(() => import("./views/GeraeteView.jsx").then(m => ({ default: m.GeraeteView })));
 const FinanzenView           = React.lazy(() => import("./views/FinanzenView.jsx").then(m => ({ default: m.FinanzenView })));
 const CockpitView            = React.lazy(() => import("./views/CockpitView.jsx").then(m => ({ default: m.CockpitView })));
@@ -387,6 +389,8 @@ export default function PolierApp() {
   // Lohnvorerfassung: Lohnarten, Personalnummern, Sollzeiten (lib/lohnvorerfassung.js).
   const [lohnEinstellungen, setLohnEinstellungen, lohnEinstellungenStatus] = useFirmaSpalte(firma?.id, auth.session, "lohn_einstellungen", null);
   const geraeteApi = useGeraete(auth.session, firma?.id);
+  const regieApi = useFirmaTabelle(auth.session, firma?.id, "regieberichte", { filter: { spalte: "projekt_id", wert: aktivId ?? null }, sortierung: "nummer" });
+  const [regieEinstellungen, setRegieEinstellungen] = useFirmaSpalte(firma?.id, auth.session, "regie_einstellungen", null);
   function grundlagenAendern(neu) {
     setKalkulationsgrundlagen(neu);
     setKalkulationspreise(prev => kalkulationspreiseAbleiten(prev, neu));
@@ -1062,6 +1066,8 @@ export default function PolierApp() {
     { id:"wetter",        icon:"🌤️", label:"Wetter",      rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
     { id:"kolonnen",      icon:"👷",  label:"Kolonnen",    rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
     { id:"tagebuch",      icon:"📋",  label:"Tagebuch",    rollen:["administrator","geschaeftsfuehrer","polier"] },
+    // Stundenlohnzettel nach § 15 VOB/B mit Unterschrift des AG (views/RegieView.jsx, lib/regie.js).
+    { id:"regie",         icon:"✍️",  label:"Regie",       rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
     { id:"stempeln",      icon:"⏱️",  label:"Stempeln",    rollen:["administrator","polier","vorarbeiter","facharbeiter"] },
     { id:"stunden",       icon:"📊",  label:"Stunden",     rollen:["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"] },
     // Monatliche Lohnvorerfassung für das Lohnbüro (views/LohnView.jsx).
@@ -1116,7 +1122,7 @@ export default function PolierApp() {
   const TAB_ICONS = { dashboard:LayoutGrid, aufgaben:CircleCheckBig, tagebuch:NotebookPen,
     kolonnen:Users, stempeln:Clock, gantt:Calendar, kosten:Euro, wetter:CloudSun,
     stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, firmen:Building2, profil:User, ki_frage:Sparkles, simulation:FlaskConical, abwesenheiten:Palmtree, abschluss:Archive,
-    leistung:ChartLine, rechnungen:Receipt, finanzen:Landmark, lohn:Wallet, geraete:Forklift };
+    leistung:ChartLine, rechnungen:Receipt, finanzen:Landmark, lohn:Wallet, geraete:Forklift, regie:FileSignature };
 
   // Inhalt des aktiven Tabs — von der Handy-Ansicht und vom Desktop-Rahmen genutzt.
   function tabInhalt() {
@@ -1194,6 +1200,11 @@ export default function PolierApp() {
             // "alle aus seiner Kolonne", nicht firmenweit.
             darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
         {tab === "finanzen"      && <FinanzenView session={auth.session} firmaId={firma?.id} projekte={projekte} eigeneFirma={eigeneFirma} datevEinstellungen={kalkulationsgrundlagen?.datev} />}
+        {tab === "regie"         && <RegieView key={projekt?.id} projekt={projekt} api={regieApi} geraete={geraeteApi.geraete} grundlagen={kalkulationsgrundlagen}
+            kolonnen={kolonnen} einstellungen={regieEinstellungen} setEinstellungen={setRegieEinstellungen} angebote={angebote}
+            onAngebotSpeichern={angebotSpeichern} eigeneFirma={eigeneFirma} land={lohnEinstellungen?.bundesland || "NW"}
+            darfErfassen={["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"].includes(aktiveRolle)}
+            darfAbrechnen={["administrator","geschaeftsfuehrer","bauleiter"].includes(aktiveRolle)} />}
         {tab === "geraete"       && <GeraeteView geraeteApi={geraeteApi} projekte={projekte} grundlagen={kalkulationsgrundlagen}
             darfBearbeiten={["administrator","geschaeftsfuehrer","bauleiter","polier"].includes(aktiveRolle)}
             darfStammdaten={["administrator","geschaeftsfuehrer","bauleiter"].includes(aktiveRolle)} land={lohnEinstellungen?.bundesland || "NW"} />}
@@ -1228,7 +1239,7 @@ export default function PolierApp() {
       einstellungen: ["firmen", "nutzer"], profil: ["profil"], abwesenheiten: ["abwesenheiten"],
     };
     const LABEL = { lohn: "Lohnvorerfassung", stunden: "Stunden-Export", firmen: "Unternehmen", nutzer: "Nutzer", dashboard: "Übersicht",
-      gantt: "Zeitplan", leistung: "Leistung & Soll-Ist", angebot: "Angebote & Nachträge", ki_frage: "KI fragen", simulation: "Simulation", wetter: "Wetter" };
+      gantt: "Zeitplan", regie: "Regieberichte", leistung: "Leistung & Soll-Ist", angebot: "Angebote & Nachträge", ki_frage: "KI fragen", simulation: "Simulation", wetter: "Wetter" };
     const label = id => LABEL[id] || ALLE_TABS.find(t => t.id === id)?.label || id;
     const aktiveProjekte = projekte.filter(p => !p.archiviert);
     const freigaben = firmenDaten.angebote.filter(a => a.interne_freigabe?.status === "angefragt").length;
@@ -1261,7 +1272,7 @@ export default function PolierApp() {
       setTab(erlaubt(tabId) ? tabId : (["aufgaben", "stempeln", "tagebuch", "kolonnen"].find(erlaubt) || tabId));
     };
     const projektReiter = (projekt?.archiviert ? ["abschluss"]
-      : ["dashboard", "aufgaben", "gantt", "tagebuch", "kolonnen", ...(istBuero ? [] : ["stempeln"]), "leistung", "kosten", "angebot", "rechnungen", "abschluss"])
+      : ["dashboard", "aufgaben", "gantt", "tagebuch", "regie", "kolonnen", ...(istBuero ? [] : ["stempeln"]), "leistung", "kosten", "angebot", "rechnungen", "abschluss"])
       .filter(erlaubt).map(id => ({ id, label: label(id) }));
 
     const knopf = (text, onClick, haupt = false) => (

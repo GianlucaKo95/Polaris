@@ -205,3 +205,44 @@ begin
     );
   end if;
 end $$;
+
+-- ═══ Regieberichte / Stundenlohnzettel (1.72) ═══════════════════════════
+-- § 15 VOB/B: Personal, Geräte, Material je Tag, Unterschrift des AG,
+-- Rückgabefrist 6 Werktage. Logik: src/lib/regie.js.
+alter table firmen add column if not exists regie_einstellungen jsonb;   -- { lohnsaetze: [{ bez, satz }], materialZuschlag, fristWerktage }
+create table if not exists regieberichte (
+  id              bigserial primary key,
+  firma_id        int not null references firmen(id) on delete cascade,
+  projekt_id      bigint not null references projekte(id) on delete cascade,
+  nummer          int not null,
+  datum           date not null,
+  beschreibung    text default '',
+  angeordnet_von  text default '',
+  personal        jsonb not null default '[]'::jsonb,
+  geraete         jsonb not null default '[]'::jsonb,
+  material        jsonb not null default '[]'::jsonb,
+  status          text not null default 'entwurf',     -- entwurf | eingereicht | unterschrieben | beanstandet
+  eingereicht_am  date,
+  unterschrift    jsonb,                                -- { name, am, bild (PNG als data-URL) }
+  beanstandung    text default '',
+  abgerechnet_in  jsonb,                                -- { angebot_id, am }
+  erstellt_von    uuid default auth.uid(),
+  created_at      timestamptz default now(),
+  unique (projekt_id, nummer)
+);
+create index if not exists regieberichte_projekt on regieberichte(projekt_id, datum);
+alter table regieberichte enable row level security;
+do $$
+begin
+  if not exists (select 1 from pg_policies where tablename = 'regieberichte' and policyname = 'regieberichte_lesen') then
+    create policy "regieberichte_lesen" on regieberichte for select using (firma_id = eigene_firma_id());
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'regieberichte' and policyname = 'regieberichte_schreiben') then
+    create policy "regieberichte_schreiben" on regieberichte for all using (
+      firma_id = eigene_firma_id() and eigene_rolle() in ('administrator','geschaeftsfuehrer','bauleiter','polier','vorarbeiter')
+    ) with check (
+      firma_id = eigene_firma_id() and eigene_rolle() in ('administrator','geschaeftsfuehrer','bauleiter','polier','vorarbeiter')
+      and projekt_id in (select id from projekte where firma_id = eigene_firma_id())
+    );
+  end if;
+end $$;
