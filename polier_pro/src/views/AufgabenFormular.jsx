@@ -8,6 +8,7 @@ import { AUFGABEN_TYPEN, AUFGABEN_STATUS, AUFGABEN_PRIO, extraFeldLabelFuer,
 import { AufgabenKommentare } from "../components/AufgabenKommentare.jsx";
 import { sbAufgabeSpeichern } from "../lib/supabase.js";
 import { kiMangelAusFoto } from "../lib/ai.js";
+import { useFormularSchutz } from "../hooks/useUngespeichert.js";
 
 export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave, onClose, projektTyp,
   session, firmaId, profil, darfEntscheiden = true, onEntscheiden, nurLesen = false }) {
@@ -18,6 +19,8 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
   const extraLabel = a.typ === "bewehrung" ? BEWEHRUNG_EXTRA_FELD_LABEL : extraFeldLabelFuer(projektTyp);
   const immerExtraFelder = PROJEKTTYPEN_MIT_IMMER_SICHTBAREN_EXTRAFELDERN.includes(projektTyp);
   const [bilder,  setBilder]  = useState([]);
+  // Rückfrage beim Schließen mit ungespeicherten Änderungen (lib/ungespeichert.js)
+  const schutz = useFormularSchutz({ a, bilder: bilder.length }, { titel: initial ? `Die Aufgabe „${initial.titel || initial.name || ""}“` : "Die neue Aufgabe" });
   const [planMode,setPlanMode]= useState(false);
   const [kiMangelLaedt,  setKiMangelLaedt]  = useState(false);
   const [kiMangelFehler, setKiMangelFehler] = useState("");
@@ -139,7 +142,7 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
         <div style={{ color:"var(--yellow)", fontWeight:700, fontSize:17 }}>
           {initial ? "Aufgabe bearbeiten" : "Neue Aufgabe"}
         </div>
-        <button onClick={onClose}
+        <button onClick={async () => { if (await schutz.pruefen()) onClose(); }}
           style={{ background:"var(--surface2)", border:"1px solid var(--border)",
             color:"var(--text)", borderRadius:8, padding:"6px 14px",
             cursor:"pointer", fontSize:14, fontFamily:"inherit", display:"flex" }}>✕</button>
@@ -556,13 +559,13 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
         background:"var(--bg)", borderTop:"1px solid var(--border)",
         padding:"12px 16px", paddingBottom:"calc(12px + env(safe-area-inset-bottom))" }}>
         {nurLesen ? (
-          <button onClick={onClose}
+          <button onClick={async () => { if (await schutz.pruefen()) onClose(); }}
             style={{ flex:1, background:"var(--surface2)", color:"var(--text)",
               border:"1.5px solid var(--border)", padding:16,
               cursor:"pointer", fontFamily:"inherit", fontWeight:700 }}>Schließen</button>
         ) : (
         <>
-        <button onClick={onClose}
+        <button onClick={async () => { if (await schutz.pruefen()) onClose(); }}
           style={{ flex:1, background:"var(--surface2)", color:"var(--muted)",
             border:"1.5px solid var(--border)", padding:16,
             cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}>Abbrechen</button>

@@ -1701,7 +1701,7 @@ export default function PolierApp() {
       {/* ── TOP BAR — dunkler Anker ──
           Kein zusätzlicher Abstand über den Notch/Dynamic-Island-Bereich
           hinaus — jeder Pixel Platz zählt auf dem kleinen Bildschirm. */}
-      <div style={{ background:"var(--ink)", padding:"13px 16px 0",
+      <div data-navigation style={{ background:"var(--ink)", padding:"13px 16px 0",
         paddingTop:"env(safe-area-inset-top)",
         flexShrink:0, zIndex:60 }}>
         <div style={{ display:"flex", justifyContent:"space-between",
@@ -1722,7 +1722,7 @@ export default function PolierApp() {
           <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0 }}>
             <div style={{ width:8, height:8, borderRadius:4, flexShrink:0,
               background: sbConnected ? "#22C55E" : "var(--ink-text2)" }} />
-            <ThemeToggle dark={theme.dark} toggle={theme.toggle} />
+            <span data-navigation-frei style={{ display:"contents" }}><ThemeToggle dark={theme.dark} toggle={theme.toggle} /></span>
             <button onClick={abmelden}
               style={{ width:34, height:34, flexShrink:0,
                 background:"rgba(255,255,255,.08)", border:"none", color:"#fff",
@@ -1767,7 +1767,7 @@ export default function PolierApp() {
           einen Weg, sie nachträglich doch noch zu bearbeiten, und die Tabs
           passen inhaltlich schlicht nicht zu einer geschlossenen Baustelle. */}
       {!projekt?.archiviert && (
-      <div style={{ flexShrink:0,
+      <div data-navigation style={{ flexShrink:0,
         background:"var(--surface)", borderTop:"1px solid var(--border)",
         display:"flex", padding:"6px 6px",
         paddingBottom:"max(4px, calc(env(safe-area-inset-bottom) - 14px))" }}>
@@ -1788,7 +1788,7 @@ export default function PolierApp() {
           );
         })}
         {mehrTabs.length > 0 && (
-          <button onClick={() => setZeigeMehr(m => !m)}
+          <button onClick={() => setZeigeMehr(m => !m)} data-navigation-frei
             style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center",
               gap:4, background:"none", border:"none", cursor:"pointer", fontFamily:"inherit",
               color: (aktivInMehr || zeigeMehr) ? "var(--ink)" : "var(--muted)" }}>
@@ -1807,7 +1807,7 @@ export default function PolierApp() {
         <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0,
           background:"rgba(11,17,32,0.55)", zIndex:60 }}
           onClick={() => setZeigeMehr(false)}>
-          <div onClick={e => e.stopPropagation()}
+          <div onClick={e => e.stopPropagation()} data-navigation
             style={{ position:"absolute", bottom:0, left:0, right:0,
               background:"var(--surface)", transform:`translateY(${mehrDragY}px)`,
               transition: mehrDragging ? "none" : "transform 0.25s ease",

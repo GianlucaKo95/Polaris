@@ -136,8 +136,11 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
     return <AngebotEditor
       angebot={aktAngebot}
       onSave={async a => {
+        // Zwischenspeichern: der Editor bleibt offen. Rückgabe = Erfolg (ohne Anmeldung zählt der lokale Stand)
         const gespeichert = await onAngebotSpeichern?.(a, false);
+        if (!gespeichert && session?.access_token) return null;
         setAktAngebot(gespeichert || a);
+        return gespeichert || a;
       }}
       onClose={() => setAktAngebot(null)}
       aufgaben={aufgaben}

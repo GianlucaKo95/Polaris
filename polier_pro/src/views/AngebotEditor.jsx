@@ -32,6 +32,8 @@ import { gaebX84Schreiben } from "../lib/gaebX84.js";
 import { efbAuswerten, efbHtml } from "../lib/efb.js";
 import { Co2Panel } from "../components/Co2Panel.jsx";
 import { useIstDesktop } from "../hooks/useIstDesktop.js";
+import { useUngespeichert } from "../hooks/useUngespeichert.js";
+import { verlassenBestaetigen } from "../lib/ungespeichert.js";
 import { PreisstandPanel } from "../components/PreisstandPanel.jsx";
 import { preisstandAnlegen, preiseFuer, zuschlaegeFuer, istEingefroren, einfrieren } from "../lib/preisstand.js";
 import { Menue } from "../components/Menue.jsx";
@@ -506,19 +508,61 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
     const neu = { ...a, interne_freigabe: { status, von: profil ? [profil.vorname, profil.nachname].filter(Boolean).join(" ") : "", am: new Date().toISOString(), ...(notiz ? { notiz } : {}) } };
     setARoh(neu);
     setSpeichertLaedt(true);
-    try { await onSave(neu); } finally { setSpeichertLaedt(false); }
+    try { if (await onSave(neu)) alsGespeichertMerken(neu); } finally { setSpeichertLaedt(false); }
   }
 
+  // Speichern ohne den Editor zu schließen (Zwischenspeichern). Gibt true bei
+  // Erfolg zurück — der Verlassen-Dialog (lib/ungespeichert.js) nutzt das.
   async function speichernKlick() {
-    if (gesperrt) return;
+    if (gesperrt) return true;
     setSpeichertLaedt(true);
+    setSpeicherFehler("");
     try {
       // Mit der Annahme wird der Preisstand zur Urkalkulation (die Datenbank hält ihn zusätzlich per Trigger fest)
-      await onSave(a.status === "angenommen" ? { ...a, preisstand: einfrieren(a.preisstand, new Date().toLocaleDateString("sv-SE")) } : a);
+      const stand = a.status === "angenommen" ? { ...a, preisstand: einfrieren(a.preisstand, new Date().toLocaleDateString("sv-SE")) } : a;
+      const ok = await onSave(stand);
+      if (ok) { alsGespeichertMerken(stand); return true; }
+      setSpeicherFehler("Speichern fehlgeschlagen. Die Änderungen sind lokal gesichert, bitte erneut versuchen");
+      return false;
+    } catch {
+      setSpeicherFehler("Speichern fehlgeschlagen. Die Änderungen sind lokal gesichert, bitte erneut versuchen");
+      return false;
     } finally {
       setSpeichertLaedt(false);
     }
   }
+
+  // ── Ungespeicherte Änderungen: Merker, lokale Sicherung, Rückfrage ──
+  const entwurfKey = `polaris.angebotEntwurf.${angebot.id ?? "neu"}`;
+  const basis = useRef(JSON.stringify(a));
+  const [gespeichertAm, setGespeichertAm] = useState(null);
+  const [speicherFehler, setSpeicherFehler] = useState("");
+  const [lokalerEntwurf, setLokalerEntwurf] = useState(() => {
+    try {
+      const e = JSON.parse(localStorage.getItem(entwurfKey) || "null");
+      return e?.a && JSON.stringify(e.a) !== basis.current ? e : null;
+    } catch { return null; }
+  });
+  const aJson = useMemo(() => JSON.stringify(a), [a]);
+  const geaendert = !gesperrt && aJson !== basis.current;
+  function entwurfLoeschen() { try { localStorage.removeItem(entwurfKey); } catch { /* egal */ } }
+  function alsGespeichertMerken(stand) { basis.current = JSON.stringify(stand); setARoh(stand); setGespeichertAm(new Date()); entwurfLoeschen(); }
+  useEffect(() => {
+    if (!geaendert || lokalerEntwurf) return undefined;
+    const t = setTimeout(() => { try { localStorage.setItem(entwurfKey, JSON.stringify({ a, zeit: new Date().toISOString() })); } catch { /* Speicher voll */ } }, 1000);
+    return () => clearTimeout(t);
+  }, [aJson, geaendert, lokalerEntwurf]);
+  useUngespeichert(geaendert, { titel: `Das Angebot „${a.titel || "ohne Titel"}“`, speichern: speichernKlick, verwerfen: entwurfLoeschen });
+  useEffect(() => {
+    const taste = e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); speichernKlick(); } };
+    window.addEventListener("keydown", taste);
+    return () => window.removeEventListener("keydown", taste);
+  });
+  const schliessen = async () => { if (await verlassenBestaetigen()) onClose(); };
+  const speicherStatus = speicherFehler ? <span role="alert" style={{ color:"var(--red)" }}>{speicherFehler}</span>
+    : speichertLaedt ? "Speichert …"
+    : geaendert ? <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}><span aria-hidden="true" style={{ width:6, height:6, borderRadius:3, background:"var(--akzent)" }} />Nicht gespeichert</span>
+    : gespeichertAm ? `Gespeichert ${gespeichertAm.toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" })}` : null;
 
   function exportPDF() {
     // .filter(Boolean): eine leere eigeneFirma.strasse/.telefon ließ sonst
@@ -851,7 +895,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
     );
     return (
       <div style={{ marginBottom:24 }}>
-        <button onClick={onClose} className="desk-nav"
+        <button onClick={schliessen} className="desk-nav"
           style={{ display:"inline-flex", alignItems:"center", gap:4, height:28, padding:"0 8px 0 4px", marginLeft:-4,
             background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontFamily:"inherit", fontSize:13 }}>
           <ChevronLeft size={16} strokeWidth={1.5} /> Alle Angebote
@@ -868,6 +912,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               {a.datum && <span style={{ ...zahl, fontSize:13 }}>{new Date(a.datum).toLocaleDateString("de-DE")}</span>}
               {nachtragZu && <span>· Nachtrag</span>}
               {gesperrt && <span>· angenommen und gesperrt</span>}
+              {speicherStatus && <span style={{ fontSize:13, marginLeft:8 }}>{speicherStatus}</span>}
             </div>
           </div>
           <div style={{ display:"flex", gap:8, flexShrink:0 }}>
@@ -1130,7 +1175,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
         borderBottom:"1px solid var(--border)", position:"sticky", top:0,
         zIndex:10, display:"flex", justifyContent:"space-between",
         alignItems:"center" }}>
-        <button onClick={onClose}
+        <button onClick={schliessen}
           style={{ background:"var(--surface2)", border:"1.5px solid var(--border)",
             color:"var(--text)", borderRadius:10, padding:"7px 14px",
             cursor:"pointer", fontFamily:"inherit", display:"flex" }}><ChevronLeft size={16} /></button>
@@ -1159,6 +1204,18 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
       )}
 
       <div style={istDesktop ? { padding:"0 0 48px" } : { padding:"16px 14px 100px" }}>
+        {lokalerEntwurf && !gesperrt && (
+          <div role="status" style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap", background:"var(--surface)", border:"1px solid var(--akzent)",
+            borderRadius:12, padding:"12px 16px", marginBottom:16 }}>
+            <span style={{ flex:1, minWidth:220 }}>
+              Ungespeicherter Stand vom {new Date(lokalerEntwurf.zeit).toLocaleString("de-DE", { dateStyle:"short", timeStyle:"short" })} gefunden, zum Beispiel nach einem Absturz oder geschlossenen Tab
+            </span>
+            <button onClick={() => { setARoh(lokalerEntwurf.a); setLokalerEntwurf(null); }}
+              style={{ height:32, padding:"0 12px", borderRadius:8, border:"none", background:"var(--text)", color:"var(--surface)", fontFamily:"inherit", fontSize:14, cursor:"pointer" }}>Wiederherstellen</button>
+            <button onClick={() => { entwurfLoeschen(); setLokalerEntwurf(null); }}
+              style={{ height:32, padding:"0 12px", borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface)", color:"var(--text)", fontFamily:"inherit", fontSize:14, cursor:"pointer" }}>Verwerfen</button>
+          </div>
+        )}
         {/* Summen-Banner */}
         {(() => {
           const f = n => n.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1734,6 +1791,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
               {gesperrt ? "Gesperrt" : speichertLaedt ? <><Spinner size={14} /> Speichert…</> : "Angebot speichern"}
             </button>
+            {speicherStatus && <div style={{ fontSize:13, color:"var(--text2)", marginTop:8, textAlign:"center" }}>{speicherStatus}</div>}
             </div>
           </div>
         )}

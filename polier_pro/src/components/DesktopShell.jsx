@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PolarisMarke } from "./PolarisMarke.jsx";
 import { emojiAusTextknoten } from "../lib/utils.js";
+import { verlassenBestaetigen } from "../lib/ungespeichert.js";
 import { LogOut, Moon, Sun, Search, User, Palmtree } from "lucide-react";
 
 // Desktop-Rahmen (ab 1024 px): Seitenleiste nach Arbeitsbereichen, Kopf mit
@@ -55,7 +56,7 @@ export function DesktopShell({
 
   return (
     <div style={{ height: "100dvh", display: "flex", background: "var(--bg)", color: "var(--text)", fontSize: 14, lineHeight: "20px" }}>
-      <nav aria-label="Hauptnavigation" className="desk-leiste" style={{ width: 248, flexShrink: 0, boxSizing: "border-box", padding: "20px 12px 16px",
+      <nav aria-label="Hauptnavigation" data-navigation className="desk-leiste" style={{ width: 248, flexShrink: 0, boxSizing: "border-box", padding: "20px 12px 16px",
         background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", overflowY: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 8px", marginBottom: 16 }}>
           <PolarisMarke />
@@ -63,7 +64,7 @@ export function DesktopShell({
             style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: 4, background: verbunden ? "var(--green)" : "var(--muted)" }} />
         </div>
 
-        <button onClick={() => setSuche(true)} className="desk-nav"
+        <button onClick={() => setSuche(true)} data-navigation-frei className="desk-nav"
           style={{ ...zeile(false), border: "1px solid var(--border2)", marginBottom: 16, color: "var(--muted)" }}>
           <Search size={16} strokeWidth={1.5} aria-hidden="true" />
           <span style={{ flexGrow: 1, whiteSpace: "nowrap" }}>Suchen</span>
@@ -90,7 +91,7 @@ export function DesktopShell({
             {onProfil && <button onClick={onProfil} aria-label="Mein Profil" title="Mein Profil" style={symbol}><User size={16} strokeWidth={1.5} /></button>}
             {onAbwesenheit && <button onClick={onAbwesenheit} aria-label="Abwesenheit" title="Abwesenheit" style={symbol}><Palmtree size={16} strokeWidth={1.5} /></button>}
             <div style={{ flexGrow: 1 }} />
-            <button onClick={onThemeWechsel} aria-label={dark ? "Helles Design" : "Dunkles Design"} title={dark ? "Helles Design" : "Dunkles Design"} style={symbol}>
+            <button onClick={onThemeWechsel} data-navigation-frei aria-label={dark ? "Helles Design" : "Dunkles Design"} title={dark ? "Helles Design" : "Dunkles Design"} style={symbol}>
               {dark ? <Sun size={16} strokeWidth={1.5} /> : <Moon size={16} strokeWidth={1.5} />}
             </button>
             <button onClick={onAbmelden} aria-label="Abmelden" title="Abmelden" style={symbol}><LogOut size={16} strokeWidth={1.5} /></button>
@@ -101,16 +102,16 @@ export function DesktopShell({
       <main style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
         <div className="desk-inhalt" style={{ maxWidth: 1360, boxSizing: "border-box", padding: "32px 32px 48px" }}>
           <header style={{ marginBottom: reiter?.length ? 16 : 24 }}>
-            {kopfzeile && <div style={{ fontSize: 13, color: "var(--text2)", marginBottom: 4 }}>{kopfzeile}</div>}
+            {kopfzeile && <div data-navigation style={{ fontSize: 13, color: "var(--text2)", marginBottom: 4 }}>{kopfzeile}</div>}
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: 16 }}>
               <div style={{ minWidth: 0 }}>
                 <h1 style={{ margin: 0, fontSize: 28, lineHeight: "36px", fontWeight: 500, letterSpacing: "-0.01em" }}>{titel}</h1>
                 {untertitel && <div style={{ color: "var(--text2)", marginTop: 4 }}>{untertitel}</div>}
               </div>
-              {aktionen && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{aktionen}</div>}
+              {aktionen && <div data-navigation style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{aktionen}</div>}
             </div>
             {reiter?.length > 0 && (
-              <div role="tablist" style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 20, borderBottom: "1px solid var(--border)" }}>
+              <div role="tablist" data-navigation style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 20, borderBottom: "1px solid var(--border)" }}>
                 {reiter.map(r => {
                   const aktiv = aktiverReiter === r.id;
                   return (
@@ -143,7 +144,8 @@ function Befehlspalette({ befehle, onSchliessen }) {
     .filter(b => b.immer || !q || b.label.toLowerCase().includes(q) || (b.suchtext || "").toLowerCase().includes(q))
     .slice(0, 12), [befehle, q]);
   useEffect(() => { setIndex(0); }, [q]);
-  const ausfuehren = b => { onSchliessen(); b.aktion(text.trim()); };
+  // Wechselt die Ansicht: bei ungespeicherten Änderungen erst nachfragen (lib/ungespeichert.js)
+  const ausfuehren = async b => { onSchliessen(); const t = text.trim(); if (await verlassenBestaetigen()) b.aktion(t); };
   const taste = e => {
     if (e.key === "Escape") onSchliessen();
     else if (e.key === "ArrowDown") { e.preventDefault(); setIndex(i => Math.min(treffer.length - 1, i + 1)); }

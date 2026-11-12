@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 import { Label, inputStyle } from "../components/Label.jsx";
+import { useFormularSchutz } from "../hooks/useUngespeichert.js";
 
 const KATEGORIEN = [
   ["lohn", "Lohn"],
@@ -20,6 +21,8 @@ function parsePreis(wert) {
 // EP-Kalkulation pro Position zusammengesetzt wird.
 export function KalkulationspreisFormular({ initial, onSave, onClose }) {
   const [p, setP] = useState(initial || { kategorie:"lohn", bezeichnung:"", einheit:"h", preis:0 });
+  // Rückfrage beim Schließen mit ungespeicherten Änderungen (lib/ungespeichert.js)
+  const schutz = useFormularSchutz(p, { titel: "Der Kalkulationspreis" });
   const gueltig = p.bezeichnung?.trim() && Number.isFinite(p.preis) && p.preis >= 0;
   return (
     <div>
@@ -30,7 +33,7 @@ export function KalkulationspreisFormular({ initial, onSave, onClose }) {
           display:"flex", alignItems:"center", gap:7 }}>
           {initial?.id ? <><Pencil size={15} /> Kalkulationspreis bearbeiten</> : <><Plus size={15} /> Neuer Kalkulationspreis</>}
         </div>
-        <button onClick={onClose} style={{ background:"none", border:"none",
+        <button onClick={async () => { if (await schutz.pruefen()) onClose(); }} style={{ background:"none", border:"none",
           color:"var(--muted)", fontSize:24, cursor:"pointer" }}>✕</button>
       </div>
 
@@ -65,7 +68,7 @@ export function KalkulationspreisFormular({ initial, onSave, onClose }) {
       </div>
 
       <div style={{ display:"flex", gap:10 }}>
-        <button onClick={onClose} style={{ flex:1, background:"var(--surface2)",
+        <button onClick={async () => { if (await schutz.pruefen()) onClose(); }} style={{ flex:1, background:"var(--surface2)",
           color:"var(--muted)", border:"1.5px solid var(--border)", borderRadius:12,
           padding:13, cursor:"pointer", fontFamily:"inherit" }}>Abbrechen</button>
         <button onClick={() => gueltig && onSave(p)} disabled={!gueltig}

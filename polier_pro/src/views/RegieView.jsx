@@ -7,6 +7,8 @@ import { tagessatz } from "../lib/geraete.js";
 import {
   REGIE_STANDARD, regieSummen, regieStand, abrechenbar, naechsteNummer, regieAlsPositionen, leererBericht, regieHtml,
 } from "../lib/regie.js";
+import { useUngespeichert } from "../hooks/useUngespeichert.js";
+import { verlassenBestaetigen } from "../lib/ungespeichert.js";
 
 // Regieberichte (Stundenlohnzettel) einer Baustelle: links die Liste mit
 // Rückgabefrist nach § 15 VOB/B, rechts (Handy: eigene Seite) der Bericht mit
@@ -103,10 +105,11 @@ export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [
   const geraeteHier = geraete.filter(g => g.status !== "ausgemustert")
     .sort((a, b) => (String(b.projekt_id) === String(projekt?.id)) - (String(a.projekt_id) === String(projekt?.id)));
 
-  const neu = () => {
+  const neu = async () => {
+    if (geaendert && !(await verlassenBestaetigen())) return;
     setAuswahlId("neu"); setMeldung(null);
     setEntwurf(leererBericht(projekt.id, naechsteNummer(berichte), heute));
-    setGeaendert(true);
+    setGeaendert(false);
   };
   async function sichern(b = entwurf, text = "Gespeichert") {
     if (!b.beschreibung?.trim()) { setMeldung("Bitte die ausgeführte Leistung beschreiben"); return null; }
@@ -114,6 +117,8 @@ export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [
     if (g) { setAuswahlId(g.id); setEntwurf(structuredClone(g)); setGeaendert(false); setMeldung(text); }
     return g;
   }
+  useUngespeichert(geaendert && !!entwurf, { titel: `Der Regiebericht ${entwurf?.nummer ?? ""}`, speichern: async () => !!(await sichern()) });
+  const waehlen = async id => { if (geaendert && !(await verlassenBestaetigen())) return; setGeaendert(false); setAuswahlId(id); setSaetzeOffen(false); setMeldung(null); };
   const drucken = b => {
     const w = window.open("", "_blank");
     if (!w) { setMeldung("Der Browser hat das Druckfenster blockiert"); return; }
@@ -181,7 +186,7 @@ export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [
                 const aktiv = b.id === auswahlId;
                 const kannMarkieren = darfAbrechnen && st.stand === "anerkannt";
                 return (
-                  <tr key={b.id} className="desk-zeile" onClick={() => { setAuswahlId(b.id); setSaetzeOffen(false); setMeldung(null); }}
+                  <tr key={b.id} className="desk-zeile" onClick={() => waehlen(b.id)}
                     style={{ borderTop: "1px solid var(--border)", cursor: "pointer", background: aktiv ? "var(--bg)" : undefined,
                       boxShadow: aktiv ? "inset 2px 0 0 var(--akzent)" : undefined }}>
                     {darfAbrechnen && (
@@ -264,7 +269,7 @@ export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [
     const gesperrt = !darfErfassen || b.status === "unterschrieben" || !!b.abgerechnet_in;
     return (
       <div>
-        {!istDesktop && <button onClick={() => setAuswahlId(null)} style={{ ...leise, paddingLeft: 0, marginBottom: 8 }}><ArrowLeft size={16} strokeWidth={1.5} /> Alle Regieberichte</button>}
+        {!istDesktop && <button onClick={() => waehlen(null)} style={{ ...leise, paddingLeft: 0, marginBottom: 8 }}><ArrowLeft size={16} strokeWidth={1.5} /> Alle Regieberichte</button>}
         <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
           <div style={{ fontSize: 18, fontWeight: 500 }}>Regiebericht <span style={zahl}>{b.nummer}</span></div>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text2)" }}><Punkt stand={st.stand} />{st.text}</span>

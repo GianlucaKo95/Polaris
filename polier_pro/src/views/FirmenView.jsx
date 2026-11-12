@@ -6,6 +6,7 @@ import { Chip } from "../components/Chip.jsx";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { SwipeToDelete } from "../components/SwipeToDelete.jsx";
 import { Spinner } from "../components/Spinner.jsx";
+import { useFormularSchutz } from "../hooks/useUngespeichert.js";
 
 export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboardingReset, session = null, firmaId = null, firma = null, projekte = [] }) {
   const [screen, setScreen]     = useState("home"); // home | eigene | subs | subEdit
@@ -14,6 +15,10 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
   const [tmpFirma, setTmpFirma] = useState(owneFirma);
   const [speichern, setSpeichern] = useState(false);
   const [speicherFehler, setSpeicherFehler] = useState("");
+  // Rückfrage beim Zurückgehen mit ungespeicherten Firmendaten bzw. Nachunternehmer-Angaben
+  const schutzEigene = useFormularSchutz(tmpFirma, { titel: "Das Formular Firmendaten", aktiv: screen === "eigene", basisSchluessel: screen });
+  const schutzSub = useFormularSchutz(editSub, { titel: "Der Nachunternehmer", aktiv: screen === "subEdit", basisSchluessel: `${screen}:${editSub?.id ?? "neu"}` });
+  const zurueck = async () => { if (await schutzEigene.pruefen() && await schutzSub.pruefen()) setScreen("home"); };
   // PLAN_CONFIG nur als Startwert/Fallback — siehe PlanGuard.jsx für
   // dieselbe Begründung, einzige echte Quelle ist plan_config in der DB.
   const [planConfig, setPlanConfig] = useState(PLAN_CONFIG);
@@ -251,7 +256,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
       {screen === "eigene" && (
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-            <button onClick={() => setScreen("home")}
+            <button onClick={zurueck}
               style={{ background: "var(--border)", border:"none", color: "var(--text)", borderRadius:8,
                 padding:"6px 10px", cursor:"pointer", display:"flex" }}><ChevronLeft size={16} /></button>
             <div style={{ color: "var(--yellow)", fontWeight:700, fontSize:16,
@@ -369,7 +374,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
       {screen === "abo" && firma?.id && session && (
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-            <button onClick={() => setScreen("home")}
+            <button onClick={zurueck}
               style={{ background: "var(--border)", border:"none", color: "var(--text)", borderRadius:8,
                 padding:"6px 10px", cursor:"pointer", display:"flex" }}><ChevronLeft size={16} /></button>
             <div style={{ color: "var(--yellow)", fontWeight:700, fontSize:16,
@@ -513,7 +518,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
       {screen === "subEdit" && editSub && (
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-            <button onClick={() => setScreen("home")}
+            <button onClick={zurueck}
               style={{ background: "var(--border)", border:"none", color: "var(--text)", borderRadius:8,
                 padding:"6px 10px", cursor:"pointer", display:"flex" }}><ChevronLeft size={16} /></button>
             <div style={{ color: "var(--yellow)", fontWeight:700, fontSize:16,
@@ -595,7 +600,7 @@ export function FirmenView({ owneFirma, setEigeneFirma, subs, setSubs, onOnboard
                 style={{ background:"#2E1A1A", color: "var(--red)", border:`1px solid ${'var(--red)'}`,
                   borderRadius:10, padding:"12px 16px", cursor:"pointer", display:"flex" }}><Trash2 size={16} /></button>
             )}
-            <button onClick={() => setScreen("home")}
+            <button onClick={zurueck}
               style={{ flex:1, background: "var(--border)", color: "var(--muted)", border:"none", borderRadius:10, padding:13, cursor:"pointer" }}>
               Abbrechen
             </button>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 import { Label, inputStyle } from "../components/Label.jsx";
+import { useFormularSchutz } from "../hooks/useUngespeichert.js";
 
 function parsePreis(wert) {
   // Deutsche Eingabe mit Komma statt Punkt zulassen (z.B. "12,50").
@@ -10,6 +11,8 @@ function parsePreis(wert) {
 
 export function PreisFormular({ initial, onSave, onClose }) {
   const [p, setP] = useState(initial || { gewerk:"", einheit:"m²", preis:0, beschreibung:"" });
+  // Rückfrage beim Schließen mit ungespeicherten Änderungen (lib/ungespeichert.js)
+  const schutz = useFormularSchutz(p, { titel: "Der Einheitspreis" });
   const gueltig = p.gewerk?.trim() && p.beschreibung?.trim()
     && Number.isFinite(p.preis) && p.preis >= 0;
   return (
@@ -21,7 +24,7 @@ export function PreisFormular({ initial, onSave, onClose }) {
           display:"flex", alignItems:"center", gap:7 }}>
           {initial?.id ? <><Pencil size={15} /> Preis bearbeiten</> : <><Plus size={15} /> Neuer Einheitspreis</>}
         </div>
-        <button onClick={onClose} style={{ background:"none", border:"none",
+        <button onClick={async () => { if (await schutz.pruefen()) onClose(); }} style={{ background:"none", border:"none",
           color:"var(--muted)", fontSize:24, cursor:"pointer" }}>✕</button>
       </div>
       {[["Gewerk","gewerk","z.B. Betonage"],["Beschreibung","beschreibung","z.B. Beton C25/30 inkl. Einbau"]].map(([l,k,ph]) => (
@@ -47,7 +50,7 @@ export function PreisFormular({ initial, onSave, onClose }) {
         </div>
       </div>
       <div style={{ display:"flex", gap:10 }}>
-        <button onClick={onClose} style={{ flex:1, background:"var(--surface2)",
+        <button onClick={async () => { if (await schutz.pruefen()) onClose(); }} style={{ flex:1, background:"var(--surface2)",
           color:"var(--muted)", border:"1.5px solid var(--border)", borderRadius:12,
           padding:13, cursor:"pointer", fontFamily:"inherit" }}>Abbrechen</button>
         <button onClick={() => gueltig && onSave(p)} disabled={!gueltig}

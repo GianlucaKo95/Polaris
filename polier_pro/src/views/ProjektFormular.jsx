@@ -10,10 +10,13 @@ import { kiBaustelleAnlegen } from "../lib/ai.js";
 import { sbFetch } from "../lib/supabase.js";
 import { KundenportalFreigabe } from "../components/KundenportalFreigabe.jsx";
 import { ProjektDokumente } from "../components/ProjektDokumente.jsx";
+import { useFormularSchutz } from "../hooks/useUngespeichert.js";
 
 export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherFehler = "", session, istAdmin = false,
   firmaId, profil }) {
   const [p, setP] = useState(initial || leerProjekt());
+  // Rückfrage beim Schließen mit ungespeicherten Änderungen (lib/ungespeichert.js)
+  const schutz = useFormularSchutz(p, { titel: initial ? `Die Baustelle „${initial.name || ""}“` : "Die neue Baustelle" });
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
   const [kiDiktat,  setKiDiktat]  = useState("");
   const [kiLaedt,   setKiLaedt]   = useState(false);
@@ -119,7 +122,7 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
           display:"flex", alignItems:"center", gap:8 }}>
           {initial?.name ? <><Pencil size={15} /> Baustelle bearbeiten</> : <><Plus size={15} /> Neue Baustelle</>}
         </div>
-        <button onClick={onClose}
+        <button onClick={async () => { if (await schutz.pruefen()) onClose(); }}
           style={{ background:"var(--surface2)", border:"1px solid var(--border)",
             color:"var(--text)", borderRadius:8, padding:"6px 14px",
             cursor:"pointer", fontSize:14, fontFamily:"inherit", display:"flex" }}><X size={15} /></button>
@@ -133,7 +136,7 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
             display:"flex", alignItems:"center", gap:8 }}>
             {initial?.name ? <><Pencil size={15} /> Baustelle bearbeiten</> : <><Plus size={15} /> Neue Baustelle</>}
           </div>
-          <button onClick={onClose}
+          <button onClick={async () => { if (await schutz.pruefen()) onClose(); }}
             style={{ background:"none", border:"none", color:"var(--muted)",
               cursor:"pointer", display:"flex" }}><X size={20} /></button>
         </div>
@@ -339,7 +342,7 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
         )}
 
         <div style={{ display:"flex", gap:10 }}>
-          <button onClick={onClose}
+          <button onClick={async () => { if (await schutz.pruefen()) onClose(); }}
             style={{ flex:1, background:"var(--surface2)", color:"var(--muted)",
               border:"1.5px solid var(--border)", borderRadius:12, padding:14,
               cursor:"pointer", fontFamily:"inherit" }}>

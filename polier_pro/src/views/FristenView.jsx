@@ -5,6 +5,8 @@ import {
   SICHERHEIT_ARTEN, FRIST_ARTEN, sicherheitLabel, fristLabel, gewaehrleistungsEnde, rueckgabeDatum, avalkostenJahr, terminListe, stand,
   neueSicherheit, neueFrist,
 } from "../lib/fristen.js";
+import { useUngespeichert } from "../hooks/useUngespeichert.js";
+import { verlassenBestaetigen } from "../lib/ungespeichert.js";
 
 // Sicherheiten und Fristen über alle Baustellen: anstehende Termine,
 // Bürgschaften und Bareinbehalte, Gewährleistungs- und Vertragsfristen.
@@ -51,11 +53,17 @@ export function FristenView({ projekte = [], sicherheitenApi, fristenApi }) {
   const gewaehlt = auswahl && auswahl.id !== "neu"
     ? (auswahl.typ === "sicherheit" ? sicherheiten : fristen).find(x => x.id === auswahl.id) : null;
   useEffect(() => { if (auswahl?.id !== "neu") setEntwurf(gewaehlt ? structuredClone(gewaehlt) : null); }, [auswahl?.typ, auswahl?.id, gewaehlt]);
-  const oeffnen = (typ, id) => { setAuswahl({ typ, id }); setMeldung(null); };
-  const neu = typ => {
+  // Ungespeicherte Änderungen: Entwurf weicht vom gespeicherten Eintrag ab (oder neuer Eintrag mit Inhalt)
+  const [vorlage, setVorlage] = useState(null);   // Ausgangsstand eines neuen Eintrags
+  const geaendert = !!entwurf && JSON.stringify(entwurf) !== JSON.stringify(auswahl?.id === "neu" ? vorlage : gewaehlt);
+  useUngespeichert(geaendert, { titel: auswahl?.typ === "sicherheit" ? "Die Sicherheit" : "Die Frist", speichern: async () => !!(await sichern()) });
+  const oeffnen = async (typ, id) => { if (geaendert && !(await verlassenBestaetigen())) return; setAuswahl({ typ, id }); setMeldung(null); };
+  const neu = async typ => {
+    if (geaendert && !(await verlassenBestaetigen())) return;
     const teil = { projekt_id: baustelle ? Number(baustelle) : null };
     setAuswahl({ typ, id: "neu" });
-    setEntwurf(typ === "sicherheit" ? neueSicherheit(teil) : neueFrist({ ...teil, abnahme_am: abnahmeJeProjekt[teil.projekt_id] || null }));
+    const v = typ === "sicherheit" ? neueSicherheit(teil) : neueFrist({ ...teil, abnahme_am: abnahmeJeProjekt[teil.projekt_id] || null });
+    setVorlage(v); setEntwurf(structuredClone(v));
     setMeldung(null);
   };
   const aendern = t => setEntwurf(e => ({ ...e, ...t }));
@@ -63,6 +71,7 @@ export function FristenView({ projekte = [], sicherheitenApi, fristenApi }) {
     const api = auswahl.typ === "sicherheit" ? sicherheitenApi : fristenApi;
     const g = await api.speichern(e);
     if (g) { setAuswahl({ typ: auswahl.typ, id: g.id }); setEntwurf(structuredClone(g)); setMeldung(text); }
+    return !!g;
   }
   async function entfernen() {
     if (!window.confirm("Eintrag löschen?")) return;
@@ -307,7 +316,7 @@ export function FristenView({ projekte = [], sicherheitenApi, fristenApi }) {
   );
 
   if (!istDesktop) return <div className="eigen-felder">{formular ? <div style={{ background: "var(--surface)", borderRadius: 12, padding: 16 }}>
-    <button onClick={() => { setAuswahl(null); setEntwurf(null); }} style={{ ...knopf(), border: "none", background: "none", paddingLeft: 0, color: "var(--text2)", marginBottom: 8 }}>Zurück</button>{formular}</div> : links}</div>;
+    <button onClick={async () => { if (geaendert && !(await verlassenBestaetigen())) return; setAuswahl(null); setEntwurf(null); }} style={{ ...knopf(), border: "none", background: "none", paddingLeft: 0, color: "var(--text2)", marginBottom: 8 }}>Zurück</button>{formular}</div> : links}</div>;
   return (
     <div className="eigen-felder" style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
       {links}

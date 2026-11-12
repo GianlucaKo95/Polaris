@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { ClipboardList, Plus } from "lucide-react";
 import { Label, inputStyle } from "../components/Label.jsx";
+import { useFormularSchutz } from "../hooks/useUngespeichert.js";
 
 export function VorlageFormular({ initial, einheitspreise, onSave, onClose }) {
   const [v, setV] = useState(initial || { name:"", gewerk:"", positionen:[] });
+  // Rückfrage beim Schließen mit ungespeicherten Änderungen (lib/ungespeichert.js)
+  const schutz = useFormularSchutz(v, { titel: "Die LV-Vorlage" });
 
   function addPosition() {
     setV(x => ({ ...x, positionen:[...x.positionen,
@@ -21,7 +24,7 @@ export function VorlageFormular({ initial, einheitspreise, onSave, onClose }) {
         position:"sticky", top:0, background:"var(--surface)", zIndex:5 }}>
         <div style={{ color:"var(--yellow)", fontWeight:700, fontSize:16,
           display:"flex", alignItems:"center", gap:7 }}><ClipboardList size={15} /> Neue LV-Vorlage</div>
-        <button onClick={onClose} style={{ background:"none", border:"none",
+        <button onClick={async () => { if (await schutz.pruefen()) onClose(); }} style={{ background:"none", border:"none",
           color:"var(--muted)", fontSize:24, cursor:"pointer" }}>✕</button>
       </div>
       <div style={{ marginBottom:9 }}>
@@ -63,7 +66,7 @@ export function VorlageFormular({ initial, einheitspreise, onSave, onClose }) {
         </div>
       ))}
       <div style={{ display:"flex", gap:10, marginTop:16 }}>
-        <button onClick={onClose} style={{ flex:1, background:"var(--surface2)",
+        <button onClick={async () => { if (await schutz.pruefen()) onClose(); }} style={{ flex:1, background:"var(--surface2)",
           color:"var(--muted)", border:"1.5px solid var(--border)", borderRadius:12,
           padding:13, cursor:"pointer", fontFamily:"inherit" }}>Abbrechen</button>
         <button onClick={() => v.name && onSave(v)}

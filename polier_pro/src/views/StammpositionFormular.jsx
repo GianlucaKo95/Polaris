@@ -3,6 +3,7 @@ import { Pencil, Plus, X } from "lucide-react";
 import { Label, inputStyle } from "../components/Label.jsx";
 import { KALKULATIONSPREIS_KATEGORIEN } from "./KalkulationspreisFormular.jsx";
 import { leereStammposition, stammpositionEp, stammpositionZeitansatz, variablenWerte, zeilenMenge, formelFehler } from "../lib/stammpositionen.js";
+import { useFormularSchutz } from "../hooks/useUngespeichert.js";
 
 const EINHEITEN = ["m²", "m³", "m", "Stk", "t", "kg", "h", "Psch"];
 
@@ -19,6 +20,8 @@ const euro = n => n.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumF
 // sofort sieht, was ein Angebot mit dieser Position kosten würde.
 export function StammpositionFormular({ initial, kalkulationspreise = [], standardZuschlaege, stammpositionen = [], onSave, onClose }) {
   const [sp, setSp] = useState(() => ({ ...leereStammposition(), ...(initial || {}) }));
+  // Rückfrage beim Schließen mit ungespeicherten Änderungen (lib/ungespeichert.js)
+  const schutz = useFormularSchutz(sp, { titel: "Die Stammposition" });
   const gueltig = sp.bez?.trim() && sp.einheit;
   const optionen = { stammpositionen };
   const ep = stammpositionEp(sp, kalkulationspreise, standardZuschlaege, optionen);
@@ -60,7 +63,7 @@ export function StammpositionFormular({ initial, kalkulationspreise = [], standa
           display:"flex", alignItems:"center", gap:7 }}>
           {initial?.id ? <><Pencil size={15} /> Stammposition bearbeiten</> : <><Plus size={15} /> Neue Stammposition</>}
         </div>
-        <button onClick={onClose} style={{ background:"none", border:"none",
+        <button onClick={async () => { if (await schutz.pruefen()) onClose(); }} style={{ background:"none", border:"none",
           color:"var(--muted)", fontSize:24, cursor:"pointer" }}>✕</button>
       </div>
 
@@ -198,7 +201,7 @@ export function StammpositionFormular({ initial, kalkulationspreise = [], standa
       </div>
 
       <div style={{ display:"flex", gap:10 }}>
-        <button onClick={onClose} style={{ flex:1, background:"var(--surface2)",
+        <button onClick={async () => { if (await schutz.pruefen()) onClose(); }} style={{ flex:1, background:"var(--surface2)",
           color:"var(--muted)", border:"1.5px solid var(--border)", borderRadius:12,
           padding:13, cursor:"pointer", fontFamily:"inherit" }}>Abbrechen</button>
         <button onClick={() => gueltig && onSave({ ...sp, rezeptur: sp.rezeptur.map(({ eingabe, ...z }) => z),

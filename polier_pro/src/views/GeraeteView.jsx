@@ -6,6 +6,8 @@ import {
   PRUEFARTEN, GERAETE_STATUS, pruefStand, naechstePruefung, umsetzen, pruefungErledigt,
   tagessatz, mieteJeBaustelle, summeMiete, neuesGeraet,
 } from "../lib/geraete.js";
+import { useUngespeichert } from "../hooks/useUngespeichert.js";
+import { verlassenBestaetigen } from "../lib/ungespeichert.js";
 
 // Geräteverwaltung: Liste aller Geräte der Firma mit Standort und nächster
 // Prüfung, rechts (Handy: darunter) das gewählte Gerät mit Umsetzen,
@@ -77,12 +79,16 @@ export function GeraeteView({ geraeteApi, projekte = [], grundlagen, darfBearbei
   }, [auswahlId, gespeichert]);
 
   const aendern = teil => { setEntwurf(e => ({ ...e, ...teil })); setGeaendert(true); };
-  const neuAnlegen = () => { setAuswahlId("neu"); setEntwurf(neuesGeraet()); setGeaendert(true); setMeldung(null); };
+  const neuAnlegen = async () => { if (geaendert && !(await verlassenBestaetigen())) return; setAuswahlId("neu"); setEntwurf(neuesGeraet()); setGeaendert(false); setMeldung(null); };
   async function sichern(g = entwurf, text = "Gespeichert") {
-    if (!g.bezeichnung?.trim()) { setMeldung("Bitte eine Bezeichnung eintragen"); return; }
+    if (!g.bezeichnung?.trim()) { setMeldung("Bitte eine Bezeichnung eintragen"); return false; }
     const neu = await speichern(g);
     if (neu) { setAuswahlId(neu.id); setEntwurf(structuredClone(neu)); setGeaendert(false); setMeldung(text); }
+    return !!neu;
   }
+  // Ungespeicherte Änderungen: Rückfrage beim Wechsel des Geräts und beim Verlassen
+  useUngespeichert(geaendert && !!entwurf, { titel: `Das Gerät „${entwurf?.bezeichnung || "neu"}“`, speichern: () => sichern() });
+  const waehlen = async id => { if (geaendert && !(await verlassenBestaetigen())) return; setGeaendert(false); setAuswahlId(id); setMeldung(null); };
   const umsetzenKlick = () => sichern(umsetzen(entwurf, umsetzenNach ? Number(umsetzenNach) : null, umsetzenAm),
     umsetzenNach ? `Umgesetzt auf ${projektName(umsetzenNach)}` : "Zurück auf dem Bauhof");
   const geprueft = art => sichern(pruefungErledigt(entwurf, art, heute), "Prüfung eingetragen");
@@ -134,7 +140,7 @@ export function GeraeteView({ geraeteApi, projekte = [], grundlagen, darfBearbei
               {sichtbar.map(({ g, pruef }) => {
                 const aktiv = g.id === auswahlId;
                 return (
-                  <tr key={g.id} className="desk-zeile" onClick={() => { setAuswahlId(g.id); setMeldung(null); }}
+                  <tr key={g.id} className="desk-zeile" onClick={() => waehlen(g.id)}
                     style={{ borderTop: "1px solid var(--border)", cursor: "pointer", background: aktiv ? "var(--bg)" : undefined,
                       boxShadow: aktiv ? "inset 2px 0 0 var(--akzent)" : undefined }}>
                     <td style={{ padding: "10px 8px 10px 16px", ...zahl, fontSize: 13, color: "var(--text2)", whiteSpace: "nowrap" }}>{g.inventarnr || "–"}</td>
@@ -162,7 +168,7 @@ export function GeraeteView({ geraeteApi, projekte = [], grundlagen, darfBearbei
           </table>
         ) : (
           sichtbar.map(({ g, pruef }, i) => (
-            <button key={g.id} onClick={() => setAuswahlId(g.id)}
+            <button key={g.id} onClick={() => waehlen(g.id)}
               style={{ display: "flex", width: "100%", textAlign: "left", gap: 12, alignItems: "center", padding: "12px 14px", background: "none", border: "none",
                 borderTop: i ? "1px solid var(--border)" : "none", fontFamily: "inherit", color: "var(--text)", cursor: "pointer" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -191,7 +197,7 @@ export function GeraeteView({ geraeteApi, projekte = [], grundlagen, darfBearbei
     return (
       <div>
         {!istDesktop && (
-          <button onClick={() => { setAuswahlId(null); setEntwurf(null); }} style={{ ...knopf(), border: "none", background: "none", paddingLeft: 0, marginBottom: 8, color: "var(--text2)" }}>
+          <button onClick={async () => { if (geaendert && !(await verlassenBestaetigen())) return; setGeaendert(false); setAuswahlId(null); setEntwurf(null); }} style={{ ...knopf(), border: "none", background: "none", paddingLeft: 0, marginBottom: 8, color: "var(--text2)" }}>
             <ArrowLeft size={16} strokeWidth={1.5} /> Alle Geräte
           </button>
         )}

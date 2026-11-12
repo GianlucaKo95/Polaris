@@ -11,6 +11,8 @@ import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { useBackButton } from "../hooks/useBackButton.js";
 import { useIstDesktop } from "../hooks/useIstDesktop.js";
 import { AUFGABEN_STATUS, AUFGABEN_PRIO } from "../config/konstanten.js";
+import { useUngespeichert } from "../hooks/useUngespeichert.js";
+import { verlassenBestaetigen } from "../lib/ungespeichert.js";
 
 export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eigeneFirma, kolonnen, zeitbuchungen, tagebuchVorlage, offlineSpeichern, aufgaben, setAufgaben, session, onNavigate }) {
   const istDesktop = useIstDesktop();
@@ -18,6 +20,9 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
   const [detail,     setDetail]     = useState(null);
   const [form,       setForm]       = useState({ taetigkeit:"", besonderheiten:"", material:"", arbeiter:0, maengel:0 });
   const [bilder,     setBilder]     = useState([]);
+  // Rückfrage beim Verlassen, solange ein begonnener Bericht nicht gespeichert ist
+  const berichtBegonnen = open && (!!(form.taetigkeit || form.besonderheiten || form.material) || Number(form.arbeiter) > 0 || Number(form.maengel) > 0 || bilder.length > 0);
+  useUngespeichert(berichtBegonnen, { titel: "Der Tagesbericht" });
   const [uploading,  setUploading]  = useState(false);
   const [wetter,     setWetter]     = useState(null);
   const fileRef = useRef(null);
@@ -145,7 +150,8 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
     setBilder([]);
   }
 
-  function resetForm() {
+  async function resetForm() {
+    if (berichtBegonnen && !(await verlassenBestaetigen())) return;
     setOpen(false);
     setForm({ taetigkeit:"", besonderheiten:"", material:"", arbeiter:0, maengel:0 });
     setBilder([]);
