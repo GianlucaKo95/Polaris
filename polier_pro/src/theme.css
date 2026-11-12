@@ -285,3 +285,7 @@ input, textarea, select {
 :root[data-layout="desktop"] .desk-inhalt button[style*="background: var(--rbg)"] { background: none !important; color: var(--muted) !important; transition: color 120ms ease-out; }
 :root[data-layout="desktop"] .desk-inhalt button[style*="background: var(--rbg)"]:hover { color: var(--red) !important; }
 :root[data-layout="desktop"] .desk-inhalt .ki-zweitknopf { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--border2) !important; }
+/* Anmeldung (Desktop): Fokus sichtbar in der Akzentfarbe */
+.anmelde-feld { transition: border-color 120ms ease-out; }
+.anmelde-feld:hover { border-color: var(--muted) !important; }
+.anmelde-feld:focus { border-color: var(--akzent) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--akzent) 15%, transparent); }

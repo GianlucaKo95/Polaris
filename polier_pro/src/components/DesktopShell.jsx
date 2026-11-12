@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PolarisMarke } from "./PolarisMarke.jsx";
 import { LogOut, Moon, Sun, Search, User, Palmtree } from "lucide-react";
 
 // Desktop-Rahmen (ab 1024 px): Seitenleiste nach Arbeitsbereichen, Kopf mit
@@ -33,11 +34,7 @@ export function DesktopShell({
       <nav aria-label="Hauptnavigation" className="desk-leiste" style={{ width: 248, flexShrink: 0, boxSizing: "border-box", padding: "20px 12px 16px",
         background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", overflowY: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 8px", marginBottom: 16 }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
-            <rect width="24" height="24" rx="6" fill="var(--text)" />
-            <path d="M12 4.5 L13.6 10.4 L19.5 12 L13.6 13.6 L12 19.5 L10.4 13.6 L4.5 12 L10.4 10.4 Z" fill="var(--bg)" />
-          </svg>
-          <span style={{ fontWeight: 600, fontSize: 16 }}>Polaris</span>
+          <PolarisMarke />
           <span title={verbunden ? "Verbunden" : "Offline"} aria-label={verbunden ? "Verbunden" : "Offline"}
             style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: 4, background: verbunden ? "var(--green)" : "var(--muted)" }} />
         </div>
