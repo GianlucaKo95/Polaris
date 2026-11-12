@@ -3,10 +3,11 @@ import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
   CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight, ChevronLeft,
   Building2, Calendar, Euro, CloudSun, ChartColumn, FileText, Settings,
   UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree, Archive,
-  ChartLine, Receipt, Landmark, Wallet, Database, Forklift, FileSignature, CalendarRange } from "lucide-react";
+  ChartLine, Receipt, Landmark, Wallet, Database, Forklift, FileSignature, CalendarRange, ShieldCheck } from "lucide-react";
 import { useIstDesktop } from "./hooks/useIstDesktop.js";
 import { useGeraete } from "./hooks/useGeraete.js";
 import { useFirmaTabelle } from "./hooks/useFirmaTabelle.js";
+import { terminListe, dringend } from "./lib/fristen.js";
 import { DesktopShell } from "./components/DesktopShell.jsx";
 import { useFirmenUebersicht } from "./hooks/useFirmenUebersicht.js";
 import { BaustellenListeView } from "./views/BaustellenListeView.jsx";
@@ -64,6 +65,7 @@ const KiFrageView            = React.lazy(() => import("./views/KiFrageView.jsx"
 const BaustellenAbschlussView = React.lazy(() => import("./views/BaustellenAbschlussView.jsx").then(m => ({ default: m.BaustellenAbschlussView })));
 const SimulationView         = React.lazy(() => import("./views/SimulationView.jsx").then(m => ({ default: m.SimulationView })));
 const KostenView             = React.lazy(() => import("./views/KostenView.jsx").then(m => ({ default: m.KostenView })));
+const FristenView            = React.lazy(() => import("./views/FristenView.jsx").then(m => ({ default: m.FristenView })));
 const PlanungView            = React.lazy(() => import("./views/PlanungView.jsx").then(m => ({ default: m.PlanungView })));
 const RegieView              = React.lazy(() => import("./views/RegieView.jsx").then(m => ({ default: m.RegieView })));
 const GeraeteView            = React.lazy(() => import("./views/GeraeteView.jsx").then(m => ({ default: m.GeraeteView })));
@@ -391,6 +393,8 @@ export default function PolierApp() {
   const [lohnEinstellungen, setLohnEinstellungen, lohnEinstellungenStatus] = useFirmaSpalte(firma?.id, auth.session, "lohn_einstellungen", null);
   const geraeteApi = useGeraete(auth.session, firma?.id);
   const regieApi = useFirmaTabelle(auth.session, firma?.id, "regieberichte", { filter: { spalte: "projekt_id", wert: aktivId ?? null }, sortierung: "nummer" });
+  const sicherheitenApi = useFirmaTabelle(auth.session, firma?.id, "sicherheiten");
+  const fristenApi = useFirmaTabelle(auth.session, firma?.id, "fristen");
   const planApi = useFirmaTabelle(auth.session, firma?.id, "einsatzplan", { sortierung: "woche" });
   const [regieEinstellungen, setRegieEinstellungen] = useFirmaSpalte(firma?.id, auth.session, "regie_einstellungen", null);
   function grundlagenAendern(neu) {
@@ -1083,6 +1087,8 @@ export default function PolierApp() {
     { id:"rechnungen",    icon:"🧾",  label:"Rechnungen",  rollen:["administrator","geschaeftsfuehrer"] },
     // Offene Posten, Eingangsrechnungen, Mahnungen, DATEV (views/FinanzenView.jsx).
     { id:"finanzen",      icon:"🏦",  label:"Finanzen",    rollen:["administrator","geschaeftsfuehrer"] },
+    // Bürgschaften, Einbehalte, Gewährleistung und Vertragsfristen (views/FristenView.jsx, lib/fristen.js).
+    { id:"fristen",       icon:"🛡️",  label:"Fristen",     rollen:["administrator","geschaeftsfuehrer","bauleiter"] },
     // Kolonnen und Geräte je Kalenderwoche über alle Baustellen (views/PlanungView.jsx, lib/planung.js).
     { id:"planung",       icon:"🗓️",  label:"Planung",     rollen:["administrator","geschaeftsfuehrer","bauleiter","polier"] },
     // Inventar, Standort, Prüffristen, interne Miete (views/GeraeteView.jsx, lib/geraete.js).
@@ -1126,7 +1132,7 @@ export default function PolierApp() {
   const TAB_ICONS = { dashboard:LayoutGrid, aufgaben:CircleCheckBig, tagebuch:NotebookPen,
     kolonnen:Users, stempeln:Clock, gantt:Calendar, kosten:Euro, wetter:CloudSun,
     stunden:ChartColumn, angebot:FileText, admin_params:Settings, nutzer:UserCog, firmen:Building2, profil:User, ki_frage:Sparkles, simulation:FlaskConical, abwesenheiten:Palmtree, abschluss:Archive,
-    leistung:ChartLine, rechnungen:Receipt, finanzen:Landmark, lohn:Wallet, geraete:Forklift, regie:FileSignature, planung:CalendarRange };
+    leistung:ChartLine, rechnungen:Receipt, finanzen:Landmark, lohn:Wallet, geraete:Forklift, regie:FileSignature, planung:CalendarRange, fristen:ShieldCheck };
 
   // Inhalt des aktiven Tabs — von der Handy-Ansicht und vom Desktop-Rahmen genutzt.
   function tabInhalt() {
@@ -1204,6 +1210,7 @@ export default function PolierApp() {
             // "alle aus seiner Kolonne", nicht firmenweit.
             darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
         {tab === "finanzen"      && <FinanzenView session={auth.session} firmaId={firma?.id} projekte={projekte} eigeneFirma={eigeneFirma} datevEinstellungen={kalkulationsgrundlagen?.datev} />}
+        {tab === "fristen"       && <FristenView projekte={projekte} sicherheitenApi={sicherheitenApi} fristenApi={fristenApi} />}
         {tab === "planung"       && <PlanungView session={auth.session} projekte={projekte} geraete={geraeteApi.geraete} plan={planApi}
             darfPlanen={["administrator","geschaeftsfuehrer","bauleiter"].includes(aktiveRolle)} />}
         {tab === "regie"         && <RegieView key={projekt?.id} projekt={projekt} api={regieApi} geraete={geraeteApi.geraete} grundlagen={kalkulationsgrundlagen}
@@ -1241,7 +1248,7 @@ export default function PolierApp() {
     const erlaubt = id => TABS.some(t => t.id === id);
     const istBuero = ["administrator", "geschaeftsfuehrer", "bauleiter"].includes(aktiveRolle);
     const UNTERSEITEN = {
-      finanzen: ["finanzen"], lohn: ["lohn", "stunden"], planung: ["planung"], geraete: ["geraete"], stammdaten: ["admin_params"],
+      finanzen: ["finanzen"], lohn: ["lohn", "stunden"], planung: ["planung"], fristen: ["fristen"], geraete: ["geraete"], stammdaten: ["admin_params"],
       einstellungen: ["firmen", "nutzer"], profil: ["profil"], abwesenheiten: ["abwesenheiten"],
     };
     const LABEL = { lohn: "Lohnvorerfassung", stunden: "Stunden-Export", firmen: "Unternehmen", nutzer: "Nutzer", dashboard: "Übersicht",
@@ -1249,12 +1256,15 @@ export default function PolierApp() {
     const label = id => LABEL[id] || ALLE_TABS.find(t => t.id === id)?.label || id;
     const aktiveProjekte = projekte.filter(p => !p.archiviert);
     const freigaben = firmenDaten.angebote.filter(a => a.interne_freigabe?.status === "angefragt").length;
+    const fristenDringend = dringend(terminListe({ fristen: fristenApi.zeilen, sicherheiten: sicherheitenApi.zeilen, heute: new Date().toLocaleDateString("sv-SE"),
+      abnahmeJeProjekt: Object.fromEntries(projekte.filter(p => p.abschluss_datum).map(p => [p.id, String(p.abschluss_datum).slice(0, 10)])) }));
     const nav = [
       istBuero && { id: "cockpit", label: "Cockpit", Icon: LayoutGrid },
       { id: "baustellen", label: "Baustellen", Icon: Building2, zahl: aktiveProjekte.length || null },
       erlaubt("angebot") && { id: "angebote", label: "Angebote", Icon: FileText, zahl: freigaben || null },
       erlaubt("finanzen") && { id: "finanzen", label: "Finanzen", Icon: Landmark },
       erlaubt("planung") && { id: "planung", label: "Planung", Icon: CalendarRange },
+      erlaubt("fristen") && { id: "fristen", label: "Sicherheiten & Fristen", Icon: ShieldCheck, zahl: fristenDringend || null },
       (erlaubt("lohn") || erlaubt("stunden")) && { id: "lohn", label: "Lohn & Zeiten", Icon: Wallet },
       erlaubt("geraete") && { id: "geraete", label: "Geräte", Icon: Forklift },
       erlaubt("admin_params") && { id: "stammdaten", label: "Stammdaten", Icon: Database },
@@ -1319,10 +1329,11 @@ export default function PolierApp() {
       inhalt = <AngeboteListeView projekte={projekte} firmenDaten={firmenDaten}
         onOeffnen={(projektId, angebotId) => { setAngebotOeffnen(angebotId); baustelleOeffnen(projektId, "angebot"); }} />;
     } else {
-      const TITEL = { finanzen: "Finanzen", lohn: "Lohn & Zeiten", geraete: "Geräte", planung: "Planung", stammdaten: "Stammdaten", einstellungen: "Einstellungen", profil: "Mein Profil", abwesenheiten: "Abwesenheit" };
+      const TITEL = { finanzen: "Finanzen", lohn: "Lohn & Zeiten", geraete: "Geräte", planung: "Planung", fristen: "Sicherheiten & Fristen", stammdaten: "Stammdaten", einstellungen: "Einstellungen", profil: "Mein Profil", abwesenheiten: "Abwesenheit" };
       titel = TITEL[seite];
       const unter = (UNTERSEITEN[seite] || []).filter(erlaubt);
       if (unter.length > 1) { reiter = unter.map(id => ({ id, label: label(id) })); aktiverReiter = tab; onReiter = setTab; }
+      if (seite === "fristen") untertitel = "Bürgschaften, Einbehalte, Gewährleistung und Vertragsfristen aller Baustellen";
       if (seite === "planung") untertitel = "Kolonnen und Geräte je Kalenderwoche über alle Baustellen";
       if (seite === "geraete") untertitel = "Standort, Prüffristen und interne Miete";
       if (seite === "stammdaten") untertitel = "Stammpositionen, Preise, Vorlagen und Regeln für die Kalkulation";

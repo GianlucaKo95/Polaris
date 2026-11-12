@@ -278,3 +278,51 @@ begin
     );
   end if;
 end $$;
+
+-- ═══ Sicherheiten und Fristen (1.74) ════════════════════════════════════
+-- Bürgschaften und Bareinbehalte (gestellt an AG / erhalten von NU) sowie
+-- Gewährleistungs- und Vertragsfristen je Baustelle. Logik: src/lib/fristen.js.
+create table if not exists sicherheiten (
+  id              bigserial primary key,
+  firma_id        int not null references firmen(id) on delete cascade,
+  projekt_id      bigint references projekte(id) on delete set null,
+  art             text not null,                  -- vertragserfuellung | gewaehrleistung | vorauszahlung | abschlag | einbehalt
+  richtung        text not null default 'gestellt',  -- gestellt (an AG) | erhalten (von NU)
+  partner         text default '',
+  aussteller      text default '',                -- Bank / Kreditversicherer
+  nummer          text default '',
+  betrag          numeric(12,2),
+  prozent         numeric(5,2),
+  ausgestellt_am  date,
+  befristet_bis   date,
+  rueckgabe_am    date,                           -- vereinbarter Rückgabezeitpunkt (sonst nach VOB/B berechnet)
+  status          text not null default 'gestellt',  -- gestellt | zurueckgefordert | zurueck
+  aval_prozent    numeric(5,3),
+  notiz           text default '',
+  created_at      timestamptz default now()
+);
+create table if not exists fristen (
+  id              bigserial primary key,
+  firma_id        int not null references firmen(id) on delete cascade,
+  projekt_id      bigint references projekte(id) on delete set null,
+  art             text not null default 'sonstig',   -- gewaehrleistung | abnahme | schlusszahlung | vertrag | sonstig
+  titel           text default '',
+  datum           date,                           -- Termin (bei Gewährleistung: abweichend vereinbartes Ende)
+  abnahme_am      date,
+  jahre           numeric(4,1) default 4,
+  erinnerung_tage int default 30,
+  erledigt_am     date,
+  notiz           text default '',
+  created_at      timestamptz default now()
+);
+alter table sicherheiten enable row level security;
+alter table fristen enable row level security;
+do $$
+declare t text;
+begin
+  foreach t in array array['sicherheiten','fristen'] loop
+    if not exists (select 1 from pg_policies where tablename = t and policyname = t || '_firma') then
+      execute format('create policy %I on %I for all using (firma_id = eigene_firma_id() and eigene_rolle() in (''administrator'',''geschaeftsfuehrer'',''bauleiter'')) with check (firma_id = eigene_firma_id() and eigene_rolle() in (''administrator'',''geschaeftsfuehrer'',''bauleiter''))', t || '_firma', t);
+    end if;
+  end loop;
+end $$;
