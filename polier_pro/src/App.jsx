@@ -264,6 +264,9 @@ export default function PolierApp() {
   // (setzt dieselben Werte, die gerade erst von dort kamen) sie sofort
   // wieder zurückschreibt, bevor der Nutzer überhaupt etwas geändert hat.
   const [parameterGeladen, setParameterGeladen] = useState(false);
+  // standard_zuschlaege kommt in einer eigenen Abfrage; vorher nichts speichern,
+  // sonst landet null statt der gespeicherten Zuschläge in der Datenbank
+  const [zuschlaegeGeladen, setZuschlaegeGeladen] = useState(false);
   const pwa  = usePWA();
   const push = usePushNotifications(projekte, eigeneFirma);
   const offline = useOfflineSync(pwa.online === false ? false : true, sbConnected);
@@ -420,7 +423,7 @@ export default function PolierApp() {
     if (!firma?.id || !auth.session?.access_token) return;
     const client = sbClientMitToken(auth.session);
     client.from("firmen").select("standard_zuschlaege").eq("id", firma.id)
-      .then(({ data, error }) => { if (!error && data?.[0]) setStandardZuschlaege(data[0].standard_zuschlaege || null); });
+      .then(({ data, error }) => { if (!error && data?.[0]) setStandardZuschlaege(data[0].standard_zuschlaege || null); setZuschlaegeGeladen(true); });
     client.from("firmen").select("stammpositionen").eq("id", firma.id)
       .then(({ data, error }) => {
         if (error) { setStammpositionenStatus("fehlt"); return; }
@@ -435,21 +438,33 @@ export default function PolierApp() {
       });
   }, [firma?.id, auth.session?.access_token]);
 
+  // Firmenparameter nur bei echten Änderungen speichern. Der erste Lauf nach
+  // dem Laden merkt sich den geladenen Stand, statt ihn zurückzuschreiben:
+  // sonst überschreibt jede Anmeldung, was ein Kollege gerade geändert hat.
+  const zuletztGespeichert = useRef({});
+  const nurBeiAenderung = (schluessel, werte) => {
+    const json = JSON.stringify([firma?.id, werte]);
+    const alt = zuletztGespeichert.current[schluessel];
+    zuletztGespeichert.current[schluessel] = json;
+    return alt !== undefined && alt !== json && JSON.parse(alt)[0] === firma?.id;
+  };
+
   useEffect(() => {
     if (angebotRegelnStatus !== "ok" || !firma?.id || !auth.session?.access_token) return;
-    sbFirmaAngebotRegelnSpeichern(firma.id, angebotRegeln, auth.session);
-  }, [angebotRegeln]);
+    if (nurBeiAenderung("angebotRegeln", angebotRegeln)) sbFirmaAngebotRegelnSpeichern(firma.id, angebotRegeln, auth.session);
+  }, [angebotRegeln, angebotRegelnStatus]);
 
   useEffect(() => {
     if (stammpositionenStatus !== "ok" || !firma?.id || !auth.session?.access_token) return;
-    sbFirmaStammpositionenSpeichern(firma.id, stammpositionen, auth.session);
-  }, [stammpositionen]);
+    if (nurBeiAenderung("stammpositionen", stammpositionen)) sbFirmaStammpositionenSpeichern(firma.id, stammpositionen, auth.session);
+  }, [stammpositionen, stammpositionenStatus]);
 
   // Einheitspreise/LV-Vorlagen nach jeder Änderung in der Firma persistieren.
   useEffect(() => {
-    if (!parameterGeladen || !firma?.id || !auth.session?.access_token) return;
-    sbFirmaParameterSpeichern(firma.id, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, auth.session, kalkulationspreise, standardZuschlaege);
-  }, [einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, kalkulationspreise, standardZuschlaege]);
+    if (!parameterGeladen || !zuschlaegeGeladen || !firma?.id || !auth.session?.access_token) return;
+    if (nurBeiAenderung("parameter", [einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, kalkulationspreise, standardZuschlaege]))
+      sbFirmaParameterSpeichern(firma.id, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, auth.session, kalkulationspreise, standardZuschlaege);
+  }, [parameterGeladen, zuschlaegeGeladen, einheitspreise, lvVorlagen, angebotVorlage, tagebuchVorlage, kalkulationspreise, standardZuschlaege]);
 
   // Projekte aus Supabase laden, sobald die Firma bekannt ist.
   // Ohne dies existierten Baustellen nur im Browser-Speicher — Neuladen,
