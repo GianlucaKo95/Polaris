@@ -10,6 +10,7 @@ import { Spinner } from "../components/Spinner.jsx";
 import { KiAngebotAssistent } from "../components/KiAngebotAssistent.jsx";
 import { KiVorkalkulation } from "../components/KiVorkalkulation.jsx";
 import { KalkulationsPruefung } from "../components/KalkulationsPruefung.jsx";
+import { LvRisiken } from "../components/LvRisiken.jsx";
 import { vorschlagAnwenden, rezepturMengeAendern, alsStammposition } from "../lib/kiVorkalkulation.js";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
 import { positionMengeAendern, positionVariableAendern } from "../lib/stammpositionen.js";
@@ -81,6 +82,8 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [pruefOffen, setPruefOffen] = useState(false);
   const [kiPruefErgebnis, setKiPruefErgebnis] = useState(null);
   const [pruefErledigt, setPruefErledigt] = useState(() => new Set());
+  const [risikenOffen, setRisikenOffen] = useState(false);
+  const [risikenStand, setRisikenStand] = useState(null);
   const [preisspiegelOffen, setPreisspiegelOffen] = useState(false);
   const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
   const [gaebFehler, setGaebFehler] = useState("");
@@ -821,6 +824,11 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
       darfStammpositionen={!!onStammpositionenAendern} onUebernehmen={vorkalkulationUebernehmen} onClose={() => setVorkalkOffen(false)} />;
   }
 
+  if (risikenOffen) {
+    return <LvRisiken positionen={a.positionen} projekt={projekt} angebotTitel={a.titel} eigeneFirma={eigeneFirma} session={session}
+      stand={risikenStand} setStand={setRisikenStand}
+      onZurPosition={id => { setAuswahlId(id); setRechts("position"); setRisikenOffen(false); }} onClose={() => setRisikenOffen(false)} />;
+  }
   if (pruefOffen) {
     return <KalkulationsPruefung positionen={a.positionen} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege}
       preispruefung={pruefung} projekt={projekt} angebotTitel={a.titel} session={session}
@@ -965,6 +973,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               <Menue label="KI-Kalkulation" icon={Sparkles} eintraege={[
                 !gesperrt && { label: "LV vorkalkulieren", aktion: () => setVorkalkOffen(true) },
                 { label: "Kalkulation prüfen", aktion: () => setPruefOffen(true) },
+                { label: "LV-Risiken und Bieterfragen", aktion: () => setRisikenOffen(true) },
               ].filter(Boolean)} />
             )}
             {!gesperrt && (
