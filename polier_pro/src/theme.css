@@ -220,6 +220,23 @@ input, textarea, select {
 /* Haupt-Buttons der älteren Ansichten: Schrift passend zur neuen Fläche */
 :root[data-layout="desktop"] [style*="background: var(--yellow)"] { color: #FFFFFF !important; }
 :root[data-layout="desktop"][data-theme="dark"] [style*="background: var(--yellow)"] { color: #16181D !important; }
+/* Vollbild-Formulare der App: am Desktop als Seitenpanel rechts */
+:root[data-layout="desktop"] .voll-overlay {
+  left: auto !important; width: min(720px, 100vw) !important;
+  border-left: 1px solid var(--border);
+  box-shadow: 0 0 0 100vmax rgba(22,24,29,0.32);
+  padding-top: 0 !important;
+}
+/* Kopfzeile der Panels: hell und ruhig statt dunkler App-Leiste */
+:root[data-layout="desktop"] .voll-overlay > [style*="position: sticky"]:first-child {
+  background: var(--surface) !important; color: var(--text) !important;
+  border-bottom: 1px solid var(--border) !important; padding: 16px 24px !important;
+}
+:root[data-layout="desktop"] .voll-overlay > [style*="position: sticky"]:first-child :is([style*="color: rgb(255, 255, 255)"], [style*="color: #fff"], [style*="color: white"]) { color: var(--text) !important; }
+:root[data-layout="desktop"] .voll-overlay > [style*="position: sticky"]:first-child button { background: transparent !important; border: 1px solid var(--border) !important; color: var(--text2) !important; }
+/* Aktive Segmente: dunkle Fläche mit „gelber“ Schrift wäre am Desktop unsichtbar */
+:root[data-layout="desktop"] [style*="background: var(--ink)"][style*="color: var(--yellow)"] { color: #FFFFFF !important; }
+:root[data-layout="desktop"][data-theme="dark"] [style*="background: var(--ink)"][style*="color: var(--yellow)"] { color: #16181D !important; }
 :root[data-layout="desktop"] button { border-radius: var(--radius-sm); }
 :root[data-layout="desktop"] :focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
 .desk-nav { transition: background-color 120ms ease-out, color 120ms ease-out; }
@@ -234,7 +251,7 @@ input, textarea, select {
 .desk-reiter { transition: color 120ms ease-out; }
 .desk-reiter:hover { color: var(--text) !important; }
 /* Seitenköpfe der älteren Ansichten: im Desktop-Rahmen übernimmt der Rahmen Titel und Aktion */
-:root[data-layout="desktop"] .desk-inhalt .seiten-kopf { display: none !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .seiten-kopf { display: none !important; }
 /* Desktop: Eingabefelder, die erst beim Zeigen und Bearbeiten als Feld erscheinen (Angebotskopf, LV-Tabelle) */
 .desk-feld { box-sizing: border-box; height: 32px; padding: 0 6px; background: transparent; border: 1px solid transparent; border-radius: 6px;
   color: var(--text); font: inherit; transition: border-color 120ms ease-out, background-color 120ms ease-out; }
@@ -249,42 +266,42 @@ input, textarea, select {
    Die Handy-Ansichten setzen ihre Optik inline (fette 11-px-Labels, 15-px-
    Felder mit 1,5-px-Rand). Im Desktop-Inhalt gelten stattdessen die
    Werkplan-Werte: Gewichte 400–600, kleinste Schrift 12 px, ein Feldmaß. */
-:root[data-layout="desktop"] .desk-inhalt [style*="font-weight: 700"],
-:root[data-layout="desktop"] .desk-inhalt [style*="font-weight: 800"],
-:root[data-layout="desktop"] .desk-inhalt [style*="font-weight: 900"] { font-weight: 500 !important; }
-:root[data-layout="desktop"] .desk-inhalt [style*="font-size: 9px"],
-:root[data-layout="desktop"] .desk-inhalt [style*="font-size: 9.5px"],
-:root[data-layout="desktop"] .desk-inhalt [style*="font-size: 10px"],
-:root[data-layout="desktop"] .desk-inhalt [style*="font-size: 10.5px"],
-:root[data-layout="desktop"] .desk-inhalt [style*="font-size: 11px"],
-:root[data-layout="desktop"] .desk-inhalt [style*="font-size: 11.5px"] { font-size: 12px !important; }
-:root[data-layout="desktop"] .desk-inhalt .feld-label { font-size: 13px !important; font-weight: 400 !important; color: var(--text2) !important; margin-bottom: 4px !important; }
-:root[data-layout="desktop"] .desk-inhalt input:not(.desk-feld):not(.ohne-rahmen):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([style*="border: none"]):not(.eigen-felder *),
-:root[data-layout="desktop"] .desk-inhalt select:not(.desk-feld):not([style*="border: none"]):not(.eigen-felder *),
-:root[data-layout="desktop"] .desk-inhalt textarea:not(.desk-feld):not([style*="border: none"]):not(.eigen-felder *) {
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) [style*="font-weight: 700"],
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) [style*="font-weight: 800"],
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) [style*="font-weight: 900"] { font-weight: 500 !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) [style*="font-size: 9px"],
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) [style*="font-size: 9.5px"],
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) [style*="font-size: 10px"],
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) [style*="font-size: 10.5px"],
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) [style*="font-size: 11px"],
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) [style*="font-size: 11.5px"] { font-size: 12px !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .feld-label { font-size: 13px !important; font-weight: 400 !important; color: var(--text2) !important; margin-bottom: 4px !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) input:not(.desk-feld):not(.ohne-rahmen):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([style*="border: none"]):not(.eigen-felder *),
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) select:not(.desk-feld):not([style*="border: none"]):not(.eigen-felder *),
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) textarea:not(.desk-feld):not([style*="border: none"]):not(.eigen-felder *) {
   box-sizing: border-box; min-height: 36px; padding: 7px 10px !important; font-size: 14px !important; line-height: 20px;
   border: 1px solid var(--border2) !important; border-radius: 8px !important; background-color: var(--surface);
   transition: border-color 120ms ease-out; }
-:root[data-layout="desktop"] .desk-inhalt input:not(.desk-feld):not(.ohne-rahmen):focus,
-:root[data-layout="desktop"] .desk-inhalt select:not(.desk-feld):focus,
-:root[data-layout="desktop"] .desk-inhalt textarea:not(.desk-feld):focus { outline: none; border-color: var(--akzent) !important; }
-:root[data-layout="desktop"] .desk-inhalt input[type="checkbox"], :root[data-layout="desktop"] .desk-inhalt input[type="radio"] { accent-color: var(--text); }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) input:not(.desk-feld):not(.ohne-rahmen):focus,
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) select:not(.desk-feld):focus,
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) textarea:not(.desk-feld):focus { outline: none; border-color: var(--akzent) !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) input[type="checkbox"], :root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) input[type="radio"] { accent-color: var(--text); }
 /* Unterreiter älterer Ansichten (z. B. Finanzen) als Unterstrich-Reiter wie im Rahmen */
-:root[data-layout="desktop"] .desk-inhalt .unter-reiter { gap: 24px !important; border-bottom: 1px solid var(--border); margin-bottom: 20px !important; }
-:root[data-layout="desktop"] .desk-inhalt .unter-reiter > button { height: 40px; padding: 0 !important; margin-bottom: -1px; background: none !important; border: none !important;
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .unter-reiter { gap: 24px !important; border-bottom: 1px solid var(--border); margin-bottom: 20px !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .unter-reiter > button { height: 40px; padding: 0 !important; margin-bottom: -1px; background: none !important; border: none !important;
   border-bottom: 2px solid transparent !important; border-radius: 0 !important; color: var(--text2) !important; font-size: 14px !important; font-weight: 400 !important; }
-:root[data-layout="desktop"] .desk-inhalt .unter-reiter > button[aria-selected="true"] { color: var(--text) !important; border-bottom-color: var(--text) !important; font-weight: 500 !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .unter-reiter > button[aria-selected="true"] { color: var(--text) !important; border-bottom-color: var(--text) !important; font-weight: 500 !important; }
 /* Farbige Akzentkanten an Kennzahl-Kacheln: auf dem Desktop eine ruhige Haarlinie */
-:root[data-layout="desktop"] .desk-inhalt [style*="border-bottom: 3px solid"] { border: 1px solid var(--border) !important; }
-:root[data-layout="desktop"] .desk-inhalt [style*="border-left: 4px solid"],
-:root[data-layout="desktop"] .desk-inhalt [style*="border-left: 3px solid"] { border-left: 1px solid var(--border) !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) [style*="border-bottom: 3px solid"] { border: 1px solid var(--border) !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) [style*="border-left: 4px solid"],
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) [style*="border-left: 3px solid"] { border-left: 1px solid var(--border) !important; }
 /* Gestrichelte „Hinzufügen“-Flächen: neutral statt orange getönt */
-:root[data-layout="desktop"] .desk-inhalt button[style*="dashed"] { background: none !important; color: var(--text) !important; border: 1px dashed var(--border2) !important; border-radius: 8px !important; }
-:root[data-layout="desktop"] .desk-inhalt b, :root[data-layout="desktop"] .desk-inhalt strong { font-weight: 500; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) button[style*="dashed"] { background: none !important; color: var(--text) !important; border: 1px dashed var(--border2) !important; border-radius: 8px !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) b, :root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) strong { font-weight: 500; }
 /* Rot getönte Löschknöpfe: auf dem Desktop leise, rot erst beim Zeigen */
-:root[data-layout="desktop"] .desk-inhalt button[style*="background: var(--rbg)"] { background: none !important; color: var(--muted) !important; transition: color 120ms ease-out; }
-:root[data-layout="desktop"] .desk-inhalt button[style*="background: var(--rbg)"]:hover { color: var(--red) !important; }
-:root[data-layout="desktop"] .desk-inhalt .ki-zweitknopf { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--border2) !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) button[style*="background: var(--rbg)"] { background: none !important; color: var(--muted) !important; transition: color 120ms ease-out; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) button[style*="background: var(--rbg)"]:hover { color: var(--red) !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .ki-zweitknopf { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--border2) !important; }
 /* Anmeldung (Desktop): Fokus sichtbar in der Akzentfarbe */
 .anmelde-feld { transition: border-color 120ms ease-out; }
 .anmelde-feld:hover { border-color: var(--muted) !important; }
@@ -293,43 +310,43 @@ input, textarea, select {
 /* ── Desktop-Feinschliff 1.70 ────────────────────────────────────────────
    Klassen, die die Handy-Ansicht nicht verändern (Regeln nur im Desktop-Inhalt). */
 /* Liste aus einzelnen Handy-Karten → eine Tafel mit Zeilen und Haarlinien */
-:root[data-layout="desktop"] .desk-inhalt .listen-gruppe { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-:root[data-layout="desktop"] .desk-inhalt .listen-gruppe > * { background: none !important; border: none !important; border-radius: 0 !important; margin: 0 !important; box-shadow: none !important; padding: 12px 16px !important; }
-:root[data-layout="desktop"] .desk-inhalt .listen-gruppe > * + * { border-top: 1px solid var(--border) !important; }
-:root[data-layout="desktop"] .desk-inhalt .listen-gruppe > [style*="cursor: pointer"] { transition: background-color 120ms ease-out; }
-:root[data-layout="desktop"] .desk-inhalt .listen-gruppe > [style*="cursor: pointer"]:hover { background: var(--bg) !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .listen-gruppe { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .listen-gruppe > * { background: none !important; border: none !important; border-radius: 0 !important; margin: 0 !important; box-shadow: none !important; padding: 12px 16px !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .listen-gruppe > * + * { border-top: 1px solid var(--border) !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .listen-gruppe > [style*="cursor: pointer"] { transition: background-color 120ms ease-out; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .listen-gruppe > [style*="cursor: pointer"]:hover { background: var(--bg) !important; }
 /* Kleine Bearbeiten-/Löschen-Knöpfe in Zeilen: leise Symbolknöpfe */
-:root[data-layout="desktop"] .desk-inhalt .zeilen-knopf { width: 32px; height: 32px; padding: 0 !important; display: inline-flex !important; align-items: center; justify-content: center;
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .zeilen-knopf { width: 32px; height: 32px; padding: 0 !important; display: inline-flex !important; align-items: center; justify-content: center;
   background: none !important; border: none !important; border-radius: 8px !important; color: var(--muted) !important; transition: background-color 120ms ease-out, color 120ms ease-out; }
-:root[data-layout="desktop"] .desk-inhalt .zeilen-knopf:hover { background: var(--surface2) !important; color: var(--text) !important; }
-:root[data-layout="desktop"] .desk-inhalt .zeilen-knopf.loeschen:hover { color: var(--red) !important; }
-:root[data-layout="desktop"] .desk-inhalt .zeilen-knopf svg { width: 16px; height: 16px; stroke-width: 1.5; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .zeilen-knopf:hover { background: var(--surface2) !important; color: var(--text) !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .zeilen-knopf.loeschen:hover { color: var(--red) !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .zeilen-knopf svg { width: 16px; height: 16px; stroke-width: 1.5; }
 /* Unterreiter: auch Gitter-Varianten als Reihe, ohne Symbole */
-:root[data-layout="desktop"] .desk-inhalt .unter-reiter { display: flex !important; flex-wrap: wrap; }
-:root[data-layout="desktop"] .desk-inhalt .unter-reiter > button { flex: none !important; }
-:root[data-layout="desktop"] .desk-inhalt .unter-reiter > button svg { display: none; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .unter-reiter { display: flex !important; flex-wrap: wrap; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .unter-reiter > button { flex: none !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .unter-reiter > button svg { display: none; }
 /* Umschalter innerhalb einer Seite (Nutzer/Einladungen, Liste/Kanban): leise Segmente wie „Laufend · Archiv“ */
-:root[data-layout="desktop"] .desk-inhalt .filter-reiter { display: inline-flex !important; gap: 4px !important; width: auto !important; margin-bottom: 16px !important; }
-:root[data-layout="desktop"] .desk-inhalt .filter-reiter > button { flex: none !important; height: 32px; padding: 0 12px !important; border: none !important; border-radius: 8px !important;
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .filter-reiter { display: inline-flex !important; gap: 4px !important; width: auto !important; margin-bottom: 16px !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .filter-reiter > button { flex: none !important; height: 32px; padding: 0 12px !important; border: none !important; border-radius: 8px !important;
   background: transparent !important; color: var(--text2) !important; font-size: 14px !important; font-weight: 400 !important; box-shadow: none !important; }
-:root[data-layout="desktop"] .desk-inhalt .filter-reiter > button[aria-pressed="true"] { background: var(--surface2) !important; color: var(--text) !important; font-weight: 500 !important; }
-:root[data-layout="desktop"] .desk-inhalt .filter-reiter > button svg { display: none; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .filter-reiter > button[aria-pressed="true"] { background: var(--surface2) !important; color: var(--text) !important; font-weight: 500 !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .filter-reiter > button svg { display: none; }
 /* Buttons über die ganze Breite (Handy): auf dem Desktop so breit wie ihr Text */
-:root[data-layout="desktop"] .desk-inhalt .desk-knopf-auto { display: inline-flex !important; width: auto !important; height: 40px; padding: 0 16px !important; font-size: 14px !important; border-radius: 8px !important; }
-:root[data-layout="desktop"] .desk-inhalt .desk-rechts { display: flex !important; justify-content: flex-end; }
-:root[data-layout="desktop"] .desk-inhalt .desk-abstand { margin-bottom: 24px !important; }
-:root[data-layout="desktop"] .desk-inhalt .desk-ohne-rand { padding: 0 !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .desk-knopf-auto { display: inline-flex !important; width: auto !important; height: 40px; padding: 0 16px !important; font-size: 14px !important; border-radius: 8px !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .desk-rechts { display: flex !important; justify-content: flex-end; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .desk-abstand { margin-bottom: 24px !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .desk-ohne-rand { padding: 0 !important; }
 /* Leere Zustände: eine ruhige Tafel, linksbündig */
-:root[data-layout="desktop"] .desk-inhalt .desk-leer { text-align: left !important; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px 20px !important; color: var(--text2) !important; font-size: 14px !important; }
-:root[data-layout="desktop"] .desk-inhalt .desk-leer > svg:first-child, :root[data-layout="desktop"] .desk-inhalt .desk-leer > div:first-child > svg { display: none; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .desk-leer { text-align: left !important; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px 20px !important; color: var(--text2) !important; font-size: 14px !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .desk-leer > svg:first-child, :root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .desk-leer > div:first-child > svg { display: none; }
 /* Kennzahl-Kacheln älterer Ansichten wie im Cockpit: Bezeichnung, große Zahl */
-:root[data-layout="desktop"] .desk-inhalt .desk-kennzahl { padding: 16px 20px !important; border: 1px solid var(--border) !important; border-radius: 12px !important; }
-:root[data-layout="desktop"] .desk-inhalt .desk-kennzahl > div:nth-last-child(2) { font-size: 13px !important; color: var(--text2) !important; font-weight: 400 !important; margin-bottom: 8px !important; }
-:root[data-layout="desktop"] .desk-inhalt .desk-kennzahl > div:last-child { font-size: 24px !important; line-height: 32px; font-weight: 400 !important; font-family: var(--font-zahl); }
-:root[data-layout="desktop"] .desk-inhalt .desk-leer > div:first-child:has(> svg:only-child) { display: none !important; }
-:root[data-layout="desktop"] .desk-inhalt .desk-leer > div { margin-top: 0 !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .desk-kennzahl { padding: 16px 20px !important; border: 1px solid var(--border) !important; border-radius: 12px !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .desk-kennzahl > div:nth-last-child(2) { font-size: 13px !important; color: var(--text2) !important; font-weight: 400 !important; margin-bottom: 8px !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .desk-kennzahl > div:last-child { font-size: 24px !important; line-height: 32px; font-weight: 400 !important; font-family: var(--font-zahl); }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .desk-leer > div:first-child:has(> svg:only-child) { display: none !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) .desk-leer > div { margin-top: 0 !important; }
 /* Gestrichelte graue Gruppen (Zuschläge, Mutter-LV, Lohn & Geräte): ruhige Tafel */
-:root[data-layout="desktop"] .desk-inhalt div[style*="dashed var(--border)"] { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: 12px !important; padding: 16px 20px !important; }
+:root[data-layout="desktop"] :is(.desk-inhalt, .voll-overlay) div[style*="dashed var(--border)"] { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: 12px !important; padding: 16px 20px !important; }
 
 /* Ansichten, die ihre Felder selbst im Desktop-Maß setzen (z. B. Geräte), tragen .eigen-felder und sind von der Feldregel oben ausgenommen */
 .eigen-felder input:focus, .eigen-felder select:focus, .eigen-felder textarea:focus { outline: none; border-color: var(--akzent) !important; }

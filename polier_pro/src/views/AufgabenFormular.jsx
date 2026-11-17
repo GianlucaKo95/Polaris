@@ -130,7 +130,7 @@ export function AufgabenFormular({ initial, kolonnen, alleAufgaben = [], onSave,
   // verschachtelten Stacking, indem es das Overlay als direktes Kind von
   // <body> rendert, exakt auf einer Ebene mit dem App-Root selbst.
   return createPortal(
-    <div ref={scrollRef} style={{ position:"fixed", top:0, left:0, right:0, bottom:0,
+    <div className="voll-overlay" ref={scrollRef} style={{ position:"fixed", top:0, left:0, right:0, bottom:0,
       background:"var(--bg)", zIndex:500, overflowY:"auto",
       WebkitOverflowScrolling:"touch" }}>
 

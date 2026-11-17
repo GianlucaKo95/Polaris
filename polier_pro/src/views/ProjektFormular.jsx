@@ -11,11 +11,13 @@ import { sbFetch } from "../lib/supabase.js";
 import { KundenportalFreigabe } from "../components/KundenportalFreigabe.jsx";
 import { ProjektDokumente } from "../components/ProjektDokumente.jsx";
 import { useFormularSchutz } from "../hooks/useUngespeichert.js";
+import { useIstDesktop } from "../hooks/useIstDesktop.js";
 
 export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherFehler = "", session, istAdmin = false,
   firmaId, profil }) {
   const [p, setP] = useState(initial || leerProjekt());
   // Rückfrage beim Schließen mit ungespeicherten Änderungen (lib/ungespeichert.js)
+  const istDesktop = useIstDesktop();
   const schutz = useFormularSchutz(p, { titel: initial ? `Die Baustelle „${initial.name || ""}“` : "Die neue Baustelle" });
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
   const [kiDiktat,  setKiDiktat]  = useState("");
@@ -108,7 +110,7 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
   // im normalen Baum bricht die iOS-Standalone-PWA denselben
   // nested-position:fixed-Bug wie beim Aufgabenformular.
   return createPortal(
-    <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0,
+    <div className="voll-overlay" style={{ position:"fixed", top:0, left:0, right:0, bottom:0,
       background:"var(--bg)", zIndex:500, overflowY:"auto",
       WebkitOverflowScrolling:"touch" }}>
 
@@ -130,7 +132,7 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
 
       <div style={{ padding:"20px 16px 100px" }}>
 
-        <div style={{ display:"flex", justifyContent:"space-between",
+        {!istDesktop && <div style={{ display:"flex", justifyContent:"space-between",
           alignItems:"center", marginBottom:13 }}>
           <div style={{ color:"var(--yellow)", fontWeight:700, fontSize:17,
             display:"flex", alignItems:"center", gap:8 }}>
@@ -139,7 +141,7 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
           <button onClick={async () => { if (await schutz.pruefen()) onClose(); }}
             style={{ background:"none", border:"none", color:"var(--muted)",
               cursor:"pointer", display:"flex" }}><X size={20} /></button>
-        </div>
+        </div>}
 
         {/* Kundenportal — nur beim Bearbeiten (braucht eine echte projekt_id
             für die Freigabe-Zeile), RLS entscheidet serverseitig final über
@@ -195,7 +197,7 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
                   borderRadius:12, padding:"9px 12px", cursor:"pointer",
                   display:"flex", alignItems:"center", gap:8,
                   transition:"all 0.15s" }}>
-                <span style={{ fontSize:20 }}>{cfg.icon}</span>
+                {!istDesktop && <span style={{ fontSize:20 }}>{cfg.icon}</span>}
                 <span style={{ color: p.typ===key ? "var(--text)" : "var(--muted)",
                   fontSize:12, fontWeight: p.typ===key ? 700 : 400 }}>
                   {cfg.label}

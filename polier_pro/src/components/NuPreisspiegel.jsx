@@ -44,7 +44,7 @@ export function NuPreisspiegel({ positionen, zuschlagFremdleistung = 0, onUebern
   const anzahlGewaehlt = Object.values(effektiveWahl).filter(i => i >= 0).length;
 
   return createPortal(
-    <div style={{ position:"fixed", inset:0, background:"var(--bg)", zIndex:700, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
+    <div className="voll-overlay" style={{ position:"fixed", inset:0, background:"var(--bg)", zIndex:700, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
       <div style={{ background:"var(--surface)", padding:"10px 18px", paddingTop:"calc(14px + env(safe-area-inset-top))",
         borderBottom:"3px solid var(--yellow)", position:"sticky", top:0, zIndex:2,
         display:"flex", justifyContent:"space-between", alignItems:"center" }}>

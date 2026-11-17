@@ -76,7 +76,7 @@ function ZeileKarte({ children }) {
 function FormularGeruest({ titel, Icon, onSchliessen, children }) {
   useBackButton(true, onSchliessen);
   return createPortal(
-    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg)",
+    <div className="voll-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg)",
       zIndex: 650, overflowY: "auto", WebkitOverflowScrolling: "touch", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
         padding: "14px 18px", paddingTop: "calc(14px + env(safe-area-inset-top))",

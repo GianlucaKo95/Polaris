@@ -656,7 +656,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
       {/* Preis-Formular — als Portal gerendert, sonst derselbe
           nested-position:fixed-Bug wie beim Aufgabenformular */}
       {(neuPreis || editPreis) && createPortal(
-        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:600, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
+        <div className="voll-overlay" style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:600, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
           <div style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
             padding:16,
             width:"100%", maxWidth:480 }}>
@@ -672,7 +672,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
 
       {/* Kalkulationspreis-Formular */}
       {(neuKalkPreis || editKalkPreis) && createPortal(
-        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:600, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
+        <div className="voll-overlay" style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:600, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
           <div style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
             padding:16,
             width:"100%", maxWidth:480 }}>
@@ -688,7 +688,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
 
       {/* Stammpositions-Formular */}
       {stammFormular && createPortal(
-        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:600, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
+        <div className="voll-overlay" style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:600, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
           <div style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
             padding:16, width:"100%", maxWidth:480 }}>
             <StammpositionFormular
@@ -706,7 +706,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
 
       {/* Vorlagen-Formular */}
       {neuVorlage && createPortal(
-        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:600, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
+        <div className="voll-overlay" style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:600, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
           <div style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
             padding:16,
             width:"100%", maxWidth:480 }}>

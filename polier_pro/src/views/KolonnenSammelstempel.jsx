@@ -137,7 +137,7 @@ export function KolonnenSammelstempel({ kolonne, projekte, aufgaben = [], sessio
   // nested-position:fixed-Stacking-Context-Bug wie beim Aufgabenformular
   // (Bootstrap-Bar der App liegt trotz korrekter z-Index-Werte darüber).
   return createPortal(
-    <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0,
+    <div className="voll-overlay" style={{ position:"fixed", top:0, left:0, right:0, bottom:0,
       background:"var(--bg)", zIndex:500, overflowY:"auto",
       WebkitOverflowScrolling:"touch" }}>
 

@@ -322,7 +322,7 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
           beim Aufgabenformular (App-Bootstrap-Bar liegt trotz korrektem
           z-Index darüber). */}
       {detail && createPortal(
-        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:300,
+        <div className="voll-overlay" style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:300,
           overflowY:"auto" }}>
           <div style={{ background: "var(--surface)", minHeight:"100dvh", maxWidth:520, margin:"0 auto", padding:14,
             paddingTop:"calc(20px + env(safe-area-inset-top))" }}>
@@ -444,7 +444,7 @@ export function TagesbuchView({ berichte, setBerichte, sbConnected, projekt, eig
 
       {/* ── Neuer Bericht Modal ── */}
       {open && createPortal(
-        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:200, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
+        <div className="voll-overlay" style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:200, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
           <div style={{ background: "var(--surface)", borderRadius:"16px 16px 0 0", padding:16,
             width:"100%", maxWidth:520 }}>
 

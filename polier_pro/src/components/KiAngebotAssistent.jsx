@@ -126,7 +126,7 @@ export function KiAngebotAssistent({ projekt, eigeneFirma, stammpositionen = [],
   });
 
   return createPortal(
-    <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:700,
+    <div className="voll-overlay" style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"var(--bg)", zIndex:700,
       overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
       <div style={{ background:"var(--surface)", padding:"10px 18px", paddingTop:"calc(14px + env(safe-area-inset-top))",
         borderBottom:"3px solid var(--yellow)", position:"sticky", top:0, zIndex:2,
