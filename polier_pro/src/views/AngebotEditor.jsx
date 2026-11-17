@@ -11,6 +11,7 @@ import { KiAngebotAssistent } from "../components/KiAngebotAssistent.jsx";
 import { KiVorkalkulation } from "../components/KiVorkalkulation.jsx";
 import { KalkulationsPruefung } from "../components/KalkulationsPruefung.jsx";
 import { LvRisiken } from "../components/LvRisiken.jsx";
+import { AufmassWerkzeug } from "../components/AufmassWerkzeug.jsx";
 import { vorschlagAnwenden, rezepturMengeAendern, alsStammposition } from "../lib/kiVorkalkulation.js";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
 import { positionMengeAendern, positionVariableAendern } from "../lib/stammpositionen.js";
@@ -84,6 +85,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [pruefErledigt, setPruefErledigt] = useState(() => new Set());
   const [risikenOffen, setRisikenOffen] = useState(false);
   const [risikenStand, setRisikenStand] = useState(null);
+  const [aufmassFuer, setAufmassFuer] = useState(null); // Positions-ID
   const [preisspiegelOffen, setPreisspiegelOffen] = useState(false);
   const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
   const [gaebFehler, setGaebFehler] = useState("");
@@ -824,6 +826,16 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
       darfStammpositionen={!!onStammpositionenAendern} onUebernehmen={vorkalkulationUebernehmen} onClose={() => setVorkalkOffen(false)} />;
   }
 
+  const aufmassPos = aufmassFuer != null ? a.positionen.find(p => p.id === aufmassFuer) : null;
+  const aufmassOverlay = aufmassPos && (
+    <AufmassWerkzeug ziel={{ bez: aufmassPos.bez, einheit: aufmassPos.einheit || "m²" }} initial={aufmassPos.aufmass} session={session}
+      onClose={() => setAufmassFuer(null)}
+      onUebernehmen={({ zeilen, abzugsregel, summe, toleranz }) => {
+        updatePos(aufmassPos.id, "menge", summe);
+        setA(x => ({ ...x, positionen: x.positionen.map(p => p.id === aufmassPos.id ? { ...p, aufmass: { zeilen, abzugsregel, toleranz } } : p) }));
+        setAufmassFuer(null);
+      }} />
+  );
   if (risikenOffen) {
     return <LvRisiken positionen={a.positionen} projekt={projekt} angebotTitel={a.titel} eigeneFirma={eigeneFirma} session={session}
       stand={risikenStand} setStand={setRisikenStand}
@@ -1065,6 +1077,13 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
             <Kalkulationsaufriss aufriss={aufriss} teiler={pos.menge || 1} einheit={pos.einheit} />
           </div>
         )}
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16, paddingBottom:16, borderBottom:"1px solid var(--border)" }}>
+          <div style={{ flex:1, fontSize:13, color:"var(--text2)" }}>
+            {pos.aufmass ? <>Menge aus Aufmaß, {pos.aufmass.zeilen.length} Zeilen{pos.aufmass.toleranz > 0 ? `, ± ${Math.round(pos.aufmass.toleranz * 100)} % geschätzt` : ""}</> : "Menge von Hand"}
+          </div>
+          {!gesperrt && <button onClick={() => setAufmassFuer(pos.id)} style={{ height:32, padding:"0 12px", borderRadius:8, border:"1px solid var(--border2)",
+            background:"var(--surface)", color:"var(--text)", fontFamily:"inherit", fontSize:13, cursor:"pointer" }}>{pos.aufmass ? "Aufmaß öffnen" : "Aus Plan oder Foto messen"}</button>}
+        </div>
         {pos.kiKalkulation && (
           <div style={{ marginBottom:16, paddingBottom:16, borderBottom:"1px solid var(--border)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"var(--text2)", marginBottom:4 }}>
@@ -1238,6 +1257,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 
   return (
     <div>
+      {aufmassOverlay}
       {/* Header (Handy) — auf dem Desktop steht der Kopf im Inhalt */}
       {!istDesktop && (
       <div style={{ background:"var(--surface)", padding:"10px 16px",

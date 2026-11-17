@@ -182,3 +182,26 @@ export async function pdfPlanLesen(datei, seite = 1) {
     doc.destroy();
   }
 }
+
+// Eine Seite als Bild fürs Aufmaß (lib/aufmass.js). renderFaktor = Bildpunkte
+// je PDF-Punkt, damit sich mit dem Planmaßstab Meter je Bildpunkt ergeben.
+export async function pdfSeiteRendern(datei, seite = 1, maxPx = 2600) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const { default: workerUrl } = await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url");
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await datei.arrayBuffer()) }).promise;
+  try {
+    const page = await doc.getPage(Math.min(seite, doc.numPages));
+    const basis = page.getViewport({ scale: 1 });
+    const renderFaktor = Math.min(4, maxPx / Math.max(basis.width, basis.height));
+    const viewport = page.getViewport({ scale: renderFaktor });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(viewport.width); canvas.height = Math.round(viewport.height);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+    return { url: canvas.toDataURL("image/png"), breite: canvas.width, hoehe: canvas.height, renderFaktor, seiten: doc.numPages };
+  } finally {
+    doc.destroy();
+  }
+}
