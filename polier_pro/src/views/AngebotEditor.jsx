@@ -9,6 +9,7 @@ import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { KiAngebotAssistent } from "../components/KiAngebotAssistent.jsx";
 import { KiVorkalkulation } from "../components/KiVorkalkulation.jsx";
+import { KalkulationsPruefung } from "../components/KalkulationsPruefung.jsx";
 import { vorschlagAnwenden, rezepturMengeAendern, alsStammposition } from "../lib/kiVorkalkulation.js";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
 import { positionMengeAendern, positionVariableAendern } from "../lib/stammpositionen.js";
@@ -77,6 +78,9 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [vonAufgabe,setVonAufgabe]= useState(false);
   const [vonKI,     setVonKI]     = useState(false);
   const [vorkalkOffen, setVorkalkOffen] = useState(false);
+  const [pruefOffen, setPruefOffen] = useState(false);
+  const [kiPruefErgebnis, setKiPruefErgebnis] = useState(null);
+  const [pruefErledigt, setPruefErledigt] = useState(() => new Set());
   const [preisspiegelOffen, setPreisspiegelOffen] = useState(false);
   const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
   const [gaebFehler, setGaebFehler] = useState("");
@@ -817,6 +821,13 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
       darfStammpositionen={!!onStammpositionenAendern} onUebernehmen={vorkalkulationUebernehmen} onClose={() => setVorkalkOffen(false)} />;
   }
 
+  if (pruefOffen) {
+    return <KalkulationsPruefung positionen={a.positionen} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege}
+      preispruefung={pruefung} projekt={projekt} angebotTitel={a.titel} session={session}
+      kiErgebnis={kiPruefErgebnis} setKiErgebnis={setKiPruefErgebnis} erledigt={pruefErledigt} setErledigt={setPruefErledigt}
+      onZurPosition={id => { setAuswahlId(id); setRechts("position"); setPruefOffen(false); }} onClose={() => setPruefOffen(false)} />;
+  }
+
   // ── KI-Angebot (Agent mit Stammdatenzugriff, lib/kiAngebotAgent.js) ──
   if (vonKI) {
     return <KiAngebotAssistent projekt={projekt} eigeneFirma={eigeneFirma}
@@ -950,6 +961,12 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
             </div>
           </div>
           <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+            {!leer && (
+              <Menue label="KI-Kalkulation" icon={Sparkles} eintraege={[
+                !gesperrt && { label: "LV vorkalkulieren", aktion: () => setVorkalkOffen(true) },
+                { label: "Kalkulation prüfen", aktion: () => setPruefOffen(true) },
+              ].filter(Boolean)} />
+            )}
             {!gesperrt && (
               <Menue label="Neu aus …" icon={Plus} eintraege={[
                 { gruppe: "Leistungsverzeichnis" },
@@ -960,8 +977,6 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 { label: "GAEB 90 einlesen", hinweis: "D81–D86", aktion: () => gaebInputRef.current?.click() },
                 { label: "GAEB XML einlesen", hinweis: "X83–X86", aktion: () => gaebXmlInputRef.current?.click() },
                 { label: "Preise einspielen", hinweis: "D84, D86", aktion: () => gaebPreisInputRef.current?.click() },
-                !leer && { gruppe: "KI-Kalkulation" },
-                !leer && { label: "LV vorkalkulieren", aktion: () => setVorkalkOffen(true) },
                 !leer && { gruppe: "Nachunternehmer" },
                 !leer && { label: "NU-Preisspiegel", aktion: () => setPreisspiegelOffen(true) },
               ]} />
