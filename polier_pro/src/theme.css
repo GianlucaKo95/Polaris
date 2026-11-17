@@ -227,6 +227,7 @@ input, textarea, select {
   box-shadow: 0 0 0 100vmax rgba(22,24,29,0.32);
   padding-top: 0 !important;
 }
+:root[data-layout="desktop"] .voll-overlay.breit { width: min(1180px, 100vw) !important; }
 /* Kopfzeile der Panels: hell und ruhig statt dunkler App-Leiste */
 :root[data-layout="desktop"] .voll-overlay > [style*="position: sticky"]:first-child {
   background: var(--surface) !important; color: var(--text) !important;

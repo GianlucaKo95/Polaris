@@ -152,4 +152,5 @@ export const QUELLEN_LABEL = {
   nachunternehmer: "Nachunternehmer",
   manuell: "Manuell",
   ki_ohne_preis: "Ohne Preis",
+  ki_rezeptur: "KI-Vorkalkulation",
 };

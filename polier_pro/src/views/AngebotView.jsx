@@ -11,7 +11,7 @@ import { useIstDesktop } from "../hooks/useIstDesktop.js";
 import { Menue } from "../components/Menue.jsx";
 import { mutterLvIndexBauen, angebotAusAusschreibungAbgleichen, positionenMitKalkulationVorbereiten } from "../lib/mutterlv.js";
 
-export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, stammpositionen = [], eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen, co2Faktoren = [], oeffneAngebotId = null, onGeoeffnet = null, session }) {
+export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise, standardZuschlaege, stammpositionen = [], onStammpositionenAendern = null, eigeneFirma, angebote = [], onAngebotSpeichern, firmaId, profil, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen, co2Faktoren = [], oeffneAngebotId = null, onGeoeffnet = null, session }) {
   const istDesktop = useIstDesktop();
   const [aktAngebot,  setAktAngebot]  = useState(null);
   // Aus der Angebotsliste (Desktop) direkt ein bestimmtes Angebot öffnen
@@ -149,6 +149,7 @@ export function AngebotView({ projekt, aufgaben, einheitspreise, lvVorlagen, ang
       angebotVorlage={angebotVorlage}
       kalkulationspreise={kalkulationspreise}
       stammpositionen={stammpositionen}
+      onStammpositionenAendern={onStammpositionenAendern}
       standardZuschlaege={standardZuschlaege}
       angebote={angebote}
       nachtragZu={aktAngebot.nachtrag_zu ? angebote.find(x => x.id === aktAngebot.nachtrag_zu) || null : null}

@@ -87,8 +87,8 @@ async function rufeKiProxyAuf(body, session, refusalHinweis = "Bitte das Diktat 
 // lib/kiAngebotAgent.js): reicht system/messages/tools an den ki-proxy
 // durch und gibt die rohe Anthropic-Antwort (content-Blöcke + stop_reason)
 // zurück — die Schleife und die Werkzeuge liegen im Agenten-Modul.
-export async function kiToolAufruf({ system, messages, tools, maxTokens = 4000 }, session) {
-  return rufeKiProxyAuf({ system, messages, tools, maxTokens }, session,
+export async function kiToolAufruf({ system, messages, tools, maxTokens = 4000, toolChoice = null }, session) {
+  return rufeKiProxyAuf({ system, messages, tools, maxTokens, ...(toolChoice ? { tool_choice: toolChoice } : {}) }, session,
     "Bitte die Anfrage umformulieren oder erneut versuchen.");
 }
 

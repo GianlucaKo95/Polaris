@@ -8,6 +8,8 @@ import { druckePDF } from "../lib/pdf.jsx";
 import { DiktierFeld } from "../components/DiktierFeld.jsx";
 import { Spinner } from "../components/Spinner.jsx";
 import { KiAngebotAssistent } from "../components/KiAngebotAssistent.jsx";
+import { KiVorkalkulation } from "../components/KiVorkalkulation.jsx";
+import { vorschlagAnwenden, rezepturMengeAendern, alsStammposition } from "../lib/kiVorkalkulation.js";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
 import { positionMengeAendern, positionVariableAendern } from "../lib/stammpositionen.js";
 import { katalogBauen, QUELLEN_LABEL } from "../lib/katalog.js";
@@ -54,7 +56,7 @@ import { ExcelVorschauModal } from "../components/ExcelVorschauModal.jsx";
 // der die für Beton erfasste Menge passt — Bewehrung braucht hier keinen
 // Eintrag, da der Katalog nur einen einzigen Bewehrung-Eintrag (t) kennt.
 const BEVORZUGTE_EINHEIT = { beton: "m²" };
-export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise: firmenpreise = [], stammpositionen = [], standardZuschlaege: firmenZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen = null, co2Faktoren = [], projekt, eigeneFirma, firmaId, profil, session }) {
+export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitspreise, lvVorlagen, angebotVorlage, kalkulationspreise: firmenpreise = [], stammpositionen = [], standardZuschlaege: firmenZuschlaege = null, angebote = [], nachtragZu = null, rolle = null, angebotRegeln = null, kalkulationsgrundlagen = null, onTerminplanErzeugen = null, co2Faktoren = [], projekt, eigeneFirma, firmaId, profil, session, onStammpositionenAendern = null }) {
   const istDesktop = useIstDesktop();
   // Preisstand je Angebot (lib/preisstand.js): beim ersten Öffnen aus den
   // Firmenpreisen bzw. aus der Urkalkulation des Hauptauftrags kopiert.
@@ -74,6 +76,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [vonVorlage,setVonVorlage]= useState(false);
   const [vonAufgabe,setVonAufgabe]= useState(false);
   const [vonKI,     setVonKI]     = useState(false);
+  const [vorkalkOffen, setVorkalkOffen] = useState(false);
   const [preisspiegelOffen, setPreisspiegelOffen] = useState(false);
   const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
   const [gaebFehler, setGaebFehler] = useState("");
@@ -153,7 +156,8 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       // Aus einer Stammposition: Rezeptur für die neue Menge neu hochrechnen
       // (lib/stammpositionen.js), statt die Gesamtmengen einzufrieren.
       if (key === "menge") {
-        const neu = positionMengeAendern(p, Number(val), stammpositionen, kalkulationspreise);
+        const neu = positionMengeAendern(p, Number(val), stammpositionen, kalkulationspreise)
+          || rezepturMengeAendern(p, Number(val), kalkulationspreise);
         if (neu) return neu;
       }
       const aktualisiert = { ...p, [key]:key==="menge"||key==="ep"||key==="rabatt" ? Number(val) : val };
@@ -783,6 +787,36 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
       onClose={() => setPreisspiegelOffen(false)} />;
   }
 
+  // ── KI-Vorkalkulation eines LV (lib/kiVorkalkulation.js) ──
+  function vorkalkulationUebernehmen(vorschlaege, merken) {
+    const ctx = { stammpositionen, kalkulationspreise, standardZuschlaege };
+    const neueSp = [];
+    // Außerhalb von setA gerechnet: die neuen Stammpositionen werden direkt danach gebraucht
+    const positionen = a.positionen.map(p => {
+      const v = vorschlaege.get(p.id);
+      if (!v) return p;
+      const neu = vorschlagAnwenden(p, v, ctx);
+      // Rezeptur als Stammposition merken: Katalog wächst, Mengenänderungen
+      // und spätere Nachkalkulation greifen auf dieselbe Rezeptur
+      if (v.art === "rezeptur" && merken.has(p.id) && onStammpositionenAendern) {
+        const sp = alsStammposition(p, v, projekt?.typ || "");
+        neueSp.push(sp);
+        return { ...neu, stammpositionId: sp.id, preisquelle: { art: "stammposition", ref: `SP:${sp.id}`, bez: sp.bez } };
+      }
+      return neu;
+    });
+    setA(x => ({ ...x, positionen }));
+    if (neueSp.length) onStammpositionenAendern([...stammpositionen, ...neueSp]);
+    setKiInfo({ annahmen: [], warnungen: [], anzahl: vorschlaege.size, ohnePreis: 0, vorkalkuliert: true, gemerkt: neueSp.length });
+    setVorkalkOffen(false);
+  }
+  if (vorkalkOffen) {
+    return <KiVorkalkulation positionen={a.positionen} projekt={projekt} eigeneFirma={eigeneFirma}
+      stammpositionen={stammpositionen} einheitspreise={einheitspreise} lvVorlagen={lvVorlagen}
+      kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} nachtragZu={nachtragZu} session={session}
+      darfStammpositionen={!!onStammpositionenAendern} onUebernehmen={vorkalkulationUebernehmen} onClose={() => setVorkalkOffen(false)} />;
+  }
+
   // ── KI-Angebot (Agent mit Stammdatenzugriff, lib/kiAngebotAgent.js) ──
   if (vonKI) {
     return <KiAngebotAssistent projekt={projekt} eigeneFirma={eigeneFirma}
@@ -926,6 +960,8 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 { label: "GAEB 90 einlesen", hinweis: "D81–D86", aktion: () => gaebInputRef.current?.click() },
                 { label: "GAEB XML einlesen", hinweis: "X83–X86", aktion: () => gaebXmlInputRef.current?.click() },
                 { label: "Preise einspielen", hinweis: "D84, D86", aktion: () => gaebPreisInputRef.current?.click() },
+                !leer && { gruppe: "KI-Kalkulation" },
+                !leer && { label: "LV vorkalkulieren", aktion: () => setVorkalkOffen(true) },
                 !leer && { gruppe: "Nachunternehmer" },
                 !leer && { label: "NU-Preisspiegel", aktion: () => setPreisspiegelOffen(true) },
               ]} />
@@ -1003,6 +1039,16 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
           <div style={{ marginBottom:16 }}>
             <div style={{ fontSize:13, color:"var(--text2)", marginBottom:8 }}>Preisaufriss je {pos.einheit}</div>
             <Kalkulationsaufriss aufriss={aufriss} teiler={pos.menge || 1} einheit={pos.einheit} />
+          </div>
+        )}
+        {pos.kiKalkulation && (
+          <div style={{ marginBottom:16, paddingBottom:16, borderBottom:"1px solid var(--border)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"var(--text2)", marginBottom:4 }}>
+              <span aria-hidden="true" style={{ width:6, height:6, borderRadius:3, background: { hoch:"var(--green)", mittel:"var(--akzent)", niedrig:"var(--red)" }[pos.kiKalkulation.sicherheit] }} />
+              KI-Vorkalkulation · Sicherheit {pos.kiKalkulation.sicherheit}
+            </div>
+            <div style={{ fontSize:13, lineHeight:"20px" }}>{pos.kiKalkulation.begruendung}</div>
+            {pos.kiKalkulation.fehlt?.length > 0 && <div style={{ fontSize:13, color:"var(--akzent)", marginTop:4 }}>Fehlt noch: {pos.kiKalkulation.fehlt.join(", ")}</div>}
           </div>
         )}
         {!pos.kalk && (
@@ -1443,7 +1489,9 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 padding:"8px 12px", marginBottom:9, fontSize:12, color:"var(--text)" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                   <div style={{ fontWeight:700 }}>
-                    ✓ {kiInfo.anzahl} Positionen von der KI übernommen
+                    {kiInfo.vorkalkuliert
+                      ? <>{kiInfo.anzahl} Positionen vorkalkuliert{kiInfo.gemerkt > 0 && `, ${kiInfo.gemerkt} als Stammposition gemerkt`}. Begründung je Position im Seitenfeld</>
+                      : <>✓ {kiInfo.anzahl} Positionen von der KI übernommen</>}
                     {kiInfo.ohnePreis > 0 && <span style={{ color:"var(--red)" }}> · {kiInfo.ohnePreis} ohne Preis</span>}
                   </div>
                   <button onClick={() => setKiInfo(null)} style={{ background:"none", border:"none",
