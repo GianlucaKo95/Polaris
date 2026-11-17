@@ -33,7 +33,7 @@ import { AngebotNachweis } from "../components/AngebotNachweis.jsx";
 import { sbAngebotFreigabeNachweisLaden } from "../lib/supabase.js";
 import { parseGaeb90, gaeb90ZuPositionen, gaeb90DateiLesen, gaeb90Schreiben, gaeb90AlsWindows1252, parseGaeb90Preise, gaeb90PreiseZuPositionen, gaeb90PreiseEinspielen, gaeb90PreiseSchreiben } from "../lib/gaeb90.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
-import { leereKalkulation, kalkulationEp, kalkulationEinzelkosten, kalkulationZuschlagProzent, kalkulationGesamtkosten, kalkulationAufriss } from "../lib/kalkulation.js";
+import { leereKalkulation, kalkulationEp, kalkulationEinzelkosten, kalkulationZuschlagProzent, kalkulationGesamtkosten, kalkulationAufriss, kalkulationMengeAendern } from "../lib/kalkulation.js";
 import { PositionKalkulation } from "../components/PositionKalkulation.jsx";
 import { gaebX84Schreiben } from "../lib/gaebX84.js";
 import { efbAuswerten, efbHtml } from "../lib/efb.js";
@@ -176,10 +176,12 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
       const aktualisiert = { ...p, [key]:key==="menge"||key==="ep"||key==="rabatt" ? Number(val) : val };
       // Von Hand überschriebener Preis: Preisquelle ehrlich auf "manuell".
       if (key === "ep" && p.preisquelle) aktualisiert.preisquelle = { art: "manuell" };
-      // Bei kalkulierten Positionen hängt der EP von der Menge ab (Gesamt-
-      // kosten der Kalkulation / Menge) — bei Mengenänderung neu berechnen,
-      // statt den alten EP stehen zu lassen.
-      if (key === "menge" && p.kalk) aktualisiert.ep = kalkulationEp(p.kalk, kalkulationspreise, aktualisiert.menge);
+      // Von Hand kalkuliert: Posten sind Gesamtmengen und wachsen mit, der EP
+      // bleibt (lib/kalkulation.js kalkulationMengeAendern).
+      if (key === "menge" && p.kalk) {
+        aktualisiert.kalk = kalkulationMengeAendern(p.kalk, p.menge, aktualisiert.menge);
+        aktualisiert.ep = kalkulationEp(aktualisiert.kalk, kalkulationspreise, aktualisiert.menge);
+      }
       return aktualisiert;
     }) }));
   }
@@ -1578,7 +1580,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
             {istDesktop && !gesperrt && a.positionen.length > 0 && (
               <BefehlsLeiste positionen={a.positionen} kalkulationspreise={kalkulationspreise} session={session}
                 mengeSetzen={(p, m) => positionMengeAendern(p, m, stammpositionen, kalkulationspreise) || rezepturMengeAendern(p, m, kalkulationspreise)
-                  || (p.kalk ? { ...p, menge: m, ep: kalkulationEp(p.kalk, kalkulationspreise, m) } : { ...p, menge: m })}
+                  || (p.kalk ? (k => ({ ...p, menge: m, kalk: k, ep: kalkulationEp(k, kalkulationspreise, m) }))(kalkulationMengeAendern(p.kalk, p.menge, m)) : { ...p, menge: m })}
                 onAnwenden={positionen => setA(x => ({ ...x, positionen }))} />
             )}
             {istDesktop ? (

@@ -147,3 +147,17 @@ export function kalkulationAufriss(positionen, stammdaten) {
   s.summe = s.lohn + s.material + s.geraet + s.fremdleistung + s.zuschlag + s.direkt;
   return s;
 }
+
+// Mengenänderung an einer von Hand kalkulierten Position: Die Posten der
+// Kalkulation sind Gesamtmengen für die Position. Sie wachsen mit der
+// Positionsmenge mit, damit der Einheitspreis gleich bleibt — so erwartet es
+// ein Kalkulator. War die alte Menge 0, gibt es kein Verhältnis; dann
+// bleiben die Posten und der EP ergibt sich aus Gesamtkosten / neue Menge.
+export function kalkulationMengeAendern(kalk, alteMenge, neueMenge) {
+  const alt = Number(alteMenge) || 0, neu = Number(neueMenge) || 0;
+  if (!kalk || !(alt > 0) || !(neu > 0) || alt === neu) return kalk;
+  const f = neu / alt;
+  const skaliere = posten => (posten || []).map(p => ({ ...p, menge: Math.round((Number(p.menge) || 0) * f * 10000) / 10000 }));
+  return { ...kalk, lohnposten: skaliere(kalk.lohnposten), materialposten: skaliere(kalk.materialposten),
+    geraetPosten: skaliere(kalk.geraetPosten), fremdleistung: Math.round((Number(kalk.fremdleistung) || 0) * f * 100) / 100 };
+}

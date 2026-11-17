@@ -141,3 +141,20 @@ test("Zielsumme: W&G-Satz so, dass die Angebotssumme genau passt", () => {
   assert.equal(wgFuerZielsumme(pos, es, preise, 11500).hinweis, "unter Selbstkosten, kein Gewinn");
   assert.equal(wgFuerZielsumme(pos, es, preise, 10000).hinweis, "unter Herstellkosten");
 });
+
+test("Mengenänderung: EP bleibt, Posten wachsen mit", async () => {
+  const { kalkulationMengeAendern, kalkulationEp } = await import("./kalkulation.js");
+  const kp = [{ id: 1, preis: 50 }, { id: 2, preis: 20 }, { id: 3, preis: 10 }];
+  const kalk = { lohnposten: [{ stammId: 1, menge: 20 }], materialposten: [{ stammId: 2, menge: 105 }], geraetPosten: [{ stammId: 3, menge: 4 }],
+    fremdleistung: 300, zuschlagLohn: 20, zuschlagMaterial: 10, zuschlagGeraet: 10, zuschlagFremdleistung: 5 };
+  const ep100 = kalkulationEp(kalk, kp, 100);
+  const neu = kalkulationMengeAendern(kalk, 100, 150);
+  assert.equal(neu.lohnposten[0].menge, 30);
+  assert.equal(neu.materialposten[0].menge, 157.5);
+  assert.equal(neu.fremdleistung, 450);
+  assert.equal(neu.zuschlagLohn, 20);
+  assert.ok(Math.abs(kalkulationEp(neu, kp, 150) - ep100) < 1e-9);
+  assert.equal(kalkulationMengeAendern(kalk, 0, 50), kalk, "ohne alte Menge kein Verhältnis");
+  assert.equal(kalkulationMengeAendern(kalk, 100, 0), kalk);
+  assert.equal(kalkulationMengeAendern(null, 1, 2), null);
+});
