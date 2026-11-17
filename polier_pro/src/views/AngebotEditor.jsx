@@ -13,6 +13,7 @@ import { KalkulationsPruefung } from "../components/KalkulationsPruefung.jsx";
 import { LvRisiken } from "../components/LvRisiken.jsx";
 import { AufmassWerkzeug } from "../components/AufmassWerkzeug.jsx";
 import { KalkulationsCopilot } from "../components/KalkulationsCopilot.jsx";
+import { BefehlsLeiste } from "../components/BefehlsLeiste.jsx";
 import { vorschlagAnwenden, rezepturMengeAendern, alsStammposition } from "../lib/kiVorkalkulation.js";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
 import { positionMengeAendern, positionVariableAendern } from "../lib/stammpositionen.js";
@@ -1574,6 +1575,12 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
               </div>
             )}
 
+            {istDesktop && !gesperrt && a.positionen.length > 0 && (
+              <BefehlsLeiste positionen={a.positionen} kalkulationspreise={kalkulationspreise} session={session}
+                mengeSetzen={(p, m) => positionMengeAendern(p, m, stammpositionen, kalkulationspreise) || rezepturMengeAendern(p, m, kalkulationspreise)
+                  || (p.kalk ? { ...p, menge: m, ep: kalkulationEp(p.kalk, kalkulationspreise, m) } : { ...p, menge: m })}
+                onAnwenden={positionen => setA(x => ({ ...x, positionen }))} />
+            )}
             {istDesktop ? (
               <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, overflow:"clip" }}>
                 {a.positionen.length > 0 ? (
