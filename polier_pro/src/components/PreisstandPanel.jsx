@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Printer, RotateCcw, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Printer, RotateCcw, X, FileInput } from "lucide-react";
 import { mittellohnBerechnen } from "../lib/kalkulationsgrundlagen.js";
 import {
   abweichungen, firmenpreiseNachziehen, preisSetzen, preisZuruecksetzen, mittellohnSetzen, projektpreisHinzufuegen,
   lieferantenangebotSetzen, lieferantWaehlen, bedarfJePreis,
 } from "../lib/preisstand.js";
+import { LieferantenangebotEinlesen } from "./LieferantenangebotEinlesen.jsx";
 import { escapeHtml } from "../lib/utils.js";
 
 // Preise dieses Angebots: Projektmittellohn, Zuschläge, Kalkulationspreise
@@ -38,7 +39,8 @@ function Zahl({ wert, onWert, disabled, label, breite = "100%", rechts = true })
   );
 }
 
-export function PreisstandPanel({ preisstand: ps, firmenpreise = [], firmenMittellohn = null, eingefroren = false, positionen = [], onAendern, onZuschlaegeAnwenden, projekt, eigeneFirma, angebotTitel }) {
+export function PreisstandPanel({ preisstand: ps, firmenpreise = [], firmenMittellohn = null, eingefroren = false, positionen = [], onAendern, onZuschlaegeAnwenden, projekt, eigeneFirma, angebotTitel, session = null }) {
+  const [einlesen, setEinlesen] = useState(false);
   const [offen, setOffen] = useState(null);       // id des aufgeklappten Preises
   const [neu, setNeu] = useState(null);           // neuer Projektpreis
   const [ml, setMl] = useState(false);
@@ -205,6 +207,8 @@ export function PreisstandPanel({ preisstand: ps, firmenpreise = [], firmenMitte
             <button onClick={() => setNeu({ bezeichnung: "", kategorie: "material", einheit: "m³", preis: null })} style={leise}><Plus size={14} strokeWidth={1.5} /> Projektpreis</button>
           )}
           {bedarf.material.size > 0 && <button onClick={anfrageDrucken} style={leise}><Printer size={14} strokeWidth={1.5} /> Preisanfrage Material</button>}
+          <button onClick={() => setEinlesen(true)} style={leise}><FileInput size={14} strokeWidth={1.5} /> Lieferantenangebot einlesen</button>
+          {einlesen && <LieferantenangebotEinlesen preisstand={ps} session={session} onAendern={onAendern} onClose={() => setEinlesen(false)} />}
         </div>
       )}
     </div>

@@ -4,6 +4,9 @@ import { Scale, X, Upload, Check, TriangleAlert } from "lucide-react";
 import { gaebXmlDateiLesen, parseGaebXml } from "../lib/gaebXml.js";
 import { gaeb90DateiLesen, parseGaeb90Preise, gaeb90PreiseZuPositionen, gaeb90ZuPositionen } from "../lib/gaeb90.js";
 import { preisspiegelBauen, nuPreiseUebernehmen } from "../lib/preisspiegel.js";
+import { anhangAusDatei } from "../lib/anhaenge.js";
+import { nuAngebotEinlesen } from "../lib/angebotEinlesen.js";
+import { kiToolAufruf } from "../lib/ai.js";
 
 const euro = n => n == null ? "—" : n.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -16,16 +19,29 @@ async function nuAngebotLesen(datei) {
   if (/\.[dp]8[46]$/i.test(datei.name)) {
     return { name, positionen: gaeb90PreiseZuPositionen(parseGaeb90Preise(await gaeb90DateiLesen(datei))) };
   }
-  throw new Error(`${datei.name}: bitte eine bepreiste GAEB-Datei (X84, D84) wählen.`);
+  return null; // kein GAEB: wird per KI gelesen
 }
 
 // Preisspiegel für Nachunternehmer-Angebote (lib/preisspiegel.js): mehrere
 // bepreiste GAEB-Dateien hochladen, je Position den Bieter wählen (Vorgabe:
 // günstigster), übernehmen → NU-Preis als Fremdleistung mit Zuschlag.
-export function NuPreisspiegel({ positionen, zuschlagFremdleistung = 0, onUebernehmen, onClose }) {
+export function NuPreisspiegel({ positionen, zuschlagFremdleistung = 0, session = null, onUebernehmen, onClose }) {
   const [nuAngebote, setNuAngebote] = useState([]);
   const [fehler, setFehler] = useState("");
   const [wahl, setWahl] = useState({});
+  const [liest, setLiest] = useState(null);
+  const [mailOffen, setMailOffen] = useState(false);
+  const [mailText, setMailText] = useState("");
+  const rufeKi = (system, messages, tools, toolChoice) => kiToolAufruf({ system, messages, tools, toolChoice, maxTokens: 6000 }, session);
+  async function perKi({ datei, text }) {
+    if (!session?.access_token) throw new Error("PDF, Fotos und Mailtext liest die KI; dafür bitte anmelden");
+    setLiest(datei?.name || "Mailtext");
+    try {
+      const anhang = datei ? await anhangAusDatei(datei) : null;
+      const a = await nuAngebotEinlesen({ anhang, text, positionen, rufeKi });
+      setNuAngebote(x => [...x, a]);
+    } finally { setLiest(null); }
+  }
   const ref = useRef(null);
   const spiegel = useMemo(() => preisspiegelBauen(positionen, nuAngebote), [positionen, nuAngebote]);
 
@@ -34,7 +50,10 @@ export function NuPreisspiegel({ positionen, zuschlagFremdleistung = 0, onUebern
     e.target.value = "";
     setFehler("");
     for (const d of liste) {
-      try { const a = await nuAngebotLesen(d); setNuAngebote(x => [...x, a]); }
+      try {
+        const a = await nuAngebotLesen(d);
+        if (a) setNuAngebote(x => [...x, a]); else await perKi({ datei: d });
+      }
       catch (err) { setFehler(err.message || String(err)); }
     }
     setWahl({});
@@ -56,15 +75,40 @@ export function NuPreisspiegel({ positionen, zuschlagFremdleistung = 0, onUebern
       </div>
       <div style={{ padding:"14px 16px" }}>
         <div style={{ color:"var(--muted)", fontSize:12, marginBottom:10, lineHeight:1.5 }}>
-          Bepreiste Angebote eurer Nachunternehmer hochladen (GAEB X84 oder D84). Zugeordnet wird über die Ordnungszahl,
+          Bepreiste Angebote eurer Nachunternehmer hochladen: GAEB X84/D84 direkt, PDF, Foto oder Mailtext liest die KI. Zugeordnet wird über die Ordnungszahl,
           sonst über ähnlichen Text und gleiche Einheit. Der gewählte Preis wird als Fremdleistung mit {zuschlagFremdleistung} % Zuschlag übernommen.
         </div>
-        <input ref={ref} type="file" multiple accept=".x84,.X84,.x86,.X86,.d84,.D84,.d86,.D86,.p84,.P84" onChange={dateien} style={{ display:"none" }} />
+        <input ref={ref} type="file" multiple accept=".x84,.X84,.x86,.X86,.d84,.D84,.d86,.D86,.p84,.P84,application/pdf,image/*" onChange={dateien} style={{ display:"none" }} />
         <button onClick={() => ref.current?.click()}
           style={{ width:"100%", background:"var(--surface2)", color:"var(--text)", border:"1.5px dashed var(--border)", borderRadius:10,
             padding:11, cursor:"pointer", fontSize:13, fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-          <Upload size={14} /> NU-Angebot hinzufügen
+          {liest ? <>KI liest {liest} …</> : <><Upload size={14} /> NU-Angebot hinzufügen (GAEB, PDF, Foto)</>}
         </button>
+        <button onClick={() => setMailOffen(o => !o)} style={{ marginTop:8, background:"none", border:"none", color:"var(--text2)", fontFamily:"inherit", fontSize:13, cursor:"pointer", padding:0 }}>
+          {mailOffen ? "Mailtext schließen" : "Angebot aus Mailtext einfügen"}
+        </button>
+        {mailOffen && (
+          <div style={{ marginTop:8 }}>
+            <textarea value={mailText} onChange={e => setMailText(e.target.value)} rows={6} placeholder="Text der Angebotsmail hier einfügen"
+              style={{ boxSizing:"border-box", width:"100%", padding:"10px 12px", border:"1px solid var(--border2)", borderRadius:8, background:"var(--surface)", color:"var(--text)", fontFamily:"inherit", fontSize:13, resize:"vertical" }} />
+            <button disabled={!mailText.trim() || !!liest} onClick={async () => { setFehler(""); try { await perKi({ text: mailText }); setMailText(""); setMailOffen(false); } catch (e) { setFehler(e.message); } }}
+              style={{ marginTop:6, height:32, padding:"0 12px", borderRadius:8, border:"none", background:"var(--text)", color:"var(--surface)", fontFamily:"inherit", fontSize:13, cursor:"pointer", opacity: mailText.trim() ? 1 : 0.5 }}>Einlesen</button>
+          </div>
+        )}
+        {nuAngebote.some(a => a.quelle === "ki") && (
+          <div style={{ marginTop:12, display:"flex", flexDirection:"column", gap:8 }}>
+            {nuAngebote.filter(a => a.quelle === "ki").map((a, i) => (
+              <div key={i} style={{ border:"1px solid var(--border)", borderRadius:10, padding:"10px 12px", fontSize:13, background:"var(--surface)" }}>
+                <div style={{ fontWeight:500, color:"var(--text)" }}>{a.name}{a.gueltigBis ? <span style={{ color:"var(--text2)", fontWeight:400 }}> · gültig bis {a.gueltigBis}</span> : null}</div>
+                {!a.summe.ok && <div style={{ color:"var(--red)", marginTop:4 }}>Summe passt nicht: gelesen {euro(a.summe.berechnet)} €, im Angebot {euro(a.summe.angegeben)} €. Bitte Preise prüfen</div>}
+                {a.summe.ok && a.summe.angegeben != null && <div style={{ color:"var(--text2)", marginTop:4 }}>Summe stimmt mit dem Angebot überein ({euro(a.summe.angegeben)} €)</div>}
+                {a.vorbehalte.length > 0 && <div style={{ color:"var(--akzent)", marginTop:4 }}>Vorbehalte: {a.vorbehalte.join(" · ")}</div>}
+                {a.nichtAngeboten.length > 0 && <div style={{ color:"var(--text2)", marginTop:4 }}>Nicht angeboten: {a.nichtAngeboten.join(", ")}</div>}
+                {a.positionen.some(p => p.hinweis) && <div style={{ color:"var(--text2)", marginTop:4 }}>{a.positionen.filter(p => p.hinweis).map(p => `${p.oz || p.bez}: ${p.hinweis}`).join(" · ")}</div>}
+              </div>
+            ))}
+          </div>
+        )}
         {fehler && <div style={{ color:"var(--red)", fontSize:12, marginTop:8, display:"flex", gap:5 }}><TriangleAlert size={13} /> {fehler}</div>}
 
         {nuAngebote.length > 0 && (

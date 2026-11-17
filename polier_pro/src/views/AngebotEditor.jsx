@@ -799,7 +799,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 
   if (preisspiegelOffen) {
     return <NuPreisspiegel positionen={a.positionen}
-      zuschlagFremdleistung={standardZuschlaege?.zuschlagFremdleistung || 0}
+      zuschlagFremdleistung={standardZuschlaege?.zuschlagFremdleistung || 0} session={session}
       onUebernehmen={neu => { setA(x => ({ ...x, positionen: neu })); setPreisspiegelOffen(false); }}
       onClose={() => setPreisspiegelOffen(false)} />;
   }
@@ -1140,7 +1140,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
   };
 
   const preisePanel = (
-    <PreisstandPanel preisstand={a.preisstand} firmenpreise={firmenpreise} firmenMittellohn={kalkulationsgrundlagen?.mittellohn}
+    <PreisstandPanel session={session} preisstand={a.preisstand} firmenpreise={firmenpreise} firmenMittellohn={kalkulationsgrundlagen?.mittellohn}
       eingefroren={preiseEingefroren} positionen={a.positionen} onAendern={preisstandAendern} onZuschlaegeAnwenden={zuschlaegeAnwenden}
       projekt={projekt} eigeneFirma={eigeneFirma} angebotTitel={a.titel} />
   );
