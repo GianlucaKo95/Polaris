@@ -1,10 +1,11 @@
 import { useState, useRef } from "react";
 import { useIstDesktop } from "../hooks/useIstDesktop.js";
 import { createPortal } from "react-dom";
-import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator, Upload, Coins, Layers, TriangleAlert, ShieldCheck, HardHat, Leaf, Gauge } from "lucide-react";
+import { Settings, Euro, ClipboardList, Pencil, X, Plus, FileText, NotebookPen, Calculator, Upload, Coins, Layers, TriangleAlert, ShieldCheck, HardHat, Leaf, Gauge, Trophy } from "lucide-react";
 import { KalkulationsgrundlagenPanel } from "../components/KalkulationsgrundlagenPanel.jsx";
 import { Co2FaktorenPanel } from "../components/Co2FaktorenPanel.jsx";
 import { ErfahrungswertePanel } from "../components/ErfahrungswertePanel.jsx";
+import { SubmissionsAuswertung } from "../components/SubmissionsAuswertung.jsx";
 import { StammpositionFormular } from "./StammpositionFormular.jsx";
 import { stammpositionEp, stammpositionZeitansatz } from "../lib/stammpositionen.js";
 import { aufteilungGueltig } from "../lib/efb.js";
@@ -164,7 +165,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
           gemeinsame flex:1-Reihe auf schmalen Bildschirmen aus dem
           sichtbaren Bereich heraus (der letzte Tab war nicht mehr erreichbar). */}
       <div className="unter-reiter" role="tablist" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:12 }}>
-        {[["preise",Euro,"Einheitspreise"],["grundlagen",HardHat,"Lohn & Geräte"],["kalkpreise",Calculator,"Kalkulationspreise"],["stammpositionen",Layers,"Stammpositionen"],["erfahrung",Gauge,"Erfahrungswerte"],["freigabe",ShieldCheck,"Freigaberegeln"],["co2",Leaf,"CO₂"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
+        {[["preise",Euro,"Einheitspreise"],["grundlagen",HardHat,"Lohn & Geräte"],["kalkpreise",Calculator,"Kalkulationspreise"],["stammpositionen",Layers,"Stammpositionen"],["erfahrung",Gauge,"Erfahrungswerte"],["submission",Trophy,"Submissionen"],["freigabe",ShieldCheck,"Freigaberegeln"],["co2",Leaf,"CO₂"],["vorlagen",ClipboardList,"LV-Vorlagen"],["angebotsvorlage",FileText,"Angebots-Vorlage"],["tagebuchvorlage",NotebookPen,"Bautagebuch-Vorlage"]].map(([k,Icon,l]) => (
           <button key={k} role="tab" aria-selected={aktiv===k} onClick={() => setAktiv(k)}
             style={{ background: aktiv===k ? "var(--yellow)" : "var(--surface2)",
               color: aktiv===k ? "#1a1200" : "var(--muted)",
@@ -476,6 +477,7 @@ export function AdminParameterView({ einheitspreise, setEinheitspreise, lvVorlag
         </div>
       )}
 
+      {aktiv === "submission" && <SubmissionsAuswertung stammpositionen={stammpositionen} projekte={projekte} session={session} />}
       {aktiv === "erfahrung" && <ErfahrungswertePanel stammpositionen={stammpositionen} setStammpositionen={stammpositionenStatus === "ok" ? setStammpositionen : null}
         kalkulationspreise={kalkulationspreise} projekte={projekte} session={session} />}
       {aktiv === "co2" && <Co2FaktorenPanel faktoren={co2Faktoren} setFaktoren={setCo2Faktoren} status={co2FaktorenStatus} />}

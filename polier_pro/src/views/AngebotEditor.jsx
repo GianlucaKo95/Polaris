@@ -19,6 +19,7 @@ import { Anfragen } from "../components/Anfragen.jsx";
 import { AnschreibenPanel } from "../components/AnschreibenPanel.jsx";
 import { Nebenangebote } from "../components/Nebenangebote.jsx";
 import { MaterialRisiko } from "../components/MaterialRisiko.jsx";
+import { SubmissionPanel } from "../components/SubmissionPanel.jsx";
 import { anschreibenHtml, ANSCHREIBEN_CSS } from "../lib/anschreiben.js";
 import { vorschlagAnwenden, rezepturMengeAendern, alsStammposition } from "../lib/kiVorkalkulation.js";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
@@ -103,6 +104,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [nebenStand, setNebenStand] = useState(null);
   const [risikoOffen, setRisikoOffen] = useState(false);
   const [risikoStand, setRisikoStand] = useState(null);
+  const [submissionOffen, setSubmissionOffen] = useState(false);
   const [copilotStand, setCopilotStand] = useState(null);
   const [preisspiegelOffen, setPreisspiegelOffen] = useState(false);
   const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
@@ -858,6 +860,10 @@ ${anschreibenHtml(a.anschreiben, escapeHtml).nachSummen}
         setAufmassFuer(null);
       }} />
   );
+  if (submissionOffen) {
+    return <SubmissionPanel angebot={a} stammpositionen={stammpositionen} session={session} gesperrt={gesperrt}
+      onAendern={submission => setA(x => ({ ...x, submission }))} onClose={() => setSubmissionOffen(false)} />;
+  }
   if (risikoOffen) {
     return <MaterialRisiko positionen={a.positionen} preisstand={a.preisstand} kalkulationspreise={kalkulationspreise} session={session} gesperrt={gesperrt || preiseEingefroren}
       stand={risikoStand} setStand={setRisikoStand} onPreisstand={preisstandAendern}
@@ -1063,6 +1069,7 @@ ${anschreibenHtml(a.anschreiben, escapeHtml).nachSummen}
                 !leer && { label: "Angebotsschreiben", aktion: () => setAnschreibenOffen(true) },
                 !leer && !gesperrt && { label: "Nebenangebote vorschlagen", aktion: () => setNebenOffen(true) },
                 !leer && { label: "Materialpreisrisiko", aktion: () => setRisikoOffen(true) },
+                !leer && a.status !== "entwurf" && { label: "Submissionsergebnis", aktion: () => setSubmissionOffen(true) },
               ].filter(Boolean)} />
             )}
             {!gesperrt && (
