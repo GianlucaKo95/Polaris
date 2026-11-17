@@ -18,6 +18,7 @@ import { MengenPruefung } from "../components/MengenPruefung.jsx";
 import { Anfragen } from "../components/Anfragen.jsx";
 import { AnschreibenPanel } from "../components/AnschreibenPanel.jsx";
 import { Nebenangebote } from "../components/Nebenangebote.jsx";
+import { MaterialRisiko } from "../components/MaterialRisiko.jsx";
 import { anschreibenHtml, ANSCHREIBEN_CSS } from "../lib/anschreiben.js";
 import { vorschlagAnwenden, rezepturMengeAendern, alsStammposition } from "../lib/kiVorkalkulation.js";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
@@ -100,6 +101,8 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [anschreibenOffen, setAnschreibenOffen] = useState(false);
   const [nebenOffen, setNebenOffen] = useState(false);
   const [nebenStand, setNebenStand] = useState(null);
+  const [risikoOffen, setRisikoOffen] = useState(false);
+  const [risikoStand, setRisikoStand] = useState(null);
   const [copilotStand, setCopilotStand] = useState(null);
   const [preisspiegelOffen, setPreisspiegelOffen] = useState(false);
   const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
@@ -855,6 +858,13 @@ ${anschreibenHtml(a.anschreiben, escapeHtml).nachSummen}
         setAufmassFuer(null);
       }} />
   );
+  if (risikoOffen) {
+    return <MaterialRisiko positionen={a.positionen} preisstand={a.preisstand} kalkulationspreise={kalkulationspreise} session={session} gesperrt={gesperrt || preiseEingefroren}
+      stand={risikoStand} setStand={setRisikoStand} onPreisstand={preisstandAendern}
+      onVorbehalt={text => setA(x => ({ ...x, anschreiben: { einleitung: "", ausschluesse: [], zahlung: "", schluss: "", annahmen: [], ...(x.anschreiben || {}),
+        annahmen: [...(x.anschreiben?.annahmen || []).filter(t => t !== text), text] } }))}
+      onClose={() => setRisikoOffen(false)} />;
+  }
   if (nebenOffen) {
     return <Nebenangebote positionen={a.positionen} projekt={projekt} eigeneFirma={eigeneFirma} stammpositionen={stammpositionen} einheitspreise={einheitspreise}
       lvVorlagen={lvVorlagen} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} session={session}
@@ -1052,6 +1062,7 @@ ${anschreibenHtml(a.anschreiben, escapeHtml).nachSummen}
                 !leer && !gesperrt && { label: "NU- und Lieferanten-Anfragen", aktion: () => setAnfragenOffen(true) },
                 !leer && { label: "Angebotsschreiben", aktion: () => setAnschreibenOffen(true) },
                 !leer && !gesperrt && { label: "Nebenangebote vorschlagen", aktion: () => setNebenOffen(true) },
+                !leer && { label: "Materialpreisrisiko", aktion: () => setRisikoOffen(true) },
               ].filter(Boolean)} />
             )}
             {!gesperrt && (
