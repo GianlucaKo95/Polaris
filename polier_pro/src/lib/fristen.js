@@ -111,3 +111,15 @@ export function neueSicherheit(teil = {}) {
 export function neueFrist(teil = {}) {
   return { projekt_id: null, art: "gewaehrleistung", titel: "", datum: null, abnahme_am: null, jahre: 4, erinnerung_tage: 30, erledigt_am: null, notiz: "", ...teil };
 }
+
+// Abnahmedatum je Baustelle: das eingetragene Abnahmedatum, sonst
+// ersatzweise der Tag des Baustellenabschlusses (ältere Baustellen).
+export function abnahmeJeProjekt(projekte) {
+  const m = {};
+  for (const p of projekte || []) {
+    const d = p.abnahme_datum || p.abschluss_datum;
+    if (d) m[p.id] = String(d).slice(0, 10);
+  }
+  return m;
+}
+export const abnahmeIstErsatz = p => !p?.abnahme_datum && !!p?.abschluss_datum;

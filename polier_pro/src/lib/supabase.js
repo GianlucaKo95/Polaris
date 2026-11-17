@@ -1230,3 +1230,21 @@ export async function sbGetProfile(token, userId) {
     return { profil: null, sessionUngueltig: false };
   }
 }
+
+// Testmail der Fristen-Erinnerung an den angemeldeten Administrator bzw.
+// Geschäftsführer (supabase/functions/fristen-erinnerung). Per fetch, damit
+// die Fehlermeldung der Function ankommt (siehe sbSupervisorNutzerEinladen).
+export async function sbErinnerungTestmail(session) {
+  if (!session?.access_token) return { ok: false, fehler: "Nur mit Anmeldung möglich" };
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/fristen-erinnerung`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
+      body: JSON.stringify({ test: true }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 404) return { ok: false, fehler: "Die Funktion fristen-erinnerung ist noch nicht deployt" };
+    if (!res.ok) return { ok: false, fehler: data?.fehler || `Fehlgeschlagen (${res.status})` };
+    return { ok: true, ...data };
+  } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen" }; }
+}

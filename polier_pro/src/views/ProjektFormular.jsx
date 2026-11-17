@@ -244,6 +244,30 @@ export function ProjektFormular({ initial, onSave, onClose, subs = [], speicherF
           </div>
         ))}
 
+        {/* Abnahme (§ 12 VOB/B / § 640 BGB): ab hier laufen Gewährleistung und
+            Rückgabe der Bürgschaften (lib/fristen.js). Nur bei bestehenden Baustellen. */}
+        {initial && (
+          <div style={{ marginBottom:12 }}>
+            <Label>Abnahme</Label>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              <input type="date" value={p.abnahme_datum || ""} aria-label="Abnahme am"
+                onChange={e => setP(prev => ({ ...prev, abnahme_datum: e.target.value || null }))} style={inputStyle()} />
+              <select value={p.abnahme_art || ""} aria-label="Art der Abnahme"
+                onChange={e => setP(prev => ({ ...prev, abnahme_art: e.target.value || null }))} style={inputStyle()}>
+                <option value="">Art der Abnahme</option>
+                <option value="foermlich">Förmlich, mit Protokoll</option>
+                <option value="fiktiv">Fiktiv, nach Fristablauf</option>
+                <option value="schluessig">Durch Ingebrauchnahme</option>
+                <option value="teil">Teilabnahme</option>
+              </select>
+            </div>
+            <textarea value={p.abnahme_vorbehalte || ""} rows={2} placeholder="Vorbehalte, z. B. Restmängel laut Protokoll oder Vertragsstrafe"
+              aria-label="Vorbehalte bei der Abnahme" onChange={e => setP(prev => ({ ...prev, abnahme_vorbehalte: e.target.value }))}
+              style={{ ...inputStyle(), marginTop:8, resize:"vertical" }} />
+            <div style={{ fontSize:11, color:"var(--muted)", marginTop:4 }}>Ab der Abnahme laufen Gewährleistung und die Rückgabe der Bürgschaften</div>
+          </div>
+        )}
+
         {/* Farbe */}
         <div style={{ marginBottom:12 }}>
           <Label>Projektfarbe</Label>

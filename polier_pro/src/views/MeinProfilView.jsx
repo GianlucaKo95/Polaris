@@ -84,6 +84,20 @@ export function MeinProfilView({ profil, session, onProfilAktualisiert, pinPflic
     onProfilAktualisiert?.({ pin: null });
   }
 
+  // Erinnerung per E-Mail (Fristen, Geräteprüfungen, Regie) abbestellen
+  const [mailAn, setMailAn] = useState(profil?.erinnerung_email !== false);
+  const [mailMeldung, setMailMeldung] = useState("");
+  async function mailUmschalten(an) {
+    setMailAn(an); setMailMeldung("");
+    const ok = await sbFetch(`profile?id=eq.${profil.id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ erinnerung_email: an }),
+    });
+    if (!ok?.length) { setMailAn(!an); setMailMeldung("Konnte nicht gespeichert werden"); return; }
+    onProfilAktualisiert?.({ erinnerung_email: an });
+  }
+
   async function ladeAnfragen() {
     setLaden(true);
     const data = await sbFetch(
@@ -160,6 +174,20 @@ export function MeinProfilView({ profil, session, onProfilAktualisiert, pinPflic
           </div>
         </div>
       </div>
+
+      {["administrator", "geschaeftsfuehrer", "bauleiter"].includes(profil.rolle) && (
+        <label style={{ display:"flex", gap:12, alignItems:"flex-start", background:"var(--surface)", border:"1px solid var(--border)",
+          borderRadius:12, padding:"12px 14px", marginBottom:16, cursor:"pointer" }}>
+          <input type="checkbox" checked={mailAn} onChange={e => mailUmschalten(e.target.checked)} style={{ marginTop:3 }} />
+          <span>
+            <span style={{ display:"block", color:"var(--text)", fontWeight:700, fontSize:13 }}>Erinnerungen per E-Mail</span>
+            <span style={{ display:"block", color:"var(--muted)", fontSize:12, marginTop:2 }}>
+              Fällige Fristen, Bürgschaften, Geräteprüfungen und Regieberichte, sofern die Firma die Erinnerung eingeschaltet hat
+            </span>
+            {mailMeldung && <span style={{ display:"block", color:"var(--red)", fontSize:12, marginTop:4 }}>{mailMeldung}</span>}
+          </span>
+        </label>
+      )}
 
       {/* App-Sperre */}
       <div style={{ background:"var(--surface)", border:"1px solid var(--border)",

@@ -1,15 +1,16 @@
 {
   "name": "polier-pro",
-  "version": "1.76.0",
+  "version": "1.77.0",
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/funktionen-bundeln.mjs && vite build",
     "test": "node --test src/lib/*.test.mjs",
     "cap:sync": "vite build && npx cap sync",
     "android:open": "npm run cap:sync && npx cap open android",
     "ios:open": "npm run cap:sync && npx cap open ios",
-    "ki-eval": "node scripts/ki-eval.mjs"
+    "ki-eval": "node scripts/ki-eval.mjs",
+    "funktionen": "node scripts/funktionen-bundeln.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { useIstDesktop } from "../hooks/useIstDesktop.js";
+import { ErinnerungPanel } from "../components/ErinnerungPanel.jsx";
 import {
   SICHERHEIT_ARTEN, FRIST_ARTEN, sicherheitLabel, fristLabel, gewaehrleistungsEnde, rueckgabeDatum, avalkostenJahr, terminListe, stand,
-  neueSicherheit, neueFrist,
+  neueSicherheit, neueFrist, abnahmeJeProjekt as abnahmeJeProjektAus, abnahmeIstErsatz,
 } from "../lib/fristen.js";
 import { useUngespeichert } from "../hooks/useUngespeichert.js";
 import { verlassenBestaetigen } from "../lib/ungespeichert.js";
@@ -34,7 +35,7 @@ const relativ = t => t.tage === 0 ? "heute" : t.tage < 0 ? `seit ${-t.tage} ${t.
 
 function Feld({ l, children }) { return <div><label style={label}>{l}</label>{children}</div>; }
 
-export function FristenView({ projekte = [], sicherheitenApi, fristenApi }) {
+export function FristenView({ projekte = [], sicherheitenApi, fristenApi, geraete = [], regieberichte = [], erinnerung = null, setErinnerung, darfErinnerungAendern = false, session, firmaName = "", land = "NW", fristWerktage = 6 }) {
   const istDesktop = useIstDesktop();
   const heute = heuteIso();
   const [reiter, setReiter] = useState("termine");
@@ -46,8 +47,11 @@ export function FristenView({ projekte = [], sicherheitenApi, fristenApi }) {
   const fehler = sicherheitenApi.fehler || fristenApi.fehler;
 
   const projektName = id => projekte.find(p => String(p.id) === String(id))?.name || "ohne Baustelle";
-  const abnahmeJeProjekt = useMemo(() => Object.fromEntries(projekte.filter(p => p.abschluss_datum).map(p => [p.id, String(p.abschluss_datum).slice(0, 10)])), [projekte]);
+  const abnahmeJeProjekt = useMemo(() => abnahmeJeProjektAus(projekte), [projekte]);
   const passt = x => !baustelle || String(x.projekt_id) === baustelle;
+  // Abgenommene Baustellen ohne erfasste Gewährleistung
+  const ohneGewaehrleistung = projekte.filter(p => abnahmeJeProjekt[p.id] && passt({ projekt_id: p.id })
+    && !fristen.some(f => f.art === "gewaehrleistung" && String(f.projekt_id) === String(p.id)));
   const termine = useMemo(() => terminListe({ fristen, sicherheiten, abnahmeJeProjekt, heute }), [fristen, sicherheiten, abnahmeJeProjekt, heute]);
 
   const gewaehlt = auswahl && auswahl.id !== "neu"
@@ -58,9 +62,9 @@ export function FristenView({ projekte = [], sicherheitenApi, fristenApi }) {
   const geaendert = !!entwurf && JSON.stringify(entwurf) !== JSON.stringify(auswahl?.id === "neu" ? vorlage : gewaehlt);
   useUngespeichert(geaendert, { titel: auswahl?.typ === "sicherheit" ? "Die Sicherheit" : "Die Frist", speichern: async () => !!(await sichern()) });
   const oeffnen = async (typ, id) => { if (geaendert && !(await verlassenBestaetigen())) return; setAuswahl({ typ, id }); setMeldung(null); };
-  const neu = async typ => {
+  const neu = async (typ, vorgabe = {}) => {
     if (geaendert && !(await verlassenBestaetigen())) return;
-    const teil = { projekt_id: baustelle ? Number(baustelle) : null };
+    const teil = { projekt_id: baustelle ? Number(baustelle) : null, ...vorgabe };
     setAuswahl({ typ, id: "neu" });
     const v = typ === "sicherheit" ? neueSicherheit(teil) : neueFrist({ ...teil, abnahme_am: abnahmeJeProjekt[teil.projekt_id] || null });
     setVorlage(v); setEntwurf(structuredClone(v));
@@ -255,6 +259,7 @@ export function FristenView({ projekte = [], sicherheitenApi, fristenApi }) {
               {datumFeld("Abnahme am", "abnahme_am")}
               {zahlFeld("Jahre", "jahre", "4")}
             </div>
+            {!e.abnahme_am && abnahme && <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 4 }}>Aus der Baustelle: Abnahme am <span style={zahl}>{datumDe(abnahme)}</span>{abnahmeIstErsatz(projekte.find(p => String(p.id) === String(e.projekt_id))) && " (Abschlussdatum)"}</div>}
             <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>VOB/B § 13 Abs. 4: Bauwerke 4 Jahre, wartungsbedürftige Anlagenteile 2 Jahre. BGB: 5 Jahre. Was vereinbart ist, gilt</div>
             <div style={{ marginTop: 8 }}>{datumFeld("Abweichend vereinbartes Ende", "datum")}</div>
             <div style={{ fontSize: 13, color: "var(--text2)", marginTop: 8 }}>{ende ? <>Endet am <span style={zahl}>{datumDe(ende)}</span>, Erinnerung zur Begehung 3 Monate vorher</> : "Abnahmedatum eintragen, dann rechnet Polaris das Ende"}</div>
@@ -278,7 +283,8 @@ export function FristenView({ projekte = [], sicherheitenApi, fristenApi }) {
   })();
 
   const offen = termine.filter(passt).filter(t => t.stand !== "ok");
-  const REITER = [["termine", "Termine", offen.length], ["sicherheiten", "Sicherheiten", sicherheiten.filter(passt).filter(s => s.status !== "zurueck").length], ["fristen", "Fristen", fristen.filter(passt).filter(f => !f.erledigt_am).length]];
+  const REITER = [["termine", "Termine", offen.length], ["sicherheiten", "Sicherheiten", sicherheiten.filter(passt).filter(s => s.status !== "zurueck").length], ["fristen", "Fristen", fristen.filter(passt).filter(f => !f.erledigt_am).length],
+    ["erinnerung", "E-Mail-Erinnerung", null]];
 
   const links = (
     <div style={{ minWidth: 0, flex: 1 }}>
@@ -294,7 +300,7 @@ export function FristenView({ projekte = [], sicherheitenApi, fristenApi }) {
           <button key={k} role="tab" aria-selected={reiter === k} onClick={() => setReiter(k)}
             style={{ height: 40, padding: 0, marginBottom: -1, background: "none", border: "none", borderBottom: `2px solid ${reiter === k ? "var(--text)" : "transparent"}`,
               color: reiter === k ? "var(--text)" : "var(--text2)", fontFamily: "inherit", fontSize: 14, fontWeight: reiter === k ? 500 : 400, cursor: "pointer", display: "flex", gap: 6, alignItems: "center" }}>
-            {l}<span style={{ ...zahl, color: k === "termine" && n ? "var(--red)" : "var(--muted)" }}>{n}</span>
+            {l}{n != null && <span style={{ ...zahl, color: k === "termine" && n ? "var(--red)" : "var(--muted)" }}>{n}</span>}
           </button>
         ))}
       </div>
@@ -309,9 +315,37 @@ export function FristenView({ projekte = [], sicherheitenApi, fristenApi }) {
           ))}
         </div>
       )}
+      {reiter === "termine" && ohneGewaehrleistung.length > 0 && (
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, marginBottom: 16 }}>
+          {ohneGewaehrleistung.map((p, i) => (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", borderTop: i ? "1px solid var(--border)" : "none", flexWrap: "wrap" }}>
+              <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 3, background: "var(--akzent)" }} />
+              <span style={{ flex: 1, minWidth: 220 }}>{p.name}: abgenommen am <span style={zahl}>{datumDe(abnahmeJeProjekt[p.id])}</span>
+                {abnahmeIstErsatz(p) && <span style={{ color: "var(--muted)" }}> (Abschlussdatum, kein Abnahmedatum eingetragen)</span>}, Gewährleistung noch nicht erfasst</span>
+              <button onClick={() => { setBaustelle(""); setReiter("fristen"); neu("frist", { projekt_id: p.id }); }} style={{ ...knopf(), height: 32 }}>Gewährleistung anlegen</button>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "clip" }}>
         {reiter === "termine" ? termineAnsicht : reiter === "sicherheiten" ? sicherheitenAnsicht : fristenAnsicht}
       </div>
+    </div>
+  );
+
+  if (reiter === "erinnerung") return (
+    <div className="eigen-felder">
+      <div role="tablist" style={{ display: "flex", gap: 24, borderBottom: "1px solid var(--border)", marginBottom: 16 }}>
+        {REITER.map(([k, l, n]) => (
+          <button key={k} role="tab" aria-selected={reiter === k} onClick={() => setReiter(k)}
+            style={{ height: 40, padding: 0, marginBottom: -1, background: "none", border: "none", borderBottom: `2px solid ${reiter === k ? "var(--text)" : "transparent"}`,
+              color: reiter === k ? "var(--text)" : "var(--text2)", fontFamily: "inherit", fontSize: 14, fontWeight: reiter === k ? 500 : 400, cursor: "pointer", display: "flex", gap: 6, alignItems: "center" }}>
+            {l}{n != null && <span style={{ ...zahl, color: k === "termine" && n ? "var(--red)" : "var(--muted)" }}>{n}</span>}
+          </button>
+        ))}
+      </div>
+      <ErinnerungPanel einstellungen={erinnerung} setEinstellungen={setErinnerung} darfAendern={darfErinnerungAendern} session={session} firmaName={firmaName}
+        land={land} fristWerktage={fristWerktage} daten={{ projekte, fristen, sicherheiten, geraete, regieberichte }} />
     </div>
   );
 

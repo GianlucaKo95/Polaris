@@ -7,7 +7,7 @@ import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
 import { useIstDesktop } from "./hooks/useIstDesktop.js";
 import { useGeraete } from "./hooks/useGeraete.js";
 import { useFirmaTabelle } from "./hooks/useFirmaTabelle.js";
-import { terminListe, dringend } from "./lib/fristen.js";
+import { terminListe, dringend, abnahmeJeProjekt } from "./lib/fristen.js";
 import { DesktopShell } from "./components/DesktopShell.jsx";
 import { useFirmenUebersicht } from "./hooks/useFirmenUebersicht.js";
 import { BaustellenListeView } from "./views/BaustellenListeView.jsx";
@@ -395,6 +395,8 @@ export default function PolierApp() {
   const regieApi = useFirmaTabelle(auth.session, firma?.id, "regieberichte", { filter: { spalte: "projekt_id", wert: aktivId ?? null }, sortierung: "nummer" });
   const sicherheitenApi = useFirmaTabelle(auth.session, firma?.id, "sicherheiten");
   const fristenApi = useFirmaTabelle(auth.session, firma?.id, "fristen");
+  const regieAlleApi = useFirmaTabelle(auth.session, firma?.id, "regieberichte");   // firmenweit, für die Erinnerung
+  const [erinnerungEinstellungen, setErinnerungEinstellungen] = useFirmaSpalte(firma?.id, auth.session, "erinnerung_einstellungen", null);
   const planApi = useFirmaTabelle(auth.session, firma?.id, "einsatzplan", { sortierung: "woche" });
   const [regieEinstellungen, setRegieEinstellungen] = useFirmaSpalte(firma?.id, auth.session, "regie_einstellungen", null);
   function grundlagenAendern(neu) {
@@ -981,6 +983,10 @@ export default function PolierApp() {
       typ:           p.typ || "hochbau",
       farbe:         p.farbe || "#F5C400",
       sub_ids:       p.sub_ids || [],
+      // Abnahme (1.77): Grundlage für Gewährleistung und Bürgschaftsrückgabe
+      ...(p.abnahme_datum !== undefined ? { abnahme_datum: p.abnahme_datum || null } : {}),
+      ...(p.abnahme_art !== undefined ? { abnahme_art: p.abnahme_art || null } : {}),
+      ...(p.abnahme_vorbehalte !== undefined ? { abnahme_vorbehalte: p.abnahme_vorbehalte || "" } : {}),
     };
 
     // Ohne Firma (z.B. Demo-Modus ohne echten Login, ODER weil die Firma
@@ -1210,7 +1216,10 @@ export default function PolierApp() {
             // "alle aus seiner Kolonne", nicht firmenweit.
             darfAlleSehen={["administrator","geschaeftsfuehrer","polier","vorarbeiter"].includes(aktiveRolle)} />}
         {tab === "finanzen"      && <FinanzenView session={auth.session} firmaId={firma?.id} projekte={projekte} eigeneFirma={eigeneFirma} datevEinstellungen={kalkulationsgrundlagen?.datev} />}
-        {tab === "fristen"       && <FristenView projekte={projekte} sicherheitenApi={sicherheitenApi} fristenApi={fristenApi} />}
+        {tab === "fristen"       && <FristenView projekte={projekte} sicherheitenApi={sicherheitenApi} fristenApi={fristenApi}
+            geraete={geraeteApi.geraete} regieberichte={regieAlleApi.zeilen} erinnerung={erinnerungEinstellungen} setErinnerung={setErinnerungEinstellungen}
+            darfErinnerungAendern={["administrator","geschaeftsfuehrer"].includes(aktiveRolle)} session={auth.session} firmaName={eigeneFirma?.name || firma?.name || ""}
+            land={lohnEinstellungen?.bundesland || "NW"} fristWerktage={regieEinstellungen?.fristWerktage || 6} />}
         {tab === "planung"       && <PlanungView session={auth.session} projekte={projekte} geraete={geraeteApi.geraete} plan={planApi}
             darfPlanen={["administrator","geschaeftsfuehrer","bauleiter"].includes(aktiveRolle)} />}
         {tab === "regie"         && <RegieView key={projekt?.id} projekt={projekt} api={regieApi} geraete={geraeteApi.geraete} grundlagen={kalkulationsgrundlagen}
@@ -1257,7 +1266,7 @@ export default function PolierApp() {
     const aktiveProjekte = projekte.filter(p => !p.archiviert);
     const freigaben = firmenDaten.angebote.filter(a => a.interne_freigabe?.status === "angefragt").length;
     const fristenDringend = dringend(terminListe({ fristen: fristenApi.zeilen, sicherheiten: sicherheitenApi.zeilen, heute: new Date().toLocaleDateString("sv-SE"),
-      abnahmeJeProjekt: Object.fromEntries(projekte.filter(p => p.abschluss_datum).map(p => [p.id, String(p.abschluss_datum).slice(0, 10)])) }));
+      abnahmeJeProjekt: abnahmeJeProjekt(projekte) }));
     const nav = [
       istBuero && { id: "cockpit", label: "Cockpit", Icon: LayoutGrid },
       { id: "baustellen", label: "Baustellen", Icon: Building2, zahl: aktiveProjekte.length || null },

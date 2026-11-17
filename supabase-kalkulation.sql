@@ -347,3 +347,39 @@ end $$;
 drop trigger if exists angebote_urkalkulation on angebote;
 create trigger angebote_urkalkulation before update on angebote
   for each row execute function angebote_urkalkulation_festhalten();
+
+-- ═══ Abnahme je Baustelle und E-Mail-Erinnerung (1.77) ═══════════════════
+-- Abnahme (§ 12 VOB/B, § 640 BGB): Beginn der Gewährleistung und Grundlage
+-- für die Rückgabe der Bürgschaften (src/lib/fristen.js). Fehlt sie, rechnet
+-- Polaris ersatzweise mit abschluss_datum.
+alter table projekte add column if not exists abnahme_datum date;
+alter table projekte add column if not exists abnahme_art text;          -- foermlich | fiktiv | schluessig | teil
+alter table projekte add column if not exists abnahme_vorbehalte text default '';
+
+-- Erinnerung per E-Mail (Edge Function fristen-erinnerung, src/lib/erinnerung.js)
+alter table firmen add column if not exists erinnerung_einstellungen jsonb;   -- { aktiv, rhythmus, rollen, vorlaufTage }
+alter table profile add column if not exists erinnerung_email boolean default true;
+create table if not exists erinnerung_log (
+  id          bigint generated always as identity primary key,
+  firma_id    int not null references firmen(id) on delete cascade,
+  tag         date not null,
+  schluessel  jsonb not null default '[]'::jsonb,   -- gemeldete Punkte, damit "nur Neues" funktioniert
+  empfaenger  int default 0,
+  fehler      jsonb,
+  created_at  timestamptz default now(),
+  unique (firma_id, tag)
+);
+alter table erinnerung_log enable row level security;
+-- Bewusst keine Policies: nur die Edge Function (service_role) liest und schreibt.
+
+-- Täglicher Lauf um 06:30 Uhr deutscher Winterzeit (05:30 UTC; im Sommer 07:30 Uhr).
+-- Voraussetzung: Extensions pg_cron und pg_net aktiv (Dashboard → Database → Extensions).
+-- Platzhalter ersetzen und einmal ausführen:
+--
+-- select cron.schedule('fristen-erinnerung', '30 5 * * *', $$
+--   select net.http_post(
+--     url := 'https://qnbludwskdyupmyjxmql.supabase.co/functions/v1/fristen-erinnerung',
+--     headers := jsonb_build_object('Authorization', 'Bearer ' || 'DEIN-SERVICE-ROLE-KEY', 'Content-Type', 'application/json'),
+--     body := '{}'::jsonb
+--   );
+-- $$);
