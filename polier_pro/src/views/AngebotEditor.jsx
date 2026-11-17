@@ -15,6 +15,7 @@ import { AufmassWerkzeug } from "../components/AufmassWerkzeug.jsx";
 import { KalkulationsCopilot } from "../components/KalkulationsCopilot.jsx";
 import { BefehlsLeiste } from "../components/BefehlsLeiste.jsx";
 import { MengenPruefung } from "../components/MengenPruefung.jsx";
+import { Anfragen } from "../components/Anfragen.jsx";
 import { vorschlagAnwenden, rezepturMengeAendern, alsStammposition } from "../lib/kiVorkalkulation.js";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
 import { positionMengeAendern, positionVariableAendern } from "../lib/stammpositionen.js";
@@ -91,6 +92,8 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [aufmassFuer, setAufmassFuer] = useState(null); // Positions-ID
   const [copilotOffen, setCopilotOffen] = useState(false);
   const [mengenOffen, setMengenOffen] = useState(false);
+  const [anfragenOffen, setAnfragenOffen] = useState(false);
+  const [anfragenStand, setAnfragenStand] = useState(null);
   const [copilotStand, setCopilotStand] = useState(null);
   const [preisspiegelOffen, setPreisspiegelOffen] = useState(false);
   const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
@@ -844,6 +847,10 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
         setAufmassFuer(null);
       }} />
   );
+  if (anfragenOffen) {
+    return <Anfragen positionen={a.positionen} kalkulationspreise={kalkulationspreise} projekt={projekt} eigeneFirma={eigeneFirma} profil={profil}
+      session={session} stand={anfragenStand} setStand={setAnfragenStand} onClose={() => setAnfragenOffen(false)} />;
+  }
   if (mengenOffen) {
     return <MengenPruefung positionen={a.positionen} session={session} gesperrt={gesperrt}
       onPositionenAendern={positionen => setA(x => ({ ...x, positionen }))}
@@ -1021,6 +1028,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 !leer && { label: "Kalkulation prüfen", aktion: () => setPruefOffen(true) },
                 !leer && { label: "LV-Risiken und Bieterfragen", aktion: () => setRisikenOffen(true) },
                 !leer && { label: "LV-Mengen prüfen", aktion: () => setMengenOffen(true) },
+                !leer && !gesperrt && { label: "NU- und Lieferanten-Anfragen", aktion: () => setAnfragenOffen(true) },
               ].filter(Boolean)} />
             )}
             {!gesperrt && (
