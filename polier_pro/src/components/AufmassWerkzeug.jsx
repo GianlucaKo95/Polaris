@@ -276,7 +276,7 @@ export function AufmassWerkzeug({ ziel = {}, initial = null, session, onUeberneh
                   </label>
                 </div>
                 <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-                  {QUELLE[z.quelle] || z.quelle}{z.toleranz ? ` · ± ${Math.round(z.toleranz * 100)} %` : ""}{z.grundlage ? ` · ${z.grundlage}` : ""}
+                  {QUELLE[z.quelle] || z.quelle}{z.toleranz ? ` · ± ${Math.round(z.toleranz * 100)} %` : ""}{z.grundlage && z.grundlage !== QUELLE[z.quelle] ? ` · ${z.grundlage}` : ""}
                 </div>
               </div>
             ))}

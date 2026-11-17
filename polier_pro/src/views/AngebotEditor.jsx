@@ -12,6 +12,7 @@ import { KiVorkalkulation } from "../components/KiVorkalkulation.jsx";
 import { KalkulationsPruefung } from "../components/KalkulationsPruefung.jsx";
 import { LvRisiken } from "../components/LvRisiken.jsx";
 import { AufmassWerkzeug } from "../components/AufmassWerkzeug.jsx";
+import { KalkulationsCopilot } from "../components/KalkulationsCopilot.jsx";
 import { vorschlagAnwenden, rezepturMengeAendern, alsStammposition } from "../lib/kiVorkalkulation.js";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
 import { positionMengeAendern, positionVariableAendern } from "../lib/stammpositionen.js";
@@ -86,6 +87,8 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [risikenOffen, setRisikenOffen] = useState(false);
   const [risikenStand, setRisikenStand] = useState(null);
   const [aufmassFuer, setAufmassFuer] = useState(null); // Positions-ID
+  const [copilotOffen, setCopilotOffen] = useState(false);
+  const [copilotStand, setCopilotStand] = useState(null);
   const [preisspiegelOffen, setPreisspiegelOffen] = useState(false);
   const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
   const [gaebFehler, setGaebFehler] = useState("");
@@ -836,6 +839,17 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
         setAufmassFuer(null);
       }} />
   );
+  if (copilotOffen) {
+    return <KalkulationsCopilot projekt={projekt} eigeneFirma={eigeneFirma} stammpositionen={stammpositionen} einheitspreise={einheitspreise}
+      lvVorlagen={lvVorlagen} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} nachtragZu={nachtragZu} session={session}
+      stand={copilotStand} setStand={setCopilotStand} onClose={() => setCopilotOffen(false)}
+      onUebernehmen={(positionen, annahmen) => {
+        setA(x => ({ ...x, positionen: [...x.positionen, ...positionen] }));
+        setKiInfo({ annahmen, warnungen: [], anzahl: positionen.filter(p => !String(p.bez).startsWith("──")).length,
+          ohnePreis: positionen.filter(p => !String(p.bez).startsWith("──") && !(Number(p.ep) > 0)).length });
+        setCopilotStand(null); setCopilotOffen(false);
+      }} />;
+  }
   if (risikenOffen) {
     return <LvRisiken positionen={a.positionen} projekt={projekt} angebotTitel={a.titel} eigeneFirma={eigeneFirma} session={session}
       stand={risikenStand} setStand={setRisikenStand}
@@ -981,11 +995,12 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
             </div>
           </div>
           <div style={{ display:"flex", gap:8, flexShrink:0 }}>
-            {!leer && (
+            {(!leer || !gesperrt) && (
               <Menue label="KI-Kalkulation" icon={Sparkles} eintraege={[
-                !gesperrt && { label: "LV vorkalkulieren", aktion: () => setVorkalkOffen(true) },
-                { label: "Kalkulation prüfen", aktion: () => setPruefOffen(true) },
-                { label: "LV-Risiken und Bieterfragen", aktion: () => setRisikenOffen(true) },
+                !gesperrt && { label: copilotStand ? "Copilot fortsetzen" : "Copilot: Schritt für Schritt", aktion: () => setCopilotOffen(true) },
+                !gesperrt && !leer && { label: "LV vorkalkulieren", aktion: () => setVorkalkOffen(true) },
+                !leer && { label: "Kalkulation prüfen", aktion: () => setPruefOffen(true) },
+                !leer && { label: "LV-Risiken und Bieterfragen", aktion: () => setRisikenOffen(true) },
               ].filter(Boolean)} />
             )}
             {!gesperrt && (
