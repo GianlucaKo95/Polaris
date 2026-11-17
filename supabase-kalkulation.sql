@@ -459,3 +459,9 @@ revoke all on function public.regie_freigabe_daten(text) from public;
 revoke all on function public.regie_freigabe_entscheiden(text, text, text, text, text) from public;
 grant execute on function public.regie_freigabe_daten(text) to anon, authenticated;
 grant execute on function public.regie_freigabe_entscheiden(text, text, text, text, text) to anon, authenticated;
+
+-- ═══ Angebotsschreiben und Submission (1.89) ═══════════════════════════
+-- Anschreiben mit Annahmen, Ausschlüssen, Zahlungsbedingungen (lib/anschreiben.js)
+alter table angebote add column if not exists anschreiben jsonb;
+-- Submissionsergebnis bzw. Bestbieter bei verlorenen Angeboten (lib/submission.js)
+alter table angebote add column if not exists submission jsonb;

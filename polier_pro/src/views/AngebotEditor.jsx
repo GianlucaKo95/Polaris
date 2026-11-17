@@ -16,6 +16,8 @@ import { KalkulationsCopilot } from "../components/KalkulationsCopilot.jsx";
 import { BefehlsLeiste } from "../components/BefehlsLeiste.jsx";
 import { MengenPruefung } from "../components/MengenPruefung.jsx";
 import { Anfragen } from "../components/Anfragen.jsx";
+import { AnschreibenPanel } from "../components/AnschreibenPanel.jsx";
+import { anschreibenHtml, ANSCHREIBEN_CSS } from "../lib/anschreiben.js";
 import { vorschlagAnwenden, rezepturMengeAendern, alsStammposition } from "../lib/kiVorkalkulation.js";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
 import { positionMengeAendern, positionVariableAendern } from "../lib/stammpositionen.js";
@@ -94,6 +96,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [mengenOffen, setMengenOffen] = useState(false);
   const [anfragenOffen, setAnfragenOffen] = useState(false);
   const [anfragenStand, setAnfragenStand] = useState(null);
+  const [anschreibenOffen, setAnschreibenOffen] = useState(false);
   const [copilotStand, setCopilotStand] = useState(null);
   const [preisspiegelOffen, setPreisspiegelOffen] = useState(false);
   const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
@@ -598,7 +601,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
     ].filter(Boolean).join(" · ");
     const firmaKontaktzeile = [eigeneFirma?.telefon, eigeneFirma?.email].filter(Boolean).join(" · ");
     const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/>
-<style>
+<style>${ANSCHREIBEN_CSS}
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
 .page { width:210mm; padding:14mm 18mm; }
@@ -698,6 +701,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
   <div class="empfaenger-label">ANGEBOT FÜR</div>
   <strong>${escapeHtml(a.empfaenger)||"—"}</strong>
 </div>
+${anschreibenHtml(a.anschreiben, escapeHtml).vorTabelle}
 
 <table class="table">
   <thead>
@@ -735,10 +739,11 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
   <div class="summen-row gesamt"><span>Gesamtbetrag</span><span>${bruttoGesamt.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})} €</span></div>
 </div>
 
+${anschreibenHtml(a.anschreiben, escapeHtml).nachSummen}
 <div class="footer-text">
   Dieses Angebot ist gültig bis ${new Date(a.gueltig_bis).toLocaleDateString("de-DE")}.
   Alle Preise verstehen sich zzgl. ${a.mwst}% MwSt.
-  Zahlungsbedingungen: 14 Tage netto.
+  ${a.anschreiben?.zahlung ? "" : "Zahlungsbedingungen: 14 Tage netto."}
 </div>
 
 <div class="sig-section">
@@ -847,6 +852,11 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
         setAufmassFuer(null);
       }} />
   );
+  if (anschreibenOffen) {
+    return <AnschreibenPanel angebot={a} projekt={projekt} eigeneFirma={eigeneFirma} annahmen={kiInfo?.annahmen || []}
+      risiken={risikenStand?.ergebnis?.risiken || []} netto={netto} session={session} gesperrt={gesperrt}
+      onAendern={anschreiben => setA(x => ({ ...x, anschreiben }))} onClose={() => setAnschreibenOffen(false)} />;
+  }
   if (anfragenOffen) {
     return <Anfragen positionen={a.positionen} kalkulationspreise={kalkulationspreise} projekt={projekt} eigeneFirma={eigeneFirma} profil={profil}
       session={session} stand={anfragenStand} setStand={setAnfragenStand} onClose={() => setAnfragenOffen(false)} />;
@@ -870,7 +880,10 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
       lvVorlagen={lvVorlagen} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} nachtragZu={nachtragZu} session={session}
       stand={copilotStand} setStand={setCopilotStand} onClose={() => setCopilotOffen(false)}
       onUebernehmen={(positionen, annahmen) => {
-        setA(x => ({ ...x, positionen: [...x.positionen, ...positionen] }));
+        // Annahmen bleiben am Angebot und stehen später im Anschreiben
+        setA(x => ({ ...x, positionen: [...x.positionen, ...positionen],
+          anschreiben: { einleitung: "", ausschluesse: [], zahlung: "", schluss: "", ...(x.anschreiben || {}),
+            annahmen: [...new Set([...(x.anschreiben?.annahmen || []), ...annahmen])] } }));
         setKiInfo({ annahmen, warnungen: [], anzahl: positionen.filter(p => !String(p.bez).startsWith("──")).length,
           ohnePreis: positionen.filter(p => !String(p.bez).startsWith("──") && !(Number(p.ep) > 0)).length });
         setCopilotStand(null); setCopilotOffen(false);
@@ -1029,6 +1042,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 !leer && { label: "LV-Risiken und Bieterfragen", aktion: () => setRisikenOffen(true) },
                 !leer && { label: "LV-Mengen prüfen", aktion: () => setMengenOffen(true) },
                 !leer && !gesperrt && { label: "NU- und Lieferanten-Anfragen", aktion: () => setAnfragenOffen(true) },
+                !leer && { label: "Angebotsschreiben", aktion: () => setAnschreibenOffen(true) },
               ].filter(Boolean)} />
             )}
             {!gesperrt && (

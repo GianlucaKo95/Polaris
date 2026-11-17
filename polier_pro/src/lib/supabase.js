@@ -874,6 +874,13 @@ export async function sbAngebotEntscheiden(token, { entscheidung, name, signatur
   } catch { return { ok: false, hash: null, fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen." }; }
 }
 
+// Spaltenname aus einem PostgREST-/Postgres-Fehler zu einer fehlenden Spalte
+export function fehlendeSpalte(error, kandidaten) {
+  const text = `${error?.message || ""} ${error?.details || ""}`;
+  if (!/column/i.test(text)) return null;
+  return kandidaten.find(k => new RegExp(`['"\\s.]${k}['"\\s]`).test(` ${text} `)) || null;
+}
+
 export async function sbAngebotSpeichern(a, projektId, session, istNeu) {
   if (!session?.access_token || !projektId) return null;
   const payload = {
@@ -897,18 +904,27 @@ export async function sbAngebotSpeichern(a, projektId, session, istNeu) {
   if (a.endsumme !== undefined) optional.endsumme = a.endsumme;
   if (a.nachtrag_info !== undefined) optional.nachtrag_info = a.nachtrag_info;
   if (a.preisstand !== undefined) optional.preisstand = a.preisstand; // Projektpreise / Urkalkulation (lib/preisstand.js)
+  if (a.anschreiben !== undefined) optional.anschreiben = a.anschreiben; // Angebotsschreiben (lib/anschreiben.js)
+  if (a.submission !== undefined) optional.submission = a.submission;   // Submissionsergebnis (lib/submission.js)
   try {
     const client = sbClientMitToken(session);
     const schreiben = p => istNeu
       ? client.from("angebote").insert(p).select()
       : client.from("angebote").update(p).eq("id", a.id).select();
-    let { data, error } = await schreiben({ ...payload, ...optional });
-    if (error && Object.keys(optional).length) {
-      ({ data, error } = await schreiben(payload));
-      if (!error && data?.[0]) return { ...data[0], ...optional };
+    // Fehlt eine optionale Spalte, nur diese weglassen (nicht alle), damit
+    // z.B. der Preisstand nicht verloren geht, weil "anschreiben" noch fehlt.
+    const mit = { ...optional };
+    let { data, error } = await schreiben({ ...payload, ...mit });
+    for (let i = 0; error && i < Object.keys(optional).length; i++) {
+      const spalte = fehlendeSpalte(error, Object.keys(mit));
+      if (!spalte) break;
+      delete mit[spalte];
+      ({ data, error } = await schreiben({ ...payload, ...mit }));
     }
+    if (error && Object.keys(mit).length) ({ data, error } = await schreiben(payload));
     if (error) return null;
-    return data?.[0] || null;
+    // Nicht gespeicherte optionale Werte bleiben bis zum Neuladen im Zustand
+    return data?.[0] ? { ...optional, ...data[0] } : null;
   } catch { return null; }
 }
 
