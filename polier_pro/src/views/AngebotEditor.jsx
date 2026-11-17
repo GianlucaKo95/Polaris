@@ -17,6 +17,7 @@ import { BefehlsLeiste } from "../components/BefehlsLeiste.jsx";
 import { MengenPruefung } from "../components/MengenPruefung.jsx";
 import { Anfragen } from "../components/Anfragen.jsx";
 import { AnschreibenPanel } from "../components/AnschreibenPanel.jsx";
+import { Nebenangebote } from "../components/Nebenangebote.jsx";
 import { anschreibenHtml, ANSCHREIBEN_CSS } from "../lib/anschreiben.js";
 import { vorschlagAnwenden, rezepturMengeAendern, alsStammposition } from "../lib/kiVorkalkulation.js";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
@@ -97,6 +98,8 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [anfragenOffen, setAnfragenOffen] = useState(false);
   const [anfragenStand, setAnfragenStand] = useState(null);
   const [anschreibenOffen, setAnschreibenOffen] = useState(false);
+  const [nebenOffen, setNebenOffen] = useState(false);
+  const [nebenStand, setNebenStand] = useState(null);
   const [copilotStand, setCopilotStand] = useState(null);
   const [preisspiegelOffen, setPreisspiegelOffen] = useState(false);
   const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
@@ -852,6 +855,11 @@ ${anschreibenHtml(a.anschreiben, escapeHtml).nachSummen}
         setAufmassFuer(null);
       }} />
   );
+  if (nebenOffen) {
+    return <Nebenangebote positionen={a.positionen} projekt={projekt} eigeneFirma={eigeneFirma} stammpositionen={stammpositionen} einheitspreise={einheitspreise}
+      lvVorlagen={lvVorlagen} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} session={session}
+      stand={nebenStand} setStand={setNebenStand} onUebernehmen={positionen => setA(x => ({ ...x, positionen }))} onClose={() => setNebenOffen(false)} />;
+  }
   if (anschreibenOffen) {
     return <AnschreibenPanel angebot={a} projekt={projekt} eigeneFirma={eigeneFirma} annahmen={kiInfo?.annahmen || []}
       risiken={risikenStand?.ergebnis?.risiken || []} netto={netto} session={session} gesperrt={gesperrt}
@@ -1043,6 +1051,7 @@ ${anschreibenHtml(a.anschreiben, escapeHtml).nachSummen}
                 !leer && { label: "LV-Mengen prüfen", aktion: () => setMengenOffen(true) },
                 !leer && !gesperrt && { label: "NU- und Lieferanten-Anfragen", aktion: () => setAnfragenOffen(true) },
                 !leer && { label: "Angebotsschreiben", aktion: () => setAnschreibenOffen(true) },
+                !leer && !gesperrt && { label: "Nebenangebote vorschlagen", aktion: () => setNebenOffen(true) },
               ].filter(Boolean)} />
             )}
             {!gesperrt && (
