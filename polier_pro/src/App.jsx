@@ -1,3 +1,4 @@
+import { projektAusDb } from "./lib/projekt.js";
 import React, { useState, useEffect, useRef } from "react";
 import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
   CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight, ChevronLeft,
@@ -26,6 +27,7 @@ import { PasswortSetzenScreen } from "./views/PasswortSetzenScreen.jsx";
 import { ErstePinAbfrageScreen } from "./views/ErstePinAbfrageScreen.jsx";
 import { EinladungScreen } from "./views/EinladungScreen.jsx";
 import { KundenportalScreen } from "./views/KundenportalScreen.jsx";
+import { RegieFreigabeScreen } from "./views/RegieFreigabeScreen.jsx";
 import { AngebotAkzeptierenScreen } from "./views/AngebotAkzeptierenScreen.jsx";
 import { RegistrierungScreen } from "./views/RegistrierungScreen.jsx";
 import { LoginScreen } from "./views/LoginScreen.jsx";
@@ -297,6 +299,11 @@ export default function PolierApp() {
     ? new URLSearchParams(window.location.search).get("kunde")
     : null;
 
+  // Regiebericht zum Unterschreiben (1.78) — ebenfalls ohne Konto
+  const regieToken = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("regie")
+    : null;
+
   // Angebot-Annahme-Token aus URL erkennen — komplett unabhängig von Login/
   // Session, da der Kunde keinen Account hat (siehe Kundenportal-Token oben).
   const angebotFreigabeToken = typeof window !== "undefined"
@@ -461,12 +468,7 @@ export default function PolierApp() {
           return;
         }
         if (Array.isArray(data)) {
-          setProjekte(data.map(p => ({
-            id: p.id, name: p.name, adresse: p.adresse, plz: p.plz, ort: p.ort,
-            projektnummer: p.projektnummer, bauleiter: p.bauleiter,
-            auftraggeber: p.auftraggeber, typ: p.typ, farbe: p.farbe,
-            firma_id: p.firma_id, budget_positionen: p.budget_positionen, stundensatz: p.stundensatz,
-          })));
+          setProjekte(data.map(projektAusDb));
         }
         setProjekteLaden(false);
       }).catch(e => {
@@ -615,6 +617,9 @@ export default function PolierApp() {
   }, [aktiveProfil?.pin]);
 
   // ── Kundenportal (öffentlich, ohne Login) ──
+  if (regieToken) {
+    return <RegieFreigabeScreen token={regieToken} />;
+  }
   if (kundenportalToken) {
     return <KundenportalScreen token={kundenportalToken} />;
   }
@@ -969,6 +974,16 @@ export default function PolierApp() {
     setAktProjektKolonnen(gespeichert);
   }
 
+  // Einzelne Spalten einer Baustelle ändern, ohne das Formular zu durchlaufen
+  async function projektTeilSpeichern(id, teil) {
+    const vorher = projekte;
+    setProjekte(prev => prev.map(x => x.id === id ? { ...x, ...teil } : x));
+    if (!auth.session?.access_token) return true;
+    const { error } = await sbClientMitToken(auth.session).from("projekte").update(teil).eq("id", id);
+    if (error) { setProjekte(vorher); setProjekteLadeFehler(`Baustelle konnte nicht gespeichert werden: ${error.message?.slice(0, 200) || ""}`); return false; }
+    return true;
+  }
+
   async function handleSaveProjekt(p) {
     const istNeu = !projekte.find(x => x.id === p.id);
     const payload = {
@@ -987,6 +1002,8 @@ export default function PolierApp() {
       ...(p.abnahme_datum !== undefined ? { abnahme_datum: p.abnahme_datum || null } : {}),
       ...(p.abnahme_art !== undefined ? { abnahme_art: p.abnahme_art || null } : {}),
       ...(p.abnahme_vorbehalte !== undefined ? { abnahme_vorbehalte: p.abnahme_vorbehalte || "" } : {}),
+      // Regiesätze dieser Baustelle (1.78), null = Sätze der Firma
+      ...(p.regie_saetze !== undefined ? { regie_saetze: p.regie_saetze || null } : {}),
     };
 
     // Ohne Firma (z.B. Demo-Modus ohne echten Login, ODER weil die Firma
@@ -1024,12 +1041,7 @@ export default function PolierApp() {
       }
       const gespeichert = data?.[0];
       if (gespeichert) {
-        const normalisiert = {
-          id: gespeichert.id, name: gespeichert.name, adresse: gespeichert.adresse,
-          plz: gespeichert.plz, ort: gespeichert.ort, projektnummer: gespeichert.projektnummer,
-          bauleiter: gespeichert.bauleiter, auftraggeber: gespeichert.auftraggeber,
-          typ: gespeichert.typ, farbe: gespeichert.farbe, sub_ids: gespeichert.sub_ids || [],
-        };
+        const normalisiert = projektAusDb(gespeichert);
         if (istNeu) setProjekte(prev => [...prev, normalisiert]);
         else setProjekte(prev => prev.map(x => x.id===p.id ? normalisiert : x));
         setNeuProjekt(false); setEditProjekt(false);
@@ -1224,6 +1236,7 @@ export default function PolierApp() {
             darfPlanen={["administrator","geschaeftsfuehrer","bauleiter"].includes(aktiveRolle)} />}
         {tab === "regie"         && <RegieView key={projekt?.id} projekt={projekt} api={regieApi} geraete={geraeteApi.geraete} grundlagen={kalkulationsgrundlagen}
             kolonnen={kolonnen} einstellungen={regieEinstellungen} setEinstellungen={setRegieEinstellungen} angebote={angebote}
+            onProjektSaetze={saetze => projektTeilSpeichern(projekt.id, { regie_saetze: saetze })}
             onAngebotSpeichern={angebotSpeichern} eigeneFirma={eigeneFirma} land={lohnEinstellungen?.bundesland || "NW"}
             darfErfassen={["administrator","geschaeftsfuehrer","bauleiter","polier","vorarbeiter"].includes(aktiveRolle)}
             darfAbrechnen={["administrator","geschaeftsfuehrer","bauleiter"].includes(aktiveRolle)} />}

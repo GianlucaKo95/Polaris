@@ -143,3 +143,65 @@ export function regieHtml(b, { projekt, firma, einst = REGIE_STANDARD, esc }) {
   <div class="unterschrift"><div>Auftragnehmer</div><div>${b.unterschrift?.bild ? `<img src="${esc(b.unterschrift.bild)}" alt="">` : ""}Auftraggeber${b.unterschrift ? `: ${esc(b.unterschrift.name)}, ${esc(new Date(b.unterschrift.am).toLocaleString("de-DE"))}` : ""}</div></div>
   </body></html>`;
 }
+
+// ── Verrechnungssätze je Baustelle (1.78) ──
+// Die Firma pflegt Standardsätze; eine Baustelle kann abweichende Sätze haben,
+// etwa die Stundenlohnsätze aus dem LV des Auftrags. Was die Baustelle nicht
+// festlegt, kommt von der Firma.
+export function regieSaetzeFuer(firma, projekt) {
+  const basis = { ...REGIE_STANDARD, ...(firma || {}) };
+  const eigen = projekt?.regie_saetze;
+  if (!eigen) return { ...basis, quelle: "firma" };
+  return { ...basis, ...eigen, lohnsaetze: eigen.lohnsaetze?.length ? eigen.lohnsaetze : basis.lohnsaetze, quelle: "baustelle" };
+}
+
+// ── Unterschrift per Link (1.78) ──
+// Der Auftraggeber bekommt einen Link, sieht den Bericht ohne Anmeldung und
+// unterschreibt oder beanstandet ihn. Der Link gilt einmal und läuft ab.
+export const FREIGABE_TAGE = 14;
+
+export function neuerFreigabeToken() {
+  const b = new Uint8Array(24);
+  crypto.getRandomValues(b);
+  return Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+}
+
+export function freigabeLink(token, basis = typeof location !== "undefined" ? location.origin + location.pathname : "") {
+  return `${basis}?regie=${encodeURIComponent(token)}`;
+}
+
+export function freigabeAnlegen(b, heute, jetzt = new Date(), token = neuerFreigabeToken()) {
+  return {
+    ...b, status: "eingereicht", eingereicht_am: b.status === "eingereicht" && b.eingereicht_am ? b.eingereicht_am : heute, beanstandung: "",
+    freigabe_token: token, freigabe_bis: new Date(+jetzt + FREIGABE_TAGE * tagMs).toISOString(),
+  };
+}
+
+// Kann über den Link noch entschieden werden? Liefert den Grund, wenn nicht.
+export function freigabeSperre(b, jetzt = new Date()) {
+  if (!b) return "Link nicht gültig";
+  if (b.abgerechnet_in) return "Der Bericht ist bereits abgerechnet";
+  if (b.status === "unterschrieben") return "Der Bericht ist bereits unterschrieben";
+  if (b.status === "beanstandet") return "Der Bericht wurde bereits beanstandet";
+  if (b.status !== "eingereicht") return "Der Bericht wurde zurückgezogen";
+  if (!b.freigabe_bis || new Date(b.freigabe_bis) < jetzt) return "Der Link ist abgelaufen";
+  return null;
+}
+
+// Entscheidung über den Link; dieselben Regeln setzt die Datenbankfunktion
+// regie_freigabe_entscheiden durch.
+export function freigabeEntscheiden(b, { entscheidung, name, bild, grund }, jetzt = new Date()) {
+  const sperre = freigabeSperre(b, jetzt);
+  if (sperre) return { fehler: sperre };
+  if (!String(name || "").trim()) return { fehler: "Bitte den eigenen Namen eintragen" };
+  const ohneLink = { ...b, freigabe_token: null, freigabe_bis: null };
+  if (entscheidung === "unterschreiben") {
+    if (!bild) return { fehler: "Bitte im Feld unterschreiben" };
+    return { bericht: { ...ohneLink, status: "unterschrieben", unterschrift: { name: name.trim(), am: jetzt.toISOString(), bild, per: "link" } } };
+  }
+  if (entscheidung === "beanstanden") {
+    if (!String(grund || "").trim()) return { fehler: "Bitte kurz beschreiben, was nicht stimmt" };
+    return { bericht: { ...ohneLink, status: "beanstandet", beanstandung: `${grund.trim()} (${name.trim()})` } };
+  }
+  return { fehler: "Unbekannte Entscheidung" };
+}

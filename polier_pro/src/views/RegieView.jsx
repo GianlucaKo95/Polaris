@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Plus, Printer, X } from "lucide-react";
+import { ArrowLeft, Copy, Link2, Mail, Plus, Printer, X } from "lucide-react";
 import { useIstDesktop } from "../hooks/useIstDesktop.js";
 import { UnterschriftPad } from "../components/UnterschriftPad.jsx";
 import { escapeHtml } from "../lib/utils.js";
 import { tagessatz } from "../lib/geraete.js";
 import {
-  REGIE_STANDARD, regieSummen, regieStand, abrechenbar, naechsteNummer, regieAlsPositionen, leererBericht, regieHtml,
+  REGIE_STANDARD, regieSaetzeFuer, freigabeAnlegen, freigabeLink, freigabeSperre, regieSummen, regieStand, abrechenbar, naechsteNummer, regieAlsPositionen, leererBericht, regieHtml,
 } from "../lib/regie.js";
 import { useUngespeichert } from "../hooks/useUngespeichert.js";
 import { verlassenBestaetigen } from "../lib/ungespeichert.js";
@@ -72,9 +72,9 @@ function Zeilen({ spalten, zeilen, onAendern, gesperrt, neu, hinzuLabel, extra }
   );
 }
 
-export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [], einstellungen, setEinstellungen, angebote = [], onAngebotSpeichern,
+export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [], einstellungen, setEinstellungen, onProjektSaetze, angebote = [], onAngebotSpeichern,
   eigeneFirma, darfErfassen = true, darfAbrechnen = false, land = "NW" }) {
-  const einst = { ...REGIE_STANDARD, ...(einstellungen || {}) };
+  const einst = regieSaetzeFuer(einstellungen, projekt);
   const { zeilen: berichte, fehler, speichern, loeschen } = api;
   const istDesktop = useIstDesktop();
   const heute = heuteIso();
@@ -87,8 +87,17 @@ export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [
   const [markiert, setMarkiert] = useState([]);
   const [saetzeOffen, setSaetzeOffen] = useState(false);
   const [saetze, setSaetze] = useState(einst);
+  const [saetzeGeltung, setSaetzeGeltung] = useState(einst.quelle);
+  const [linkKopiert, setLinkKopiert] = useState(false);
   const [meldung, setMeldung] = useState(null);
   const opt = { land, fristWerktage: einst.fristWerktage };
+
+  // Über den Link unterschriebene Berichte erscheinen, sobald man zurückkommt
+  useEffect(() => {
+    const neuLaden = () => { if (document.visibilityState === "visible") api.laden?.(); };
+    document.addEventListener("visibilitychange", neuLaden);
+    return () => document.removeEventListener("visibilitychange", neuLaden);
+  }, [api.laden]);
 
   const liste = useMemo(() => [...berichte].sort((a, b) => b.nummer - a.nummer), [berichte]);
   const gespeichert = berichte.find(b => b.id === auswahlId) || null;
@@ -154,9 +163,10 @@ export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [
         <div style={{ color: "var(--text2)", flex: 1, minWidth: 200 }}>
           Stundenlohnarbeiten nach § 15 VOB/B. Der Auftraggeber gibt unterschriebene Zettel innerhalb von {einst.fristWerktage} Werktagen zurück, sonst gelten sie als anerkannt
         </div>
-        {darfAbrechnen && <button onClick={() => { setSaetze(einst); setSaetzeOffen(o => !o); setAuswahlId(null); }} style={knopf()}>Verrechnungssätze</button>}
+        {darfAbrechnen && <button onClick={() => { setSaetze(einst); setSaetzeGeltung(einst.quelle); setSaetzeOffen(o => !o); setAuswahlId(null); }} style={knopf()}>Verrechnungssätze</button>}
         {darfErfassen && <button onClick={neu} style={knopf(true)}><Plus size={16} strokeWidth={1.5} /> Regiebericht</button>}
       </div>
+      {einst.quelle === "baustelle" && <div style={{ fontSize: 13, color: "var(--text2)", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}><Punkt stand="offen" />Für diese Baustelle gelten eigene Verrechnungssätze</div>}
       {fehler && <div role="alert" style={{ color: "var(--red)", background: "var(--rbg)", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 13 }}>{fehler}</div>}
       {darfAbrechnen && einst.lohnsaetze.every(l => !Number(l.satz)) && (
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 16px", marginBottom: 12, color: "var(--text2)" }}>
@@ -233,13 +243,28 @@ export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [
   const saetzeAnsicht = saetzeOffen && (
     <div>
       <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 4 }}>Verrechnungssätze</div>
-      <div style={{ color: "var(--text2)", fontSize: 13, marginBottom: 16 }}>Gelten für alle Baustellen. Bestehende Berichte behalten ihre Sätze</div>
+      <div role="radiogroup" aria-label="Geltung" style={{ display: "inline-flex", border: "1px solid var(--border2)", borderRadius: 8, padding: 2, margin: "8px 0" }}>
+        {[["firma", "Alle Baustellen"], ["baustelle", "Nur diese Baustelle"]].map(([k, l]) => (
+          <button key={k} role="radio" aria-checked={saetzeGeltung === k} onClick={() => {
+            setSaetzeGeltung(k);
+            // Beim Wechsel die Sätze der jeweiligen Ebene als Ausgangspunkt zeigen
+            setSaetze(k === "firma" ? regieSaetzeFuer(einstellungen, null) : regieSaetzeFuer(einstellungen, projekt));
+          }} style={{ height: 30, padding: "0 12px", border: "none", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer",
+            background: saetzeGeltung === k ? "var(--bg)" : "transparent", color: saetzeGeltung === k ? "var(--text)" : "var(--text2)",
+            boxShadow: saetzeGeltung === k ? "inset 0 0 0 1px var(--border2)" : "none" }}>{l}</button>
+        ))}
+      </div>
+      <div style={{ color: "var(--text2)", fontSize: 13, marginBottom: 16 }}>
+        {saetzeGeltung === "firma"
+          ? `Standard der Firma für alle Baustellen${einst.quelle === "baustelle" ? ", diese Baustelle hat eigene Sätze" : ""}. Bestehende Berichte behalten ihre Sätze`
+          : "Z. B. die Stundenlohnsätze aus dem LV des Auftrags. Nicht Eingetragenes kommt von der Firma. Bestehende Berichte behalten ihre Sätze"}
+      </div>
       {saetze.lohnsaetze.map((l, i) => (
         <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 112px 28px", gap: 8, marginBottom: 8, alignItems: "center" }}>
           <input value={l.bez} aria-label="Lohngruppe" onChange={e => setSaetze(s => ({ ...s, lohnsaetze: s.lohnsaetze.map((x, j) => j === i ? { ...x, bez: e.target.value } : x) }))} style={feld} />
           <label style={{ position: "relative" }}>
-            <input value={l.satz || ""} inputMode="decimal" aria-label={`${l.bez}: € je Stunde`} placeholder="€/h"
-              onChange={e => setSaetze(s => ({ ...s, lohnsaetze: s.lohnsaetze.map((x, j) => j === i ? { ...x, satz: Number(e.target.value.replace(",", ".")) || 0 } : x) }))}
+            <input value={String(l.satz || "").replace(".", ",")} inputMode="decimal" aria-label={`${l.bez}: € je Stunde`} placeholder="€/h"
+              onChange={e => setSaetze(s => ({ ...s, lohnsaetze: s.lohnsaetze.map((x, j) => j === i ? { ...x, satz: e.target.value } : x) }))}
               style={{ ...feld, ...zahl, textAlign: "right", paddingRight: 40 }} />
             <span style={{ position: "absolute", right: 10, top: 9, fontSize: 13, color: "var(--muted)" }}>€/h</span>
           </label>
@@ -249,14 +274,27 @@ export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [
       ))}
       <button onClick={() => setSaetze(s => ({ ...s, lohnsaetze: [...s.lohnsaetze, { bez: "", satz: 0 }] }))} style={{ ...leise, paddingLeft: 0 }}><Plus size={16} strokeWidth={1.5} /> Lohngruppe</button>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, ...abschnitt }}>
-        <div><label style={label}>Materialzuschlag in %</label><input value={saetze.materialZuschlag || ""} inputMode="decimal"
-          onChange={e => setSaetze(s => ({ ...s, materialZuschlag: Number(e.target.value.replace(",", ".")) || 0 }))} style={{ ...feld, ...zahl, textAlign: "right" }} /></div>
+        <div><label style={label}>Materialzuschlag in %</label><input value={String(saetze.materialZuschlag || "").replace(".", ",")} inputMode="decimal"
+          onChange={e => setSaetze(s => ({ ...s, materialZuschlag: e.target.value }))} style={{ ...feld, ...zahl, textAlign: "right" }} /></div>
         <div><label style={label}>Rückgabefrist in Werktagen</label><input value={saetze.fristWerktage || ""} inputMode="numeric"
           onChange={e => setSaetze(s => ({ ...s, fristWerktage: Number(e.target.value) || 6 }))} style={{ ...feld, ...zahl, textAlign: "right" }} /></div>
       </div>
       <div style={{ display: "flex", gap: 8, ...abschnitt }}>
-        <button onClick={() => { setEinstellungen?.({ ...saetze, lohnsaetze: saetze.lohnsaetze.filter(l => l.bez.trim()) }); setSaetzeOffen(false); setMeldung("Verrechnungssätze gespeichert"); }} style={knopf(true)}>Speichern</button>
+        <button onClick={async () => {
+          // Eingaben sind Text (Komma erlaubt), gespeichert werden Zahlen
+          const n = v => Number(String(v ?? "").replace(",", ".")) || 0;
+          const werte = { lohnsaetze: saetze.lohnsaetze.filter(l => l.bez.trim()).map(l => ({ ...l, satz: n(l.satz) })), materialZuschlag: n(saetze.materialZuschlag), fristWerktage: saetze.fristWerktage };
+          if (saetzeGeltung === "baustelle") {
+            if (!(await onProjektSaetze?.(werte))) { setMeldung("Sätze der Baustelle konnten nicht gespeichert werden"); return; }
+          } else setEinstellungen?.({ ...(einstellungen || {}), ...werte });
+          setSaetzeOffen(false);
+          setMeldung(saetzeGeltung === "baustelle" ? `Eigene Sätze für ${projekt?.name || "diese Baustelle"} gespeichert` : "Verrechnungssätze der Firma gespeichert");
+        }} style={knopf(true)}>Speichern</button>
         <button onClick={() => setSaetzeOffen(false)} style={knopf()}>Abbrechen</button>
+        {saetzeGeltung === "baustelle" && einst.quelle === "baustelle" && (
+          <button onClick={async () => { if (await onProjektSaetze?.(null)) { setSaetzeOffen(false); setMeldung("Die Baustelle nutzt wieder die Sätze der Firma"); } }}
+            style={{ ...leise, marginLeft: "auto" }}>Firmensätze nutzen</button>
+        )}
       </div>
     </div>
   );
@@ -266,7 +304,21 @@ export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [
     const b = entwurf;
     const st = regieStand(b, heute, opt);
     const s = regieSummen(b, einst);
-    const gesperrt = !darfErfassen || b.status === "unterschrieben" || !!b.abgerechnet_in;
+    // Solange ein Link draußen ist, bleibt der Bericht unverändert: der
+    // Auftraggeber soll genau das unterschreiben, was er sieht
+    const linkAktiv = !!b.freigabe_token && !freigabeSperre(b);
+    const gesperrt = !darfErfassen || b.status === "unterschrieben" || !!b.abgerechnet_in || linkAktiv;
+    const link = linkAktiv ? freigabeLink(b.freigabe_token) : "";
+    const kopieren = async url => {
+      try { await navigator.clipboard.writeText(url); setLinkKopiert(true); setTimeout(() => setLinkKopiert(false), 2000); }
+      catch { setMeldung("Kopieren nicht möglich, bitte den Link markieren und kopieren"); }
+    };
+    const linkErzeugen = async () => {
+      const g = await sichern(freigabeAnlegen(b, heute), `Link erstellt und kopiert. Rückgabe innerhalb von ${einst.fristWerktage} Werktagen`);
+      if (g) kopieren(freigabeLink(g.freigabe_token));
+    };
+    const mail = `mailto:?subject=${encodeURIComponent(`Regiebericht Nr. ${b.nummer}, ${projekt?.name || ""}`)}&body=${encodeURIComponent(
+      `Guten Tag,\n\nbitte prüfen und unterschreiben Sie den Regiebericht Nr. ${b.nummer} vom ${datumDe(b.datum)} (Stundenlohnarbeiten nach § 15 VOB/B):\n\n${link}\n\nDer Link gilt bis ${b.freigabe_bis ? new Date(b.freigabe_bis).toLocaleDateString("de-DE") : ""}.\n\nMit freundlichen Grüßen\n${eigeneFirma?.name || ""}`)}`;
     return (
       <div>
         {!istDesktop && <button onClick={() => waehlen(null)} style={{ ...leise, paddingLeft: 0, marginBottom: 8 }}><ArrowLeft size={16} strokeWidth={1.5} /> Alle Regieberichte</button>}
@@ -370,7 +422,27 @@ export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [
           <div style={abschnitt}>
             <div style={titel}>Unterschrift Auftraggeber</div>
             {b.unterschrift.bild && <img src={b.unterschrift.bild} alt={`Unterschrift ${b.unterschrift.name}`} style={{ height: 56, background: "#fff", borderRadius: 6, border: "1px solid var(--border)" }} />}
-            <div style={{ fontSize: 13, color: "var(--text2)", marginTop: 4 }}>{b.unterschrift.name}, {new Date(b.unterschrift.am).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}</div>
+            <div style={{ fontSize: 13, color: "var(--text2)", marginTop: 4 }}>{b.unterschrift.name}, {new Date(b.unterschrift.am).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}{b.unterschrift.per === "link" ? ", über den Link" : ""}</div>
+          </div>
+        )}
+
+        {linkAktiv && (
+          <div style={abschnitt}>
+            <div style={{ ...titel, display: "flex", justifyContent: "space-between" }}>
+              <span>Link zum Unterschreiben</span>
+              <span style={zahl}>gültig bis {new Date(b.freigabe_bis).toLocaleDateString("de-DE")}</span>
+            </div>
+            <input readOnly value={link} aria-label="Link zum Unterschreiben" onFocus={e => e.target.select()}
+              style={{ ...feld, fontFamily: "var(--font-zahl)", fontSize: 12, color: "var(--text2)" }} />
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <button onClick={() => kopieren(link)} style={knopf()}><Copy size={16} strokeWidth={1.5} /> {linkKopiert ? "Kopiert" : "Kopieren"}</button>
+              <a href={mail} style={{ ...knopf(), textDecoration: "none" }}><Mail size={16} strokeWidth={1.5} /> Per E-Mail</a>
+              {darfErfassen && (
+                <button onClick={() => sichern({ ...b, freigabe_token: null, freigabe_bis: null }, "Link zurückgezogen, der Bericht lässt sich wieder bearbeiten")}
+                  style={{ ...leise, marginLeft: "auto" }}>Zurückziehen</button>
+              )}
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>Der Auftraggeber braucht kein Konto. Zum Ändern den Link zurückziehen</div>
           </div>
         )}
 
@@ -401,6 +473,7 @@ export function RegieView({ projekt, api, geraete = [], grundlagen, kolonnen = [
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", ...abschnitt }}>
           {!gesperrt && <button onClick={() => sichern()} disabled={!geaendert} style={{ ...knopf(geaendert), opacity: geaendert ? 1 : 0.6 }}>Speichern</button>}
           {!gesperrt && !unterschreiben && <button onClick={() => { setUnterzeichner(b.angeordnet_von || ""); setUnterschreiben(true); }} style={knopf()}>Unterschreiben lassen</button>}
+          {!gesperrt && b.id && !geaendert && <button onClick={linkErzeugen} style={knopf()}><Link2 size={16} strokeWidth={1.5} /> Link senden</button>}
           {!gesperrt && b.id && b.status !== "eingereicht" && (
             <button onClick={() => sichern({ ...b, status: "eingereicht", eingereicht_am: heute, beanstandung: "" }, `Eingereicht, Rückgabe innerhalb von ${einst.fristWerktage} Werktagen`)} style={knopf()}>Eingereicht</button>
           )}

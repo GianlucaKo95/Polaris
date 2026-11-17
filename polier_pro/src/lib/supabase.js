@@ -1248,3 +1248,25 @@ export async function sbErinnerungTestmail(session) {
     return { ok: true, ...data };
   } catch { return { ok: false, fehler: "Verbindung fehlgeschlagen" }; }
 }
+
+// ── Regiebericht per Link (1.78) ──
+// Der Auftraggeber hat kein Konto: beide Aufrufe laufen über den anonymen
+// Client und eine SECURITY-DEFINER-Funktion, die nur den einen Bericht zum
+// Token herausgibt bzw. ändert (siehe supabase-kalkulation.sql).
+export async function sbRegieFreigabeDaten(token) {
+  try {
+    const { data, error } = await supabase.rpc("regie_freigabe_daten", { p_token: token });
+    if (error) return { fehler: error.message };
+    return data ? { daten: data } : { fehler: "Link nicht gültig" };
+  } catch { return { fehler: "Verbindung fehlgeschlagen" }; }
+}
+
+export async function sbRegieFreigabeEntscheiden(token, { entscheidung, name, bild, grund }) {
+  try {
+    const { data, error } = await supabase.rpc("regie_freigabe_entscheiden", {
+      p_token: token, p_entscheidung: entscheidung, p_name: name || "", p_signatur: bild || null, p_grund: grund || null,
+    });
+    if (error) return { fehler: error.message || "Senden fehlgeschlagen" };
+    return { status: data };
+  } catch { return { fehler: "Verbindung fehlgeschlagen. Bitte erneut versuchen" }; }
+}

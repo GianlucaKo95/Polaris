@@ -383,3 +383,79 @@ alter table erinnerung_log enable row level security;
 --     body := '{}'::jsonb
 --   );
 -- $$);
+
+-- ═══ Regiesätze je Baustelle und Unterschrift per Link (1.78) ══════════
+-- Eigene Verrechnungssätze einer Baustelle (z. B. aus dem LV), null = Sätze der Firma
+alter table projekte add column if not exists regie_saetze jsonb;   -- { lohnsaetze: [{ bez, satz }], materialZuschlag, fristWerktage }
+
+-- Link für den Auftraggeber: einmal gültig, läuft nach 14 Tagen ab
+alter table regieberichte add column if not exists freigabe_token text;
+alter table regieberichte add column if not exists freigabe_bis timestamptz;
+create unique index if not exists regieberichte_freigabe_token on regieberichte(freigabe_token) where freigabe_token is not null;
+
+-- Liefert genau den Bericht zum Token, ohne interne Felder (keine IDs, kein Token)
+create or replace function public.regie_freigabe_daten(p_token text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  b regieberichte;
+  p projekte;
+  f firmen;
+  e jsonb;
+begin
+  if p_token is null or length(p_token) < 32 then return null; end if;
+  select * into b from regieberichte where freigabe_token = p_token;
+  if not found then return null; end if;
+  select * into p from projekte where id = b.projekt_id;
+  select * into f from firmen where id = b.firma_id;
+  e := coalesce(f.regie_einstellungen, '{}'::jsonb) || coalesce(p.regie_saetze, '{}'::jsonb);
+  return jsonb_build_object(
+    'bericht', jsonb_build_object(
+      'nummer', b.nummer, 'datum', b.datum, 'beschreibung', b.beschreibung, 'angeordnet_von', b.angeordnet_von,
+      'personal', b.personal, 'geraete', b.geraete, 'material', b.material,
+      'status', b.status, 'eingereicht_am', b.eingereicht_am, 'freigabe_bis', b.freigabe_bis,
+      'unterschrift', case when b.unterschrift is null then null else b.unterschrift - 'bild' end,
+      'abgerechnet_in', case when b.abgerechnet_in is null then null else jsonb_build_object('am', b.abgerechnet_in->'am') end),
+    'projekt', jsonb_build_object('name', p.name, 'ort', p.ort),
+    'firma', jsonb_build_object('name', f.name),
+    'einst', jsonb_build_object('materialZuschlag', coalesce((e->>'materialZuschlag')::numeric, 0),
+                                'fristWerktage', coalesce((e->>'fristWerktage')::int, 6)));
+end $$;
+
+-- Unterschreiben oder beanstanden; dieselben Regeln wie freigabeEntscheiden in src/lib/regie.js.
+-- Danach ist der Token verbraucht.
+create or replace function public.regie_freigabe_entscheiden(
+  p_token text, p_entscheidung text, p_name text, p_signatur text default null, p_grund text default null)
+returns text language plpgsql security definer set search_path = public as $$
+declare
+  b regieberichte;
+begin
+  if p_token is null or length(p_token) < 32 then raise exception 'Link nicht gültig'; end if;
+  select * into b from regieberichte where freigabe_token = p_token for update;
+  if not found then raise exception 'Link nicht gültig'; end if;
+  if b.abgerechnet_in is not null then raise exception 'Der Bericht ist bereits abgerechnet'; end if;
+  if b.status <> 'eingereicht' then raise exception 'Der Bericht wurde bereits beantwortet'; end if;
+  if b.freigabe_bis is null or b.freigabe_bis < now() then raise exception 'Der Link ist abgelaufen'; end if;
+  if coalesce(trim(p_name), '') = '' then raise exception 'Bitte den eigenen Namen eintragen'; end if;
+
+  if p_entscheidung = 'unterschreiben' then
+    if p_signatur is null or p_signatur not like 'data:image/png;base64,%' or length(p_signatur) > 400000 then
+      raise exception 'Bitte im Feld unterschreiben';
+    end if;
+    update regieberichte set status = 'unterschrieben', freigabe_token = null, freigabe_bis = null,
+      unterschrift = jsonb_build_object('name', left(trim(p_name), 120), 'am', now(), 'bild', p_signatur, 'per', 'link')
+      where id = b.id;
+  elsif p_entscheidung = 'beanstanden' then
+    if coalesce(trim(p_grund), '') = '' then raise exception 'Bitte kurz beschreiben, was nicht stimmt'; end if;
+    update regieberichte set status = 'beanstandet', freigabe_token = null, freigabe_bis = null,
+      beanstandung = left(trim(p_grund), 2000) || ' (' || left(trim(p_name), 120) || ')'
+      where id = b.id;
+  else
+    raise exception 'Unbekannte Entscheidung';
+  end if;
+  return case when p_entscheidung = 'unterschreiben' then 'unterschrieben' else 'beanstandet' end;
+end $$;
+
+revoke all on function public.regie_freigabe_daten(text) from public;
+revoke all on function public.regie_freigabe_entscheiden(text, text, text, text, text) from public;
+grant execute on function public.regie_freigabe_daten(text) to anon, authenticated;
+grant execute on function public.regie_freigabe_entscheiden(text, text, text, text, text) to anon, authenticated;

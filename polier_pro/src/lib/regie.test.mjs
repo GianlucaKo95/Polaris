@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { regieSummen, werktageDazu, regieStand, regieAlsPositionen, naechsteNummer, regieHtml } from "./regie.js";
+import { regieSummen, werktageDazu, regieStand, regieAlsPositionen, naechsteNummer, regieHtml, regieSaetzeFuer, freigabeAnlegen, freigabeSperre, freigabeEntscheiden, freigabeLink, neuerFreigabeToken } from "./regie.js";
 
 const einst = { lohnsaetze: [], materialZuschlag: 10, fristWerktage: 6 };
 const b = { nummer: 3, datum: "2026-11-10", beschreibung: "Leitung freilegen",
@@ -45,4 +45,43 @@ test("regieHtml escaped Eingaben", () => {
   const html = regieHtml({ ...b, beschreibung: "<script>x</script>" }, { projekt: { name: "P" }, firma: { name: "F" }, einst, esc: s => String(s ?? "").replace(/</g, "&lt;") });
   assert.ok(!html.includes("<script>x"));
   assert.ok(html.includes("Regiebericht Nr. 3"));
+});
+
+test("regieSaetzeFuer: Baustelle überschreibt Firma, Rest bleibt", () => {
+  const firma = { lohnsaetze: [{ bez: "Facharbeiter", satz: 52 }], materialZuschlag: 15, fristWerktage: 6 };
+  assert.equal(regieSaetzeFuer(firma, {}).quelle, "firma");
+  assert.equal(regieSaetzeFuer(firma, { regie_saetze: null }).lohnsaetze[0].satz, 52);
+  const e = regieSaetzeFuer(firma, { regie_saetze: { lohnsaetze: [{ bez: "Facharbeiter", satz: 58.5 }] } });
+  assert.equal(e.quelle, "baustelle");
+  assert.equal(e.lohnsaetze[0].satz, 58.5);
+  assert.equal(e.materialZuschlag, 15);
+  assert.equal(regieSaetzeFuer(firma, { regie_saetze: { lohnsaetze: [], materialZuschlag: 8 } }).lohnsaetze[0].satz, 52);
+  assert.equal(regieSaetzeFuer(null, null).fristWerktage, 6);
+});
+
+test("Freigabe-Link: anlegen, einmal entscheiden, Ablauf", () => {
+  const jetzt = new Date("2026-11-17T10:00:00Z");
+  const tok = neuerFreigabeToken();
+  assert.match(tok, /^[0-9a-f]{48}$/);
+  assert.notEqual(tok, neuerFreigabeToken());
+  assert.equal(freigabeLink("ab c", "https://x.de/"), "https://x.de/?regie=ab%20c");
+  const f = freigabeAnlegen({ status: "entwurf" }, "2026-11-17", jetzt, "t1");
+  assert.equal(f.status, "eingereicht");
+  assert.equal(f.eingereicht_am, "2026-11-17");
+  assert.equal(f.freigabe_bis, "2026-12-01T10:00:00.000Z");
+  // erneuter Link behält das Zugangsdatum (Frist läuft ab erstem Zugang)
+  assert.equal(freigabeAnlegen({ status: "eingereicht", eingereicht_am: "2026-11-10" }, "2026-11-17", jetzt, "t2").eingereicht_am, "2026-11-10");
+  assert.equal(freigabeSperre(f, jetzt), null);
+  assert.equal(freigabeSperre(f, new Date("2026-12-02T00:00:00Z")), "Der Link ist abgelaufen");
+  assert.equal(freigabeEntscheiden(f, { entscheidung: "unterschreiben", name: "", bild: "x" }, jetzt).fehler, "Bitte den eigenen Namen eintragen");
+  assert.equal(freigabeEntscheiden(f, { entscheidung: "unterschreiben", name: "M. Weber" }, jetzt).fehler, "Bitte im Feld unterschreiben");
+  const u = freigabeEntscheiden(f, { entscheidung: "unterschreiben", name: " M. Weber ", bild: "data:x" }, jetzt).bericht;
+  assert.equal(u.status, "unterschrieben");
+  assert.deepEqual(u.unterschrift, { name: "M. Weber", am: jetzt.toISOString(), bild: "data:x", per: "link" });
+  assert.equal(u.freigabe_token, null);
+  assert.equal(freigabeEntscheiden(u, { entscheidung: "beanstanden", name: "X", grund: "y" }, jetzt).fehler, "Der Bericht ist bereits unterschrieben");
+  const be = freigabeEntscheiden(f, { entscheidung: "beanstanden", name: "M. Weber", grund: "2 h zu viel" }, jetzt).bericht;
+  assert.equal(be.status, "beanstandet");
+  assert.equal(be.beanstandung, "2 h zu viel (M. Weber)");
+  assert.equal(freigabeSperre({ ...f, abgerechnet_in: { angebot_id: 1 } }, jetzt), "Der Bericht ist bereits abgerechnet");
 });

@@ -1,6 +1,8 @@
 import { useState, useRef } from "react";
 
-export function UnterschriftPad({ label, onSave }) {
+// onAendern (optional): meldet nach jedem Strich das Bild bzw. null nach Löschen;
+// knopf={false} blendet „Übernehmen“ aus, wenn die Seite selbst einen Absendeknopf hat.
+export function UnterschriftPad({ label, onSave, onAendern, knopf = true, hoehe }) {
   const canvasRef  = useRef(null);
   const [zeichnen, setZeichnen] = useState(false);
   const [hatZeichen, setHatZeichen] = useState(false);
@@ -38,12 +40,17 @@ export function UnterschriftPad({ label, onSave }) {
     lastPos.current = pos;
     setHatZeichen(true);
   }
-  function stop(e) { e.preventDefault(); setZeichnen(false); }
+  function stop(e) {
+    e.preventDefault();
+    if (zeichnen && onAendern) onAendern(canvasRef.current.toDataURL("image/png"));
+    setZeichnen(false);
+  }
 
   function loeschen() {
     const canvas = canvasRef.current;
     canvasRef.current.getContext("2d").clearRect(0,0,canvas.width,canvas.height);
     setHatZeichen(false);
+    onAendern?.(null);
   }
 
   function speichern() {
@@ -58,7 +65,7 @@ export function UnterschriftPad({ label, onSave }) {
       <div style={{ position:"relative", border:"1.5px solid var(--border)",
         borderRadius:12, background:"#fff", overflow:"hidden" }}>
         <canvas ref={canvasRef} width={360} height={100}
-          style={{ display:"block", width:"100%", touchAction:"none",
+          style={{ display:"block", width:"100%", height: hoehe, touchAction:"none",
             cursor:"crosshair" }}
           onMouseDown={start} onMouseMove={draw} onMouseUp={stop}
           onTouchStart={start} onTouchMove={draw} onTouchEnd={stop} />
@@ -77,14 +84,14 @@ export function UnterschriftPad({ label, onSave }) {
             fontFamily:"inherit" }}>
           Löschen
         </button>
-        <button onClick={speichern} disabled={!hatZeichen}
+        {knopf && <button onClick={speichern} disabled={!hatZeichen}
           style={{ background: hatZeichen ? "var(--green)" : "var(--surface2)",
             color: hatZeichen ? "#fff" : "var(--muted)",
             border:"none", borderRadius:8, padding:"5px 14px",
             cursor: hatZeichen ? "pointer" : "default", fontSize:12,
             fontWeight:700, fontFamily:"inherit" }}>
           ✓ Übernehmen
-        </button>
+        </button>}
       </div>
     </div>
   );
