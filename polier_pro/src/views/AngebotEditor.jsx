@@ -14,6 +14,7 @@ import { LvRisiken } from "../components/LvRisiken.jsx";
 import { AufmassWerkzeug } from "../components/AufmassWerkzeug.jsx";
 import { KalkulationsCopilot } from "../components/KalkulationsCopilot.jsx";
 import { BefehlsLeiste } from "../components/BefehlsLeiste.jsx";
+import { MengenPruefung } from "../components/MengenPruefung.jsx";
 import { vorschlagAnwenden, rezepturMengeAendern, alsStammposition } from "../lib/kiVorkalkulation.js";
 import { NuPreisspiegel } from "../components/NuPreisspiegel.jsx";
 import { positionMengeAendern, positionVariableAendern } from "../lib/stammpositionen.js";
@@ -89,6 +90,7 @@ export function AngebotEditor({ angebot, onSave, onClose, aufgaben, einheitsprei
   const [risikenStand, setRisikenStand] = useState(null);
   const [aufmassFuer, setAufmassFuer] = useState(null); // Positions-ID
   const [copilotOffen, setCopilotOffen] = useState(false);
+  const [mengenOffen, setMengenOffen] = useState(false);
   const [copilotStand, setCopilotStand] = useState(null);
   const [preisspiegelOffen, setPreisspiegelOffen] = useState(false);
   const [kiInfo,    setKiInfo]    = useState(null); // { annahmen, warnungen } nach KI-Übernahme
@@ -842,6 +844,20 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
         setAufmassFuer(null);
       }} />
   );
+  if (mengenOffen) {
+    return <MengenPruefung positionen={a.positionen} session={session} gesperrt={gesperrt}
+      onPositionenAendern={positionen => setA(x => ({ ...x, positionen }))}
+      onBieterfragen={fragen => {
+        // In die Bieterfragen der LV-Risiken übernehmen, doppelte Positionen ersetzen
+        setRisikenStand(st => {
+          const alt = st?.ergebnis || { risiken: [], fragen: [], am: new Date().toISOString() };
+          const ohne = alt.fragen.filter(f => !String(f.id).startsWith("menge:"));
+          return { ...(st || {}), ergebnis: { ...alt, fragen: [...ohne, ...fragen] }, gewaehlt: [...new Set([...(st?.gewaehlt || []), ...fragen.map(f => f.id)])] };
+        });
+        setMengenOffen(false); setRisikenOffen(true);
+      }}
+      onClose={() => setMengenOffen(false)} />;
+  }
   if (copilotOffen) {
     return <KalkulationsCopilot projekt={projekt} eigeneFirma={eigeneFirma} stammpositionen={stammpositionen} einheitspreise={einheitspreise}
       lvVorlagen={lvVorlagen} kalkulationspreise={kalkulationspreise} standardZuschlaege={standardZuschlaege} nachtragZu={nachtragZu} session={session}
@@ -1004,6 +1020,7 @@ body { font-family:Arial,sans-serif; font-size:10.5pt; color:#1a1a1a; }
                 !gesperrt && !leer && { label: "LV vorkalkulieren", aktion: () => setVorkalkOffen(true) },
                 !leer && { label: "Kalkulation prüfen", aktion: () => setPruefOffen(true) },
                 !leer && { label: "LV-Risiken und Bieterfragen", aktion: () => setRisikenOffen(true) },
+                !leer && { label: "LV-Mengen prüfen", aktion: () => setMengenOffen(true) },
               ].filter(Boolean)} />
             )}
             {!gesperrt && (
