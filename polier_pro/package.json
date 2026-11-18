@@ -1,11 +1,11 @@
 {
   "name": "polier-pro",
-  "version": "1.92.0",
+  "version": "1.93.0",
   "private": true,
   "scripts": {
     "dev": "vite",
     "build": "node scripts/funktionen-bundeln.mjs && vite build",
-    "test": "node --test src/lib/*.test.mjs",
+    "test": "node --test src/lib/*.test.mjs src/lib/kalk/*.test.mjs",
     "cap:sync": "vite build && npx cap sync",
     "android:open": "npm run cap:sync && npx cap open android",
     "ios:open": "npm run cap:sync && npx cap open ios",

@@ -1,6 +1,6 @@
 import { projektAusDb } from "./lib/projekt.js";
 import React, { useState, useEffect, useRef } from "react";
-import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid,
+import { Bell, LogOut, Plus, MapPin, Hash, TriangleAlert, LayoutGrid, Calculator,
   CircleCheckBig, NotebookPen, Users, Clock, Ellipsis, ChevronRight, ChevronLeft,
   Building2, Calendar, Euro, CloudSun, ChartColumn, FileText, Settings,
   UserCog, RefreshCw, User, Sparkles, FlaskConical, Check, Palmtree, Archive,
@@ -57,6 +57,7 @@ import { PushBanner } from "./components/PushBanner.jsx";
 // initialen Bundle landen. .then(m => ({default: m.X})), weil die Views
 // benannte statt default-Exports verwenden; React.lazy() verlangt einen
 // default-Export im aufgelösten Modul.
+const KalkulationBereich    = React.lazy(() => import("./kalkulation/KalkulationBereich.jsx").then(m => ({ default: m.KalkulationBereich })));
 const StempeluhrView        = React.lazy(() => import("./views/StempeluhrView.jsx").then(m => ({ default: m.StempeluhrView })));
 const FirmenView            = React.lazy(() => import("./views/FirmenView.jsx").then(m => ({ default: m.FirmenView })));
 const GanttView              = React.lazy(() => import("./views/GanttView.jsx").then(m => ({ default: m.GanttView })));
@@ -155,7 +156,8 @@ export default function PolierApp() {
   // Ab 1024 px: Desktop-Layout mit Seitenleiste (components/DesktopShell.jsx).
   const istDesktop = useIstDesktop();
   // Desktop ohne gewählte Baustelle: "cockpit" oder eine Firmen-Seite (Finanzen, Lohn …)
-  const [desktopSeite, setDesktopSeite] = useState("cockpit");
+  // #kalkulation in der Adresse öffnet direkt den Kalkulationsbereich (Neuladen, Lesezeichen)
+  const [desktopSeite, setDesktopSeite] = useState(() => (typeof location !== "undefined" && location.hash.startsWith("#kalkulation") ? "kalkulation" : "cockpit"));
   // Desktop: aus der Angebotsliste ein bestimmtes Angebot öffnen; Startfrage aus der ⌘K-Suche
   const [angebotOeffnen, setAngebotOeffnen] = useState(null);
   const [kiStartFrage, setKiStartFrage] = useState("");
@@ -1299,6 +1301,7 @@ export default function PolierApp() {
       istBuero && { id: "cockpit", label: "Cockpit", Icon: LayoutGrid },
       { id: "baustellen", label: "Baustellen", Icon: Building2, zahl: aktiveProjekte.length || null },
       erlaubt("angebot") && { id: "angebote", label: "Angebote", Icon: FileText, zahl: freigaben || null },
+      istBuero && erlaubt("angebot") && { id: "kalkulation", label: "Kalkulation", Icon: Calculator },
       erlaubt("finanzen") && { id: "finanzen", label: "Finanzen", Icon: Landmark },
       erlaubt("planung") && { id: "planung", label: "Planung", Icon: CalendarRange },
       erlaubt("fristen") && { id: "fristen", label: "Sicherheiten & Fristen", Icon: ShieldCheck, zahl: fristenDringend || null },
@@ -1334,6 +1337,17 @@ export default function PolierApp() {
         border: haupt ? "none" : "1px solid var(--border2)", background: haupt ? "var(--text)" : "var(--surface)", color: haupt ? "var(--surface)" : "var(--text)" }}>{text}</button>
     );
     const kannNeu = rolleConfig?.kannBearbeiten !== false;
+
+    // Eigener Bereich mit eigener Navigation (src/kalkulation)
+    if (seite === "kalkulation") {
+      return (
+        <React.Suspense fallback={<TabLadeFallback />}>
+          <KalkulationBereich session={auth.session} firmaId={firma?.id} rolle={aktiveRolle} firmenName={eigeneFirma?.name || firma?.name}
+            baustellen={projekte} alteAngebote={firmenDaten.angebote} dark={theme.dark} onThemeWechsel={theme.toggle}
+            onZurueck={() => geheZu(startSeite)} />
+        </React.Suspense>
+      );
+    }
 
     let titel, untertitel = null, kopfzeile = null, aktionen = null, reiter = null, aktiverReiter = null, onReiter = null, inhalt;
     if (seite === "baustelle") {
