@@ -10,7 +10,7 @@ const P = (id, felder = {}) => ({ id, parent_id: null, sort: 1, typ: "position",
 
 test("GP je Position exakt auf Cent, wie die Datenbank-View", () => {
   assert.equal(gpCent(P("a", { menge: 123.456, ep: 12.35 })), 152468); // 1524,6816
-  assert.equal(gpCent(P("b", { menge: 3, ep: 33.33, rabatt: 5 })), 9499); // 94,9905
+  assert.equal(gpCent(P("b", { menge: 3, ep: 33.33, rabatt: 5 })), 9498); // UP 31,6635 → 31,66; × 3 = 94,98 (wie GAEB)
   assert.equal(gpCent(P("c", { menge: 0.1, ep: 0.05 })), 1); // 0,005 → 0,01 (halber Cent weg von null)
   assert.equal(gpCent(P("d", { menge: -2, ep: 1.005 })), -202); // EP wird wie in der Datenbank auf 1,01 gerundet
   assert.equal(gpCent(T("t")), 0);

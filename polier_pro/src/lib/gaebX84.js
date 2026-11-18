@@ -93,45 +93,51 @@ export function ebenenLaengen(knoten, tiefe = 0, laengen = []) {
 // Grundposition-Zuordnung führt), Bedarf mit GB als "WithTotal".
 const PROVIS = { bedarf: "WithoutTotal", alternativ: "WithoutTotal", bedarf_mit: "WithTotal" };
 
-function itemXml({ rnopart, p }, id) {
-  const up = (Number(p.ep) || 0) * (1 - (Number(p.rabatt) || 0) / 100);
-  const it = up * (Number(p.menge) || 0);
+// Einheitspreis nach Positionsrabatt auf Cent, Gesamtbetrag = Menge × UP
+// auf Cent — dieselbe Regel wie lib/kalk/lvBaum.js und die Datenbank.
+const rund2 = x => { const v = Number(((Number(x) || 0) * 100).toPrecision(12)); return Math.sign(v) * Math.round(Math.abs(v)) / 100; };
+export const einheitspreisNetto = p => rund2((Number(p.ep) || 0) * (1 - (Number(p.rabatt) || 0) / 100));
+export const gesamtbetrag = p => rund2(einheitspreisNetto(p) * (Number(p.menge) || 0));
+
+function itemXml({ rnopart, p }, id, phase = 84) {
+  const up = einheitspreisNetto(p);
+  const it = gesamtbetrag(p);
   const langtext = p.langtext ? textXml(p.langtext) : "";
   const provis = PROVIS[positionsart(p)];
   const bez = String(p.bez).replace(/^\[[^\]]+\]\s*/, "");
   return `<Item ID="I${id}" RNoPart="${xmlEscape(rnopart)}">`
     + `<Qty>${zahl(p.menge, 3)}</Qty><QU>${xmlEscape(p.einheit || "")}</QU>`
     + (provis ? `<Provis>${provis}</Provis>` : "")
-    + `<UP>${zahl(up, 2)}</UP><IT>${zahl(it, 2)}</IT>`
+    + (phase === 84 ? `<UP>${zahl(up, 2)}</UP><IT>${zahl(it, 2)}</IT>` : "")
     + `<Description>${p.stlk ? `<StLNo Type="StLK">${xmlEscape(p.stlk)}</StLNo>` : ""}`
     + `<CompleteText><DetailTxt><Text>${textXml(bez)}${langtext}</Text></DetailTxt>`
     + `<OutlineText><OutlTxt><TextOutlTxt>${textXml(bez.slice(0, 70))}</TextOutlTxt></OutlTxt></OutlineText>`
     + `</CompleteText></Description></Item>`;
 }
 
-function bodyXml(knoten, zaehler) {
+function bodyXml(knoten, zaehler, phase = 84) {
   let summe = 0;
   let xml = "<BoQBody>";
   for (const [teil, kind] of knoten.kinder) {
-    const inner = bodyXml(kind, zaehler);
+    const inner = bodyXml(kind, zaehler, phase);
     summe += inner.summe;
     xml += `<BoQCtgy ID="C${zaehler.n++}" RNoPart="${xmlEscape(teil)}"><LblTx>${textXml(kind.label)}</LblTx>`
-      + inner.xml + `<Totals><Total>${zahl(inner.summe, 2)}</Total></Totals></BoQCtgy>`;
+      + inner.xml + (phase === 84 ? `<Totals><Total>${zahl(inner.summe, 2)}</Total></Totals>` : "") + `</BoQCtgy>`;
   }
   if (knoten.items.length) {
     xml += "<Itemlist>";
     for (const item of knoten.items) {
-      const up = (Number(item.p.ep) || 0) * (1 - (Number(item.p.rabatt) || 0) / 100);
-      if (inSumme(item.p)) summe += Math.round(up * (Number(item.p.menge) || 0) * 100) / 100;
+      if (inSumme(item.p)) summe = rund2(summe + gesamtbetrag(item.p));
       zaehler.items++;
-      xml += itemXml(item, zaehler.n++);
+      xml += itemXml(item, zaehler.n++, phase);
     }
     xml += "</Itemlist>";
   }
   return { xml: xml + "</BoQBody>", summe };
 }
 
-export function gaebX84Schreiben(positionen, { projektTitel = "Angebot", datum = new Date().toISOString().slice(0, 10), bieter = null } = {}) {
+// phase 84 = Angebotsabgabe mit Preisen (Standard), 83 = Angebotsaufforderung ohne Preise
+export function gaebX84Schreiben(positionen, { projektTitel = "Angebot", datum = new Date().toISOString().slice(0, 10), bieter = null, phase = 84 } = {}) {
   const warnungen = [];
   const { wurzel } = baumBauen(positionen || [], warnungen);
   const laengen = ebenenLaengen(wurzel);
@@ -141,7 +147,7 @@ export function gaebX84Schreiben(positionen, { projektTitel = "Angebot", datum =
   }
   bkdn.push(`<BoQBkdn><Type>Item</Type><Length>${laengen.item || 4}</Length><Num>Yes</Num></BoQBkdn>`);
   const zaehler = { n: 1, items: 0 };
-  const { xml: body, summe } = bodyXml(wurzel, zaehler);
+  const { xml: body, summe } = bodyXml(wurzel, zaehler, phase);
   const anzahl = zaehler.items;
 
   const ctr = bieter?.name
@@ -150,11 +156,11 @@ export function gaebX84Schreiben(positionen, { projektTitel = "Angebot", datum =
     : "";
 
   const text = `<?xml version="1.0" encoding="UTF-8"?>
-<GAEB xmlns="http://www.gaeb.de/GAEB_DA_XML/DA84/3.3">
+<GAEB xmlns="http://www.gaeb.de/GAEB_DA_XML/DA${phase}/3.3">
 <GAEBInfo><Version>3.3</Version><VersDate>2021-05</VersDate><Date>${datum}</Date><ProgSystem>Polaris</ProgSystem><ProgName>Polaris</ProgName></GAEBInfo>
 <PrjInfo><LblPrj>${xmlEscape(projektTitel)}</LblPrj><Cur>EUR</Cur><CurLbl>Euro</CurLbl></PrjInfo>
-<Award><DP>84</DP><AwardInfo><Cur>EUR</Cur><CurLbl>Euro</CurLbl></AwardInfo>${ctr}
-<BoQ ID="BoQ1"><BoQInfo><LblBoQ>${xmlEscape(projektTitel)}</LblBoQ><Date>${datum}</Date>${bkdn.join("")}<Totals><Total>${zahl(summe, 2)}</Total></Totals></BoQInfo>
+<Award><DP>${phase}</DP><AwardInfo><Cur>EUR</Cur><CurLbl>Euro</CurLbl></AwardInfo>${ctr}
+<BoQ ID="BoQ1"><BoQInfo><LblBoQ>${xmlEscape(projektTitel)}</LblBoQ><Date>${datum}</Date>${bkdn.join("")}${phase === 84 ? `<Totals><Total>${zahl(summe, 2)}</Total></Totals>` : ""}</BoQInfo>
 ${body}
 </BoQ></Award>
 </GAEB>

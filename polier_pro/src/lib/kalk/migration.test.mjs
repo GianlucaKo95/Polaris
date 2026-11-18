@@ -37,7 +37,7 @@ test("Projektstatus aus den Hauptangeboten", () => {
 });
 
 test("Summenprüfung: centgenau bei 2 Nachkommastellen, Abweichung und Hinweis bei mehr", () => {
-  const sauber = [pos("A", 3, 33.33, { rabatt: 5 }), pos("B", 123.456, 12.35)];
+  const sauber = [pos("A", 3, 33.33), pos("B", 123.456, 12.35)];
   const p1 = standPruefen(sauber, altePositionenZuKnoten(sauber));
   assert.equal(p1.abweichungCent, 0);
   assert.deepEqual(p1.hinweise, []);
@@ -46,6 +46,13 @@ test("Summenprüfung: centgenau bei 2 Nachkommastellen, Abweichung und Hinweis b
   assert.equal(p2.altCent, 1235);
   assert.equal(p2.neuCent, 1230);
   assert.ok(p2.hinweise[0].includes("gerundet"));
+});
+
+test("Positionsrabatt: Einheitspreis nach Rabatt wird wie in GAEB auf Cent gerundet", () => {
+  const alt = [pos("A", 3, 33.33, { rabatt: 5 })];
+  const p = standPruefen(alt, altePositionenZuKnoten(alt));
+  assert.equal(p.abweichungCent, -1);
+  assert.ok(p.hinweise.some(h => h.includes("Rabatt")));
 });
 
 test("Zusammenfassung über alle Stände", () => {

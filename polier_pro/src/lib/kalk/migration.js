@@ -46,6 +46,9 @@ export function standPruefen(altePositionen, knoten) {
     if (istTitel(p)) continue;
     const bez = String(p.bez || "").slice(0, 40);
     if (nachkommastellen(p.ep) > 2) hinweise.push(`EP ${de(p.ep, 6)} bei „${bez}“ auf ${de(rundeCent(p.ep), 2)} gerundet`);
+    if (Number(p.rabatt) && nachkommastellen(Number((Number(p.ep) * (1 - Number(p.rabatt) / 100)).toFixed(6))) > 2) {
+      hinweise.push(`Rabatt ${de(p.rabatt, 3)} % bei „${bez}“: Einheitspreis nach Rabatt auf Cent gerundet`);
+    }
     if (nachkommastellen(p.menge) > 3) hinweise.push(`Menge ${de(p.menge, 6)} bei „${bez}“ auf 3 Nachkommastellen gerundet`);
   }
   const altePos = (altePositionen || []).filter(p => !istTitel(p) && altInSumme(p) && altGp(p) !== 0).length;

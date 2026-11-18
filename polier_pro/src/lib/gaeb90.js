@@ -162,6 +162,7 @@ export function parseGaeb90(text) {
         pushPos({
           typ:"unterposition", titelPfad: titelPfad.join(" / "),
           leitOz: positionen.filter(p=>p.typ==="position").at(-1)?.oz || null,
+          unterNr: m?.[1] || null,
           bez:"", menge: m?.[2] ? mengeAusZiffern(m[2]) : 0,
           einheit: m?.[3]?.trim() || "", ep:0,
         });

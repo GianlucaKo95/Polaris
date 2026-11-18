@@ -174,12 +174,13 @@ create index if not exists kalk_ansaetze_knoten on kalk_ansaetze(knoten_id, sort
 create index if not exists kalk_ansaetze_stand on kalk_ansaetze(stand_id);
 
 -- ─── Summen je Stand ───────────────────────────────────────────────────────
--- Dieselbe Regel wie lib/kalk/lvBaum.js: GP je Position auf Cent gerundet,
+-- Dieselbe Regel wie lib/kalk/lvBaum.js und GAEB: UP = EP × (1 − Rabatt) auf Cent,
+-- GP = Menge × UP auf Cent,
 -- Bedarf ohne GB und Alternativen nicht in der Summe.
 create or replace view kalk_stand_summen with (security_invoker = true) as
 select stand_id,
        count(*) filter (where typ = 'position')                                 as positionen,
-       coalesce(sum(round(menge * ep * (1 - rabatt / 100), 2))
+       coalesce(sum(round(menge * round(ep * (1 - rabatt / 100), 2), 2))
          filter (where typ = 'position' and art not in ('bedarf','alternativ')), 0) as netto
 from lv_knoten group by stand_id;
 

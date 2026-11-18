@@ -9,7 +9,7 @@ import { Knopf, Feld, Dialog, Meldung, StatusPunkt, PROJEKT_STATUS, STAND_ARTEN,
 import { baumIndex, ozNeuVergeben, ozFehlendeVergeben, aenderungenAnwenden, pruefen, summen, ARTEN } from "../lib/kalk/lvBaum.js";
 import { gaebZuKnoten, knotenZuFlach } from "../lib/kalk/lvFlach.js";
 import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
-import { parseGaeb90, gaeb90DateiLesen, gaeb90Schreiben, gaeb90AlsWindows1252 } from "../lib/gaeb90.js";
+import { parseGaeb90, gaeb90DateiLesen } from "../lib/gaeb90.js";
 import { gaebX84Schreiben } from "../lib/gaebX84.js";
 
 const REITER = [["uebersicht", "Übersicht"], ["lv", "LV & Kalkulation"], ["protokoll", "Protokoll"]];
@@ -219,17 +219,13 @@ function LvBereich({ speicher, projekt, stand, darf, onStandGeaendert, onFehler 
     }
     const flach = knotenZuFlach(exportKnoten);
     const titel = projekt.name;
-    if (art === "x84") {
-      const r = gaebX84Schreiben(flach, { projektTitel: titel });
-      herunterladen(`${dateiName(titel)}_Stand${stand.nummer}.X84`, r.text);
-      const teile = [];
-      if (fehlend.aendern.length) teile.push(`${fehlend.aendern.length} Positionen ohne OZ ${gesperrt ? "wurden für den Export nummeriert" : "haben eine OZ bekommen"}.`);
-      if (r.warnungen.length) teile.push(`${r.warnungen.length} Hinweise: ${r.warnungen.slice(0, 3).join(" · ")}`);
-      if (teile.length) setDialog({ art: "info", text: `${r.anzahl} Positionen exportiert. ${teile.join(" ")}` });
-    } else {
-      const text = gaeb90Schreiben(flach.map(p => ({ ...p, ep: 0 })), { projektTitel: titel });
-      herunterladen(`${dateiName(titel)}_Stand${stand.nummer}.D83`, new Blob([gaeb90AlsWindows1252(typeof text === "string" ? text : text.text)], { type: "text/plain" }));
-    }
+    const phase = art === "x83" ? 83 : 84;
+    const r = gaebX84Schreiben(flach, { projektTitel: titel, phase });
+    herunterladen(`${dateiName(titel)}_Stand${stand.nummer}.X${phase}`, r.text);
+    const teile = [];
+    if (fehlend.aendern.length) teile.push(`${fehlend.aendern.length} Positionen ohne OZ ${gesperrt ? "wurden für den Export nummeriert" : "haben eine OZ bekommen"}.`);
+    if (r.warnungen.length) teile.push(`${r.warnungen.length} Hinweise: ${r.warnungen.slice(0, 3).join(" · ")}`);
+    if (teile.length) setDialog({ art: "info", text: `${r.anzahl} Positionen exportiert. ${teile.join(" ")}` });
   };
 
   const sperren = async () => {
@@ -266,7 +262,7 @@ function LvBereich({ speicher, projekt, stand, darf, onStandGeaendert, onFehler 
             <div role="menu" style={{ position: "absolute", top: 32, left: 0, zIndex: 20, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 8px 24px rgba(22,24,29,0.12)", padding: 4, width: 260 }}>
               {!gesperrt && <button role="menuitem" className="kb-knopf leise" style={{ width: "100%", justifyContent: "flex-start" }} onClick={() => { setGaebMenue(false); datei.current?.click(); }}><Upload size={16} /> Importieren (X81–X86, D81–D86)</button>}
               <button role="menuitem" className="kb-knopf leise" style={{ width: "100%", justifyContent: "flex-start" }} onClick={() => exportieren("x84")}><Download size={16} /> X84 mit Preisen exportieren</button>
-              <button role="menuitem" className="kb-knopf leise" style={{ width: "100%", justifyContent: "flex-start" }} onClick={() => exportieren("d83")}><Download size={16} /> D83 ohne Preise exportieren</button>
+              <button role="menuitem" className="kb-knopf leise" style={{ width: "100%", justifyContent: "flex-start" }} onClick={() => exportieren("x83")}><Download size={16} /> X83 ohne Preise exportieren</button>
             </div>
           )}
           <input ref={datei} type="file" hidden accept=".x81,.x82,.x83,.x84,.x85,.x86,.d81,.d83,.d84,.d86,.p83,.p84,.xml" onChange={e => importieren(e.target.files?.[0])} />

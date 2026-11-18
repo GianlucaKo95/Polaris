@@ -129,11 +129,18 @@ export function gaebZuKnoten(parsed) {
   const eintraege = (parsed?.positionen || []).map(p => {
     const pfad = p.titelPfad ? p.titelPfad.split(" / ").map(titelAusGaeb).filter(t => t.label || t.oz) : [];
     if (p.typ === "hinweis") return { pfad, typ: "hinweis", text: p.bez };
+    // Unterbeschreibung einer Leitposition (GAEB 90 Satzart 24): eigener Text,
+    // aber keine eigene OZ und kein eigener Preis — als Hinweis unter der Leitposition
+    if (p.typ === "unterposition") {
+      const nr = p.unterNr ? `Unterbeschreibung ${p.unterNr}` : "Unterbeschreibung";
+      return { pfad, typ: "hinweis", text: `${nr}: ${p.bez || ""}`,
+        extra: { unterbeschreibung: true, leitOz: p.leitOz || null, unterNr: p.unterNr || null, menge: Number(p.menge) || 0, einheit: p.einheit || "" } };
+    }
     const art = artVon(p);
     return {
       pfad, typ: "position", oz: p.oz || "", text: String(p.bez || "").replace(ART_PRAEFIX, ""),
       menge: p.menge, einheit: p.einheit, ep: p.ep, rabatt: 0, art, stlk: p.stlk,
-      extra: p.typ === "unterposition" ? { unterposition: true } : {},
+      extra: {},
     };
   });
   return flachZuKnoten(eintraege);
@@ -167,34 +174,73 @@ export function altePositionenZuKnoten(positionen) {
   return flachZuKnoten(eintraege);
 }
 
-// Knoten → altes flaches Format, z. B. für gaebX84Schreiben und gaeb90Schreiben.
-// Titelkopfzeilen tragen den ganzen Pfad, Positionen ihre OZ.
+// Knoten → altes flaches Format für gaebX84Schreiben (X83/X84).
+//
+// Der Schreiber leitet die GAEB-Gliederung aus den OZ-Teilen ab. Damit das
+// auch für LVs aus GAEB 90 passt ("0101.10" unter den Titeln "01" und "0101"),
+// wird je Position eine Export-OZ mit genau einem Teil je Titelebene gebildet
+// ("01.01.10"). Positionen ohne Titel bekommen einen Titel "00 Allgemein"
+// (oder "01 Leistungsverzeichnis", wenn das LV gar keine Titel hat).
+// Unterbeschreibungen werden an den Langtext ihrer Leitposition angehängt.
 export function knotenZuFlach(knoten) {
   const index = baumIndex(knoten);
+  const hatTitel = knoten.some(k => k.typ === "titel");
   const aus = [];
-  const lauf = (parent, pfad) => {
+  let letztePosition = null;
+
+  const relativ = (kette, i) => {
+    const t = kette[i];
+    const vorher = i > 0 ? kette[i - 1].oz : "";
+    let teil = String(t.oz || "");
+    if (vorher && teil.startsWith(vorher) && teil.length > vorher.length) teil = teil.slice(vorher.length).replace(/^\./, "");
+    else if (teil.includes(".")) teil = teil.split(".").at(-1);
+    if (!teil) teil = String(index.kinderVon(t.parent_id ?? null).filter(x => x.typ === "titel").indexOf(t) + 1).padStart(2, "0");
+    return teil;
+  };
+
+  const exportOz = (k, kette) => {
+    if (!k.oz) return undefined;
+    const teile = String(k.oz).split(".").filter(Boolean);
+    if (kette.length && teile.length === kette.length + 1) return k.oz;
+    const titelTeile = kette.length ? kette.map((_, i) => relativ(kette, i)) : [hatTitel ? "00" : "01"];
+    let item = teile.length > 1 ? teile.at(-1) : String(k.oz);
+    const letzter = kette.at(-1)?.oz;
+    if (teile.length === 1 && letzter && item.startsWith(letzter) && item.length > letzter.length) item = item.slice(letzter.length);
+    return [...titelTeile, item].join(".");
+  };
+
+  const lauf = (parent, kette) => {
     let kopfGeschrieben = false;
+    const pfad = kette.length ? kette.map(t => t.kurztext || t.oz || "Titel") : [hatTitel ? "Allgemein" : "Leistungsverzeichnis"];
     const kopf = () => {
-      if (kopfGeschrieben || !pfad.length) return;
+      if (kopfGeschrieben) return;
       aus.push({ id: `kopf-${aus.length}`, bez: `── ${pfad.join(" / ")} ──`, einheit: "", menge: 0, ep: 0, rabatt: 0 });
       kopfGeschrieben = true;
     };
     for (const k of index.kinderVon(parent)) {
       if (k.typ === "titel") {
-        lauf(k.id, [...pfad, k.kurztext || k.oz || "Titel"]);
+        lauf(k.id, [...kette, k]);
         kopfGeschrieben = false; // nach einem Untertitel Kopf erneut setzen
         continue;
       }
-      kopf();
       if (k.typ === "hinweis") {
-        aus.push({ id: k.id, bez: [k.kurztext, k.langtext].filter(Boolean).join("\n"), einheit: "", menge: 0, ep: 0, rabatt: 0 });
+        const text = [k.kurztext, k.langtext].filter(Boolean).join("\n");
+        if (k.extra?.unterbeschreibung && letztePosition) {
+          const m = Number(k.extra.menge) ? ` (${String(k.extra.menge).replace(".", ",")} ${k.extra.einheit || ""})`.replace(/ \)$/, ")") : "";
+          letztePosition.langtext = [letztePosition.langtext, `${text}${m}`].filter(Boolean).join("\n");
+          continue;
+        }
+        kopf();
+        aus.push({ id: k.id, bez: text, einheit: "", menge: 0, ep: 0, rabatt: 0 });
         continue;
       }
-      aus.push({
-        id: k.id, oz: k.oz || undefined, bez: k.kurztext, langtext: k.langtext || "",
+      kopf();
+      letztePosition = {
+        id: k.id, oz: exportOz(k, kette), bez: k.kurztext, langtext: k.langtext || "",
         menge: Number(k.menge) || 0, einheit: k.einheit || "", ep: Number(k.ep) || 0, rabatt: Number(k.rabatt) || 0,
         art: k.art === "pauschal" ? "normal" : k.art, ...(k.stlk ? { stlk: k.stlk } : {}),
-      });
+      };
+      aus.push(letztePosition);
     }
   };
   lauf(null, []);

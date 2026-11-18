@@ -4,8 +4,8 @@
 // Ein Knoten: { id, parent_id, sort, typ: "titel"|"position"|"hinweis", oz,
 //   art, kurztext, langtext, menge, einheit, ep, rabatt, stlk, extra }
 //
-// Geldregel (gleich wie die Datenbank-View kalk_stand_summen und GAEB):
-// GP je Position = Menge × EP × (1 − Rabatt %), auf Cent gerundet, kaufmännisch
+// Geldregel (gleich wie die Datenbank-View kalk_stand_summen und GAEB X84):
+// UP = EP × (1 − Rabatt %) auf Cent, GP = Menge × UP auf Cent, kaufmännisch
 // (halbe Cent weg von null). Gerechnet wird exakt mit Ganzzahlen, damit
 // Bildschirm, Datenbank, Rechnung und GAEB-Export nie um einen Cent abweichen.
 
@@ -41,11 +41,15 @@ function teileGerundet(zaehler, nenner) {
   return neg ? -q : q;
 }
 
-// GP in Cent (Number, ganzzahlig)
+// Einheitspreis nach Positionsrabatt in Cent (wie GAEB: UP auf Cent gerundet)
+export function upCent(k) {
+  return teileGerundet(ganz(k.ep, 100) * (100000n - ganz(k.rabatt, 1000)), 100000n);
+}
+
+// GP in Cent (Number, ganzzahlig) = Menge × UP, auf Cent gerundet
 export function gpCent(k) {
   if (!k || k.typ !== "position") return 0;
-  const roh = ganz(k.menge, 1000) * ganz(k.ep, 100) * (100000n - ganz(k.rabatt, 1000)); // Einheit 1e-10 €
-  return Number(teileGerundet(roh, 100000000n));
+  return Number(teileGerundet(ganz(k.menge, 1000) * upCent(k), 1000n));
 }
 
 export const gp = k => gpCent(k) / 100;
