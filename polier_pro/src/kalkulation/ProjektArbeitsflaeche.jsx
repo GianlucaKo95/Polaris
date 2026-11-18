@@ -1,8 +1,14 @@
 // Arbeitsfläche eines Kalkulationsprojekts: Übersicht, LV & Kalkulation, Protokoll.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Plus, FolderPlus, MessageSquareText, Trash2, Undo2, Redo2, ListOrdered, Upload, Download, Lock, Copy, Search, AlertTriangle, ChevronLeft,
+  Plus, FolderPlus, MessageSquareText, Trash2, Undo2, Redo2, ListOrdered, Upload, Download, Lock, Copy, Search, AlertTriangle, ChevronLeft, Printer,
 } from "lucide-react";
+import { AnsatzPanel } from "./AnsatzPanel.jsx";
+import { Schlussblatt } from "./Schlussblatt.jsx";
+import { Auswertung } from "./Auswertung.jsx";
+import { useStammdaten } from "./stammdaten.js";
+import { standBerechnen, zuschlaegeNormalisieren } from "../lib/kalk/rechenkern.js";
+import { angebotHtml } from "../lib/kalk/angebotDruck.js";
 import { useLvStand } from "./useLvStand.js";
 import { LvEditor } from "./LvEditor.jsx";
 import { Knopf, Feld, Dialog, Meldung, StatusPunkt, PROJEKT_STATUS, STAND_ARTEN, STAND_LABEL, euro, datum, zeitpunkt, zahlLesen, Taste } from "./ui.jsx";
@@ -12,7 +18,7 @@ import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 import { parseGaeb90, gaeb90DateiLesen } from "../lib/gaeb90.js";
 import { gaebX84Schreiben } from "../lib/gaebX84.js";
 
-const REITER = [["uebersicht", "Übersicht"], ["lv", "LV & Kalkulation"], ["protokoll", "Protokoll"]];
+const REITER = [["uebersicht", "Übersicht"], ["lv", "LV & Kalkulation"], ["zuschlaege", "Zuschläge"], ["auswertung", "Auswertung"], ["protokoll", "Protokoll"]];
 
 function herunterladen(name, inhalt, typ = "application/xml") {
   const blob = inhalt instanceof Blob ? inhalt : new Blob([inhalt], { type: typ });
@@ -86,8 +92,8 @@ export function ProjektArbeitsflaeche({ speicher, projektId, onZurueck, onProjek
       {fehler && <div style={{ padding: "12px 24px 0" }}><Meldung art="fehler" onSchliessen={() => setFehler(null)}>{fehler}</Meldung></div>}
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {reiter === "uebersicht" && <Uebersicht projekt={projekt} staende={staende} onAendern={projektAendern} darf={recht >= 2} onStand={id => { setStandId(id); setReiter("lv"); }} />}
-        {reiter === "lv" && stand && (
-          <LvBereich key={stand.id} speicher={speicher} projekt={projekt} stand={stand} darf={recht >= 2}
+        {["lv", "zuschlaege", "auswertung"].includes(reiter) && stand && (
+          <LvBereich key={stand.id} ansicht={reiter} staende={staende} speicher={speicher} projekt={projekt} stand={stand} darf={recht >= 2}
             onStandGeaendert={async neuId => { await ladeProjekt(); if (neuId) setStandId(neuId); onProjektGeaendert?.(); }} onFehler={setFehler} />
         )}
         {reiter === "protokoll" && <Protokoll speicher={speicher} projektId={projekt.id} staende={staende} />}
@@ -145,9 +151,16 @@ function Uebersicht({ projekt, staende, onAendern, darf, onStand }) {
 }
 
 // ── LV & Kalkulation ───────────────────────────────────────────────────────
-function LvBereich({ speicher, projekt, stand, darf, onStandGeaendert, onFehler }) {
-  const lv = useLvStand(speicher, stand.id);
+function LvBereich({ ansicht, staende, speicher, projekt, stand, darf, onStandGeaendert, onFehler }) {
+  const sd = useStammdaten();
   const gesperrt = stand.gesperrt || !darf;
+  const [zLokal, setZLokal] = useState(() => zuschlaegeNormalisieren(stand.zuschlaege));
+  const lv = useLvStand(speicher, stand.id, { zuschlaege: zLokal, gesperrt });
+  const zuschlaegeSetzen = async z => {
+    setZLokal(z);
+    lv.neuBerechnen(z);
+    try { await speicher.standAendern(stand.id, { zuschlaege: z }); onStandGeaendert(); } catch (e) { onFehler(e.nutzerText || e.message); }
+  };
   const [fokusId, setFokusId] = useState(null);
   const [suche, setSuche] = useState("");
   const [pruefungOffen, setPruefungOffen] = useState(false);
@@ -166,9 +179,23 @@ function LvBereich({ speicher, projekt, stand, darf, onStandGeaendert, onFehler 
   const knoten = lv.knoten;
   const index = useMemo(() => (knoten ? baumIndex(knoten) : null), [knoten]);
   const hinweise = useMemo(() => (knoten ? pruefen(knoten) : []), [knoten]);
+  const ergebnis = useMemo(() => (knoten ? standBerechnen(knoten, lv.ansaetze, zLokal) : null), [knoten, lv.ansaetze, zLokal]);
+  const kalkStatus = useMemo(() => {
+    const m = new Map();
+    if (ergebnis) for (const [id, e] of ergebnis.je) if (e.ansaetze) m.set(id, e.kalkuliert ? "kalk" : "manuell");
+    return m;
+  }, [ergebnis]);
 
   if (lv.ladeFehler) return <div style={{ padding: 24 }}><Meldung art="fehler">{lv.ladeFehler}</Meldung></div>;
   if (!knoten) return <div style={{ padding: 24, color: "var(--text2)" }}>LV wird geladen …</div>;
+  const standMitZ = { ...stand, zuschlaege: zLokal };
+  if (ansicht === "zuschlaege") {
+    return <Schlussblatt stand={standMitZ} projekt={projekt} knoten={knoten} ansaetze={lv.ansaetze} gesperrt={gesperrt}
+      onZuschlaege={zuschlaegeSetzen} anwenden={lv.anwenden} onFehler={onFehler} />;
+  }
+  if (ansicht === "auswertung") {
+    return <Auswertung speicher={speicher} stand={standMitZ} staende={staende} knoten={knoten} ansaetze={lv.ansaetze} />;
+  }
 
   const aktion = (a, felder) => window.dispatchEvent(new CustomEvent("lv-aktion", { detail: { aktion: a, felder } }));
   const gewaehlt = auswahl ? index.nachId.get(auswahl) : null;
@@ -228,6 +255,14 @@ function LvBereich({ speicher, projekt, stand, darf, onStandGeaendert, onFehler 
     if (teile.length) setDialog({ art: "info", text: `${r.anzahl} Positionen exportiert. ${teile.join(" ")}` });
   };
 
+  const drucken = async () => {
+    try {
+      const { druckePDF } = await import("../lib/pdf.jsx");
+      const html = angebotHtml(knoten, { stand, projekt, firma: sd.eigeneFirma || {} });
+      await druckePDF(html, `${dateiName(projekt.name)}_${dateiName(stand.bezeichnung || "Angebot")}.pdf`);
+    } catch (e) { onFehler(`Drucken fehlgeschlagen: ${e.message}`); }
+  };
+
   const sperren = async () => {
     await lv.speichernJetzt();
     if (!window.confirm(`Stand ${stand.nummer} sperren? Danach ist er unveränderlich; Änderungen gehen nur noch über einen neuen Stand. Die Summe ${euro(summen(knoten).gesamt)} wird eingefroren.`)) return;
@@ -274,7 +309,7 @@ function LvBereich({ speicher, projekt, stand, darf, onStandGeaendert, onFehler 
         </label>
         <div style={{ position: "relative" }}>
           <Knopf klein leise Icon={AlertTriangle} onClick={() => setPruefungOffen(o => !o)} disabled={!hinweise.length}
-            style={{ color: hinweise.length ? "var(--akzent)" : undefined }}>{hinweise.length ? `${hinweise.length} Prüfhinweise` : "Keine Prüfhinweise"}</Knopf>
+            style={{ color: hinweise.length ? "var(--akzent)" : undefined }} title={hinweise.length ? undefined : "Keine Prüfhinweise"}>{hinweise.length ? `${hinweise.length} Prüfhinweise` : "Prüfung"}</Knopf>
           {pruefungOffen && hinweise.length > 0 && (
             <div style={{ position: "absolute", top: 32, left: 0, zIndex: 20, width: 380, maxHeight: 360, overflowY: "auto", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 8px 24px rgba(22,24,29,0.12)", padding: 4 }}>
               {hinweise.slice(0, 200).map((h, i) => (
@@ -288,6 +323,7 @@ function LvBereich({ speicher, projekt, stand, darf, onStandGeaendert, onFehler 
           {stand.gesperrt ? <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}><Lock size={13} /> Gesperrt am {datum(stand.gesperrt_am)}</span> : statusText}
           {lv.status === "fehler" && <button className="kb-knopf leise klein" onClick={lv.erneutSpeichern}>Erneut versuchen</button>}
         </span>
+        <Knopf klein Icon={Printer} onClick={drucken}>Drucken</Knopf>
         {darf && <Knopf klein Icon={Copy} onClick={() => setDialog({ art: "stand" })}>Neuer Stand</Knopf>}
         {darf && !stand.gesperrt && <Knopf klein Icon={Lock} onClick={sperren}>Sperren</Knopf>}
       </div>
@@ -299,7 +335,11 @@ function LvBereich({ speicher, projekt, stand, darf, onStandGeaendert, onFehler 
           <TitelBaum index={index} parent={null} tiefe={0} aktiv={auswahl} onWahl={setFokusId} />
         </nav>
         <LvEditor stand={stand} knoten={knoten} gesperrt={gesperrt} anwenden={lv.anwenden} rueckgaengig={lv.rueckgaengig} wiederholen={lv.wiederholen}
-          fokusId={fokusId} onFokusErledigt={() => setFokusId(null)} sucheText={suche.trim()} />
+          fokusId={fokusId} onFokusErledigt={() => setFokusId(null)} sucheText={suche.trim()} kalkStatus={kalkStatus}
+          unten={gewaehlt?.typ === "position" ? (
+            <AnsatzPanel k={gewaehlt} ansaetze={lv.ansaetze.filter(a => a.knoten_id === gewaehlt.id)} z={zLokal} ergebnis={ergebnis?.je.get(gewaehlt.id)}
+              saetze={ergebnis?.saetze} gesperrt={gesperrt} anwenden={lv.anwenden} />
+          ) : null} />
         <Details k={gewaehlt} gesperrt={gesperrt} anwenden={lv.anwenden} hinweise={hinweise.filter(h => h.id === gewaehlt?.id)} stand={stand}
           speicher={speicher} onStandGeaendert={onStandGeaendert} onFehler={onFehler} darf={darf} />
       </div>
@@ -360,7 +400,7 @@ function Details({ k, gesperrt, anwenden, hinweise, stand, speicher, onStandGeae
                 <Feld label="Rabatt %"><ZahlFeld wert={k.rabatt} disabled={gesperrt} onWert={n => setze({ rabatt: n })} /></Feld>
                 <Feld label="STLK"><input className="kb-eingabe" defaultValue={k.stlk || ""} key={k.id} disabled={gesperrt} onBlur={e => { const v = e.target.value.trim() || null; if (v !== (k.stlk || null)) setze({ stlk: v }); }} /></Feld>
               </div>
-              {k.extra?.altKalk && <div style={{ fontSize: 12, color: "var(--muted)" }}>Aus der alten Angebotskalkulation übernommen. Die Ansätze folgen in Phase 2.</div>}
+              {k.extra?.altKalk && <div style={{ fontSize: 12, color: "var(--muted)" }}>Aus der bisherigen Angebotskalkulation übernommen.</div>}
             </>
           )}
           {hinweise.map((h, i) => <Meldung key={i}>{h.text}</Meldung>)}

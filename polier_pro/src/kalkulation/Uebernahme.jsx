@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Knopf, Meldung, euro } from "./ui.jsx";
 import { migrationsPlan, planZusammenfassung } from "../lib/kalk/migration.js";
+import { useStammdaten } from "./stammdaten.js";
 
 export function Uebernahme({ speicher, alteAngebote, baustellen, onFertig, onAbbrechen }) {
+  const sd = useStammdaten();
   const [angebote, setAngebote] = useState(null);
   const [migriert, setMigriert] = useState(null);
   const [fehler, setFehler] = useState(null);
@@ -21,7 +23,7 @@ export function Uebernahme({ speicher, alteAngebote, baustellen, onFertig, onAbb
     })();
   }, [speicher, alteAngebote]);
 
-  const plan = useMemo(() => (angebote && migriert ? migrationsPlan(angebote, baustellen, { bereitsMigriert: migriert }) : null), [angebote, migriert, baustellen]);
+  const plan = useMemo(() => (angebote && migriert ? migrationsPlan(angebote, baustellen, { bereitsMigriert: migriert, kalkulationspreise: sd.kalkulationspreise }) : null), [angebote, migriert, baustellen, sd.kalkulationspreise]);
   const z = plan ? planZusammenfassung(plan) : null;
   const abweichungen = plan ? plan.flatMap(p => p.staende.filter(s => s.pruefung.abweichungCent !== 0 || s.pruefung.hinweise.length).map(s => ({ p, s }))) : [];
 
@@ -45,8 +47,8 @@ export function Uebernahme({ speicher, alteAngebote, baustellen, onFertig, onAbb
       {!plan && !fehler && <div style={{ color: "var(--text2)" }}>Angebote werden geprüft …</div>}
       {plan && fertig == null && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginBottom: 24 }}>
-            {[["Projekte", z.projekte], ["Angebote und Nachträge", z.staende], ["Positionen", z.positionen], ["Mit Abweichung", z.mitAbweichung]].map(([l, w]) => (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 12, marginBottom: 24 }}>
+            {[["Projekte", z.projekte], ["Angebote und Nachträge", z.staende], ["Positionen", z.positionen], ["Kalkulationsansätze", z.ansaetze], ["Mit Abweichung", z.mitAbweichung]].map(([l, w]) => (
               <div key={l} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>
                 <div style={{ fontSize: 13, color: "var(--text2)" }}>{l}</div>
                 <div className="kb-zahl" style={{ fontSize: 24, marginTop: 4 }}>{w}</div>

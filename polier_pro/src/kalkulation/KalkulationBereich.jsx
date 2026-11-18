@@ -10,6 +10,7 @@ import { ProjektArbeitsflaeche } from "./ProjektArbeitsflaeche.jsx";
 import { Uebernahme } from "./Uebernahme.jsx";
 import { Gesellschaften } from "./Gesellschaften.jsx";
 import { Meldung } from "./ui.jsx";
+import { StammdatenKontext } from "./stammdaten.js";
 import { migrationsPlan, planZusammenfassung } from "../lib/kalk/migration.js";
 
 function ortAusHash() {
@@ -19,7 +20,7 @@ function ortAusHash() {
   return { seite: m[1] || "projekte", projektId: null };
 }
 
-export function KalkulationBereich({ session, firmaId, rolle, firmenName, baustellen = [], alteAngebote = [], onZurueck, dark, onThemeWechsel, speicherVorgabe = null }) {
+export function KalkulationBereich({ session, firmaId, rolle, firmenName, baustellen = [], alteAngebote = [], onZurueck, dark, onThemeWechsel, speicherVorgabe = null, stammdaten = {} }) {
   const speicher = useMemo(() => speicherVorgabe
     || (session?.access_token && firmaId ? supabaseSpeicher({ session, firmaId }) : lokalSpeicher({ speicher: typeof localStorage !== "undefined" ? localStorage : null })),
   [speicherVorgabe, session?.access_token, firmaId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -31,8 +32,8 @@ export function KalkulationBereich({ session, firmaId, rolle, firmenName, bauste
   const [offeneUebernahme, setOffeneUebernahme] = useState(0);
   const [fehler, setFehler] = useState(null);
   // App reicht bei jedem Neuzeichnen neue Arrays herein; Laden soll davon nicht neu ausgelöst werden
-  const eingaben = useRef({ baustellen, alteAngebote });
-  eingaben.current = { baustellen, alteAngebote };
+  const eingaben = useRef({ baustellen, alteAngebote, stammdaten });
+  eingaben.current = { baustellen, alteAngebote, stammdaten };
   const istVerwalter = ["administrator", "geschaeftsfuehrer"].includes(rolle) || speicher.art === "lokal";
 
   const gehe = (seite, projektId = null) => {
@@ -51,7 +52,7 @@ export function KalkulationBereich({ session, firmaId, rolle, firmenName, bauste
       setRechte(r);
       const alt = speicher.alteAngeboteLaden ? await speicher.alteAngeboteLaden().catch(() => []) : eingaben.current.alteAngebote;
       const schon = await speicher.bereitsMigriert();
-      setOffeneUebernahme(planZusammenfassung(migrationsPlan(alt, eingaben.current.baustellen, { bereitsMigriert: schon })).staende);
+      setOffeneUebernahme(planZusammenfassung(migrationsPlan(alt, eingaben.current.baustellen, { bereitsMigriert: schon, kalkulationspreise: eingaben.current.stammdaten.kalkulationspreise })).staende);
       setFehler(null);
     } catch (e) { setFehler(e.nutzerText || e.message); setProjekte(p => p || []); }
   }, [speicher]);
@@ -97,7 +98,14 @@ export function KalkulationBereich({ session, firmaId, rolle, firmenName, bauste
     fontWeight: aktiv ? 500 : 400, boxShadow: aktiv ? "inset 0 0 0 1px var(--border)" : "none",
   });
 
+  const kontext = useMemo(() => ({
+    kalkulationspreise: stammdaten.kalkulationspreise || [], stammpositionen: stammdaten.stammpositionen || [],
+    kalkulationsgrundlagen: stammdaten.kalkulationsgrundlagen || null, standardZuschlaege: stammdaten.standardZuschlaege || null,
+    eigeneFirma: stammdaten.eigeneFirma || null, onStammpositionenAendern: stammdaten.onStammpositionenAendern || null,
+  }), [stammdaten.kalkulationspreise, stammdaten.stammpositionen, stammdaten.kalkulationsgrundlagen, stammdaten.standardZuschlaege, stammdaten.eigeneFirma, stammdaten.onStammpositionenAendern]);
+
   return (
+    <StammdatenKontext.Provider value={kontext}>
     <div style={{ height: "100dvh", display: "flex", background: "var(--bg)", color: "var(--text)", fontSize: 14, lineHeight: "20px" }}>
       <nav aria-label="Kalkulation" data-navigation className="desk-leiste" style={{ width: 232, flexShrink: 0, boxSizing: "border-box", padding: "20px 12px 16px",
         background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column" }}>
@@ -128,6 +136,7 @@ export function KalkulationBereich({ session, firmaId, rolle, firmenName, bauste
         <div style={{ flex: 1, minHeight: 0 }}>{inhalt}</div>
       </main>
     </div>
+    </StammdatenKontext.Provider>
   );
 }
 

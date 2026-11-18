@@ -409,3 +409,13 @@ textarea.kb-eingabe { height: auto; padding: 8px 10px; line-height: 20px; resize
   color: var(--text2); white-space: nowrap; overflow: hidden; }
 .lv-baum-eintrag:hover { background: var(--surface2); color: var(--text); }
 .lv-baum-eintrag.aktiv { background: var(--surface2); color: var(--text); font-weight: 500; }
+
+/* Ansätze */
+.ans-zeile { display: grid; align-items: center; gap: 4px; height: 32px; padding: 0 6px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.ans-zeile.kopf { height: 28px; color: var(--text2); font-size: 12px; position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.ans-zeile .r { text-align: right; }
+.ans-feld { box-sizing: border-box; height: 26px; min-width: 0; padding: 0 4px; border: 1px solid transparent; border-radius: 4px; background: transparent;
+  color: var(--text); font: inherit; font-size: 13px; }
+.ans-feld:hover:not(:disabled) { border-color: var(--border2); }
+.ans-feld:focus { outline: none; border-color: var(--akzent); background: var(--surface); }
+.ans-feld:disabled { color: inherit; }

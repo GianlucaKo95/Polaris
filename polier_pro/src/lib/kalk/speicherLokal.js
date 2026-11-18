@@ -11,13 +11,14 @@ const jetzt = () => new Date().toISOString();
 const kopie = x => JSON.parse(JSON.stringify(x));
 
 function leer() {
-  return { gesellschaften: [{ id: "g-haupt", name: "Hauptgesellschaft", parent_id: null, kuerzel: "" }], projekte: [], staende: [], knoten: [], protokoll: [] };
+  return { gesellschaften: [{ id: "g-haupt", name: "Hauptgesellschaft", parent_id: null, kuerzel: "" }], projekte: [], staende: [], knoten: [], ansaetze: [], protokoll: [] };
 }
 
 export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 } = {}) {
   let d;
   try { d = speicher ? JSON.parse(speicher.getItem(SCHLUESSEL) || "null") : null; } catch { d = null; }
   if (!d) d = start ? { ...leer(), ...kopie(start) } : leer();
+  if (!d.ansaetze) d.ansaetze = [];
   const sichern = () => { try { speicher?.setItem(SCHLUESSEL, JSON.stringify(d)); } catch { /* voll */ } };
   const warte = () => (verzoegerung ? new Promise(r => setTimeout(r, verzoegerung)) : Promise.resolve());
   const fehler = text => { const e = new Error(text); e.nutzerText = text; throw e; };
@@ -72,6 +73,7 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
       if (d.staende.some(s => s.kalk_projekt_id === id && s.gesperrt)) fehler("Ein Projekt mit gesperrten Ständen kann nicht gelöscht werden");
       const st = new Set(d.staende.filter(s => s.kalk_projekt_id === id).map(s => s.id));
       d.knoten = d.knoten.filter(k => !st.has(k.stand_id));
+      d.ansaetze = d.ansaetze.filter(a => !st.has(a.stand_id));
       d.staende = d.staende.filter(s => !st.has(s.id));
       d.projekte = d.projekte.filter(p => p.id !== id);
       sichern();
@@ -95,6 +97,7 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
       const weg = new Set(loeschen);
       for (const k of d.knoten) if (weg.has(k.id) && k.stand_id === standId) protokoll("lv_knoten", k.id, s.kalk_projekt_id, standId, "loeschen", { kurz: k.kurztext });
       d.knoten = d.knoten.filter(k => !(weg.has(k.id) && k.stand_id === standId));
+      d.ansaetze = d.ansaetze.filter(a => !(weg.has(a.knoten_id) && a.stand_id === standId));
       for (const a of aendern) {
         const k = d.knoten.find(x => x.id === a.id && x.stand_id === standId);
         if (!k) continue;
@@ -123,10 +126,33 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
       return knoten.length;
     },
 
+    async ansaetzeLaden(standId) {
+      await warte();
+      return kopie(d.ansaetze.filter(a => a.stand_id === standId));
+    },
+
+    async ansaetzeSpeichern(standId, { neu = [], aendern = [], loeschen = [] }) {
+      await warte();
+      offen(standId);
+      const s = stand(standId);
+      const weg = new Set(loeschen);
+      d.ansaetze = d.ansaetze.filter(a => !(weg.has(a.id) && a.stand_id === standId));
+      for (const ae of aendern) {
+        const a = d.ansaetze.find(x => x.id === ae.id && x.stand_id === standId);
+        if (!a) continue;
+        const diff = {};
+        for (const [f, v] of Object.entries(ae.felder)) if (a[f] !== v) diff[f] = [a[f], v];
+        Object.assign(a, ae.felder);
+        if (Object.keys(diff).length) protokoll("kalk_ansaetze", a.id, s.kalk_projekt_id, standId, "aendern", diff);
+      }
+      for (const a of neu) if (!weg.has(a.id)) { d.ansaetze.push({ ...kopie(a), stand_id: standId }); protokoll("kalk_ansaetze", a.id, s.kalk_projekt_id, standId, "anlegen", { kurz: a.bezeichnung }); }
+      sichern();
+    },
+
     async standAendern(id, felder) {
       await warte();
       const s = stand(id);
-      if (s.gesperrt && ("nachlass" in felder || "mwst" in felder)) fehler("Ein gesperrter Stand bleibt unverändert");
+      if (s.gesperrt && ("nachlass" in felder || "mwst" in felder || "zuschlaege" in felder)) fehler("Ein gesperrter Stand bleibt unverändert");
       Object.assign(s, felder);
       protokoll("kalk_staende", id, s.kalk_projekt_id, id, "aendern", Object.fromEntries(Object.entries(felder).map(([k, v]) => [k, [null, v]])));
       sichern();
@@ -148,12 +174,13 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
       const b = stand(basisId);
       const nr = Math.max(0, ...d.staende.filter(s => s.kalk_projekt_id === b.kalk_projekt_id).map(s => s.nummer)) + 1;
       const s = { id: neueId(), kalk_projekt_id: b.kalk_projekt_id, art, nummer: nr, bezeichnung, basis_id: b.id, gesperrt: false,
-        freigabe_status: "offen", nachlass: b.nachlass, mwst: b.mwst, summe_netto: null, altes_angebot_id: null, created_at: jetzt() };
+        freigabe_status: "offen", nachlass: b.nachlass, mwst: b.mwst, zuschlaege: kopie(b.zuschlaege || {}), summe_netto: null, altes_angebot_id: null, created_at: jetzt() };
       d.staende.push(s);
       const map = new Map();
       const alt = d.knoten.filter(k => k.stand_id === basisId);
       for (const k of alt) map.set(k.id, neueId());
       for (const k of alt) d.knoten.push({ ...kopie(k), id: map.get(k.id), parent_id: k.parent_id ? map.get(k.parent_id) : null, stand_id: s.id });
+      for (const a of d.ansaetze.filter(x => x.stand_id === basisId)) d.ansaetze.push({ ...kopie(a), id: neueId(), knoten_id: map.get(a.knoten_id), stand_id: s.id });
       const p = d.projekte.find(x => x.id === b.kalk_projekt_id);
       p.aktueller_stand = s.id;
       p.updated_at = jetzt();
@@ -215,6 +242,8 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
             altes_angebot_id: st.altes_angebot_id, created_at: jetzt() };
           d.staende.push(s);
           for (const k of st.knoten) d.knoten.push({ ...kopie(k), stand_id: s.id });
+          for (const a of st.ansaetze || []) d.ansaetze.push({ ...kopie(a), stand_id: s.id });
+          if (st.zuschlaege) s.zuschlaege = kopie(st.zuschlaege);
           if (st.gesperrt) Object.assign(s, { gesperrt: true, gesperrt_am: jetzt(), summe_netto: standSumme(s.id) });
           if (i === eintrag.aktuellerStandIndex) p.aktueller_stand = s.id;
           protokoll("kalk_staende", s.id, p.id, s.id, "anlegen", { kurz: `Übernahme aus Angebot ${st.altes_angebot_id}` });

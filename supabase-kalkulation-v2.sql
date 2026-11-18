@@ -113,12 +113,14 @@ create table if not exists kalk_staende (
   freigabe_am      timestamptz,
   nachlass         numeric(6,3) not null default 0,   -- Nachlass auf die Netto-Summe in %
   mwst             numeric(5,2) not null default 19,
+  zuschlaege       jsonb not null default '{}'::jsonb, -- Zuschlagsmodell, Mittellohn (siehe lib/kalk/rechenkern.js)
   altes_angebot_id text,                  -- Herkunft bei Migration aus angebote (id als Text: bigint oder uuid)
   summe_netto      numeric(16,2),         -- beim Sperren eingefroren (vor Nachlass)
   created_at       timestamptz not null default now(),
   created_by       uuid default auth.uid()
 );
 create index if not exists kalk_staende_projekt on kalk_staende(kalk_projekt_id);
+alter table kalk_staende add column if not exists zuschlaege jsonb not null default '{}'::jsonb;
 create unique index if not exists kalk_staende_altes_angebot on kalk_staende(firma_id, altes_angebot_id) where altes_angebot_id is not null;
 
 do $$ begin
@@ -159,7 +161,7 @@ create table if not exists kalk_ansaetze (
   knoten_id    uuid not null references lv_knoten(id) on delete cascade,
   sort         double precision not null default 0,
   kostenart    text not null check (kostenart in ('lohn','material','geraet','fremd','sonstiges')),
-  ressource_id uuid,
+  ressource_id text,                       -- Kalkulationspreis aus den Stammdaten ("ml" = Mittellohn des Stands)
   bezeichnung  text default '',
   einheit      text default '',
   menge_je_me  numeric(16,6) not null default 0,
@@ -216,7 +218,8 @@ begin
   end if;
   if old.gesperrt and (new.kalk_projekt_id <> old.kalk_projekt_id or new.art <> old.art or new.nummer <> old.nummer
                        or new.summe_netto is distinct from old.summe_netto
-                       or new.nachlass <> old.nachlass or new.mwst <> old.mwst) then
+                       or new.nachlass <> old.nachlass or new.mwst <> old.mwst
+                       or new.zuschlaege is distinct from old.zuschlaege) then
     raise exception 'Ein gesperrter Stand bleibt unverändert';
   end if;
   if new.gesperrt and not old.gesperrt then
@@ -411,8 +414,8 @@ begin
   if not found then raise exception 'Stand nicht gefunden'; end if;
   perform set_config('kalk.massenkopie', 'an', true);
   select coalesce(max(nummer), 0) + 1 into nr from kalk_staende where kalk_projekt_id = b.kalk_projekt_id;
-  insert into kalk_staende (id, firma_id, kalk_projekt_id, art, nummer, bezeichnung, basis_id, nachlass, mwst)
-  values (v_neu, b.firma_id, b.kalk_projekt_id, p_art, nr, coalesce(p_bezeichnung, ''), b.id, b.nachlass, b.mwst);
+  insert into kalk_staende (id, firma_id, kalk_projekt_id, art, nummer, bezeichnung, basis_id, nachlass, mwst, zuschlaege)
+  values (v_neu, b.firma_id, b.kalk_projekt_id, p_art, nr, coalesce(p_bezeichnung, ''), b.id, b.nachlass, b.mwst, b.zuschlaege);
 
   create temp table if not exists _kk_map (alt uuid primary key, neu uuid) on commit drop;
   delete from _kk_map;
@@ -463,6 +466,35 @@ begin
   return n;
 end $$;
 grant execute on function kalk_knoten_einfuegen(uuid, jsonb, text) to authenticated;
+
+-- ─── Viele Ansätze auf einmal (Bausteine, Migration) ───────────────────────
+-- p_ansaetze: [{ id, knoten_id, sort, kostenart, ressource_id, bezeichnung, einheit, menge_je_me, faktor, preis, formel, kommentar }]
+create or replace function kalk_ansaetze_einfuegen(p_stand uuid, p_ansaetze jsonb, p_anlass text default 'import')
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  f int;
+  n int;
+  projekt uuid;
+begin
+  if kalk_stand_recht(p_stand) < 2 then raise exception 'Keine Berechtigung für diesen Stand'; end if;
+  select firma_id, kalk_projekt_id into f, projekt from kalk_staende where id = p_stand;
+  if exists (select 1 from jsonb_to_recordset(p_ansaetze) as r(knoten_id uuid)
+             where not exists (select 1 from lv_knoten k where k.id = r.knoten_id and k.stand_id = p_stand)) then
+    raise exception 'Ein Ansatz verweist auf eine Position außerhalb dieses Stands';
+  end if;
+  perform set_config('kalk.massenkopie', 'an', true);
+  insert into kalk_ansaetze (id, firma_id, stand_id, knoten_id, sort, kostenart, ressource_id, bezeichnung, einheit, menge_je_me, faktor, preis, formel, kommentar)
+  select coalesce(r.id, gen_random_uuid()), f, p_stand, r.knoten_id, coalesce(r.sort, 0), r.kostenart, r.ressource_id, coalesce(r.bezeichnung, ''),
+         coalesce(r.einheit, ''), coalesce(r.menge_je_me, 0), coalesce(r.faktor, 1), coalesce(r.preis, 0), r.formel, coalesce(r.kommentar, '')
+  from jsonb_to_recordset(p_ansaetze) as r(id uuid, knoten_id uuid, sort double precision, kostenart text, ressource_id text, bezeichnung text,
+       einheit text, menge_je_me numeric, faktor numeric, preis numeric, formel text, kommentar text);
+  get diagnostics n = row_count;
+  perform set_config('kalk.massenkopie', 'aus', true);
+  insert into kalk_protokoll (firma_id, tabelle, datensatz_id, kalk_projekt_id, stand_id, aktion, aenderung, user_id)
+  values (f, 'kalk_ansaetze', p_stand, projekt, p_stand, 'anlegen', jsonb_build_object('kurz', p_anlass || ': ' || n || ' Ansätze'), auth.uid());
+  return n;
+end $$;
+grant execute on function kalk_ansaetze_einfuegen(uuid, jsonb, text) to authenticated;
 
 -- ─── Live-Zusammenarbeit ───────────────────────────────────────────────────
 do $$ begin

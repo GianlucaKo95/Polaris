@@ -51,7 +51,7 @@ export function tsvZuPositionen(text) {
   return aus;
 }
 
-export function LvEditor({ stand, knoten, gesperrt, anwenden, rueckgaengig, wiederholen, fokusId, onFokusErledigt, sucheText }) {
+export function LvEditor({ stand, knoten, gesperrt, anwenden, rueckgaengig, wiederholen, fokusId, onFokusErledigt, sucheText, kalkStatus = null, unten = null }) {
   const [zugeklappt, setZugeklappt] = useState(() => new Set());
   const [cursor, setCursor] = useState({ id: null, spalte: "kurztext" });
   const [anker, setAnker] = useState(null); // Mehrfachauswahl: von anker bis cursor
@@ -130,6 +130,11 @@ export function LvEditor({ stand, knoten, gesperrt, anwenden, rueckgaengig, wied
     }
     if (e.spalte === "kurztext" || e.spalte === "oz" || e.spalte === "einheit") wert = String(wert).trim();
     if (k[e.spalte] === wert) return true;
+    // Ein von Hand gesetzter EP einer kalkulierten Position wird zum manuellen EP
+    if (e.spalte === "ep" && kalkStatus?.get(k.id) === "kalk") {
+      anwenden({ aendern: [{ id: k.id, felder: { ep: wert, extra: { ...(k.extra || {}), epManuell: true } } }] });
+      return true;
+    }
     anwenden({ aendern: [{ id: k.id, felder: { [e.spalte]: wert } }] });
     return true;
   };
@@ -277,7 +282,7 @@ export function LvEditor({ stand, knoten, gesperrt, anwenden, rueckgaengig, wied
     <div style={{ display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
       <div ref={raster} className="lv-raster" tabIndex={0} onKeyDown={taste} role="grid" aria-label="Leistungsverzeichnis"
         aria-rowcount={liste.length} onScroll={e => setScrollTop(e.currentTarget.scrollTop)}
-        style={{ flex: 1, minHeight: 0, overflow: "auto", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8 }}>
+        style={{ flex: 1, minHeight: 224, overflow: "auto", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8 }}>
         <div className="lv-kopf" style={{ gridTemplateColumns: RASTER, minWidth: MIN_BREITE }} role="row">
           {SPALTEN.map(s => <div key={s.key} className={`lv-zelle${s.r ? " r" : ""}`} role="columnheader">{s.label}</div>)}
         </div>
@@ -325,6 +330,10 @@ export function LvEditor({ stand, knoten, gesperrt, anwenden, rueckgaengig, wied
                     const cent = k.typ === "titel" ? sm.jeKnoten.get(k.id) || 0 : gpCent(k);
                     const ausserhalb = k.typ === "position" && (k.art === "bedarf" || k.art === "alternativ");
                     inhalt = k.typ === "hinweis" ? "" : <span className="kb-zahl" style={{ color: ausserhalb ? "var(--muted)" : undefined }}>{ausserhalb ? `(${euro(cent / 100)})` : euro(cent / 100)}</span>;
+                  } else if (s.key === "ep" && k.typ === "position" && kalkStatus?.get(k.id)) {
+                    const st = kalkStatus.get(k.id);
+                    inhalt = <span className="kb-zahl" title={st === "kalk" ? "aus den Ansätzen kalkuliert" : "manueller EP, Ansätze vorhanden"}>
+                      {st === "manuell" && <span style={{ color: "var(--akzent)", marginRight: 4, fontSize: 11 }}>M</span>}{wertAnzeige(k, s.key)}</span>;
                   } else {
                     const w = wertAnzeige(k, s.key);
                     inhalt = s.r || s.key === "oz" ? <span className="kb-zahl">{w}</span> : w;
@@ -353,6 +362,7 @@ export function LvEditor({ stand, knoten, gesperrt, anwenden, rueckgaengig, wied
           </div>
         )}
       </div>
+      {unten}
       <Summenleiste sm={sm} stand={stand} anzahlAuswahl={auswahl.length > 1 ? auswahl : null} knoten={knoten} index={index} />
       <EditorAktionen neu={neu} loeschenAuswahl={loeschenAuswahl} gesperrt={gesperrt} aktuell={aktuell} />
     </div>

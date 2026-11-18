@@ -1344,6 +1344,8 @@ export default function PolierApp() {
         <React.Suspense fallback={<TabLadeFallback />}>
           <KalkulationBereich session={auth.session} firmaId={firma?.id} rolle={aktiveRolle} firmenName={eigeneFirma?.name || firma?.name}
             baustellen={projekte} alteAngebote={firmenDaten.angebote} dark={theme.dark} onThemeWechsel={theme.toggle}
+            stammdaten={{ kalkulationspreise, stammpositionen, kalkulationsgrundlagen, standardZuschlaege, eigeneFirma,
+              onStammpositionenAendern: stammpositionenStatus === "ok" || !auth.session ? setStammpositionen : null }}
             onZurueck={() => geheZu(startSeite)} />
         </React.Suspense>
       );

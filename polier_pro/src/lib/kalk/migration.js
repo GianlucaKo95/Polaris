@@ -15,6 +15,25 @@
 import { nettoSumme, gp as altGp, inSumme as altInSumme, istTitel } from "../lv.js";
 import { altePositionenZuKnoten } from "./lvFlach.js";
 import { summen, rundeCent } from "./lvBaum.js";
+import { altKalkZuAnsaetze, saetzeAusAltKalk, standBerechnen, STANDARD_ZUSCHLAEGE } from "./rechenkern.js";
+import { preiseFuer } from "../preisstand.js";
+
+// Alte Positionskalkulationen → Ansätze und Zuschläge des Stands. Positionen,
+// deren alter EP sich aus den Ansätzen nicht centgenau ergibt (andere Sätze
+// je Position, geänderte Preise), behalten ihren EP als "EP manuell".
+export function kalkulationUebernehmen(knoten, angebot, kalkulationspreise) {
+  const preise = preiseFuer(angebot, kalkulationspreise);
+  const mitKalk = knoten.filter(k => k.typ === "position" && k.extra?.altKalk);
+  const ansaetze = mitKalk.flatMap(k => altKalkZuAnsaetze(k, k.extra.altKalk, preise));
+  const e = angebot?.endsumme;
+  const zuschlaege = e && (e.bgk?.length || Number(e.agkProzent) || Number(e.wgProzent))
+    ? { ...STANDARD_ZUSCHLAEGE, modell: "endsumme", endsumme: { bgk: e.bgk || [], agkProzent: Number(e.agkProzent) || 0, wgProzent: Number(e.wgProzent) || 0, umlageAuf: e.umlageAuf === "alle" ? "alle" : "lohn" } }
+    : { ...STANDARD_ZUSCHLAEGE, saetze: mitKalk.length ? saetzeAusAltKalk(mitKalk[0].extra.altKalk) : { ...STANDARD_ZUSCHLAEGE.saetze } };
+  const r = standBerechnen(knoten, ansaetze, zuschlaege);
+  const abweichend = new Set(r.epAenderungen.map(x => x.id));
+  const neueKnoten = knoten.map(k => (abweichend.has(k.id) ? { ...k, extra: { ...k.extra, epManuell: true } } : k));
+  return { knoten: neueKnoten, ansaetze, zuschlaege, epBehalten: abweichend.size, kalkuliert: mitKalk.length };
+}
 
 const GESPERRT_BEI = new Set(["versendet", "angenommen", "abgelehnt"]);
 
@@ -58,7 +77,7 @@ export function standPruefen(altePositionen, knoten) {
 }
 
 // Plan für alle Angebote einer Firma. bereitsMigriert: Set alter Angebots-IDs (als Text).
-export function migrationsPlan(angebote, projekte, { bereitsMigriert = new Set() } = {}) {
+export function migrationsPlan(angebote, projekte, { bereitsMigriert = new Set(), kalkulationspreise = [] } = {}) {
   const projektNachId = new Map((projekte || []).map(p => [String(p.id), p]));
   const gruppen = new Map();
   for (const a of angebote || []) {
@@ -74,7 +93,10 @@ export function migrationsPlan(angebote, projekte, { bereitsMigriert = new Set()
     const pr = projektNachId.get(schluessel);
     const erstes = liste.find(a => !a.nachtrag_zu) || liste[0];
     const staende = liste.map((a, i) => {
-      const knoten = altePositionenZuKnoten(a.positionen || []);
+      const kalk = kalkulationUebernehmen(altePositionenZuKnoten(a.positionen || []), a, kalkulationspreise);
+      const knoten = kalk.knoten;
+      const pruefung = standPruefen(a.positionen || [], knoten);
+      if (kalk.epBehalten) pruefung.hinweise.push(`${kalk.epBehalten} von ${kalk.kalkuliert} kalkulierten Positionen behalten ihren bisherigen EP (EP manuell), weil er sich aus den Ansätzen nicht centgenau ergibt`);
       return {
         altes_angebot_id: String(a.id),
         art: a.nachtrag_zu ? "nachtrag" : "angebot",
@@ -85,7 +107,9 @@ export function migrationsPlan(angebote, projekte, { bereitsMigriert = new Set()
         gesperrt: standStatusAusAngebot(a),
         datum: a.datum || null,
         knoten,
-        pruefung: standPruefen(a.positionen || [], knoten),
+        ansaetze: kalk.ansaetze,
+        zuschlaege: kalk.zuschlaege,
+        pruefung,
       };
     });
     const hauptstaende = staende.filter(s => s.art !== "nachtrag");
@@ -106,13 +130,14 @@ export function migrationsPlan(angebote, projekte, { bereitsMigriert = new Set()
 }
 
 export function planZusammenfassung(plan) {
-  let staende = 0, positionen = 0, mitAbweichung = 0, maxAbweichungCent = 0;
+  let staende = 0, positionen = 0, mitAbweichung = 0, maxAbweichungCent = 0, ansaetze = 0;
   for (const p of plan) for (const s of p.staende) {
     staende++;
     positionen += s.knoten.filter(k => k.typ === "position").length;
     const ab = Math.abs(s.pruefung.abweichungCent);
     if (ab > 0) mitAbweichung++;
+    ansaetze += s.ansaetze?.length || 0;
     maxAbweichungCent = Math.max(maxAbweichungCent, ab);
   }
-  return { projekte: plan.length, staende, positionen, mitAbweichung, maxAbweichungCent };
+  return { projekte: plan.length, staende, positionen, mitAbweichung, maxAbweichungCent, ansaetze };
 }

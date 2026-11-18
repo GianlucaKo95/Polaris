@@ -6,6 +6,7 @@ import { sbClientMitToken } from "../supabase.js";
 
 const KNOTEN_FELDER = ["id", "parent_id", "sort", "typ", "oz", "art", "kurztext", "langtext", "menge", "einheit", "ep", "rabatt", "stlk", "extra"];
 const BLOCK = 500;
+const ANSATZ_FELDER = ["id", "knoten_id", "sort", "kostenart", "ressource_id", "bezeichnung", "einheit", "menge_je_me", "faktor", "preis", "formel", "kommentar"];
 
 function nutzerFehler(error, standard = "Speichern fehlgeschlagen") {
   const roh = error?.message || "";
@@ -120,6 +121,32 @@ export function supabaseSpeicher({ session, firmaId }) {
       return n;
     },
 
+    async ansaetzeLaden(standId) {
+      const alle = [];
+      for (let von = 0; ; von += 1000) {
+        const teil = pruefe(await db().from("kalk_ansaetze").select(ANSATZ_FELDER.join(",")).eq("stand_id", standId).order("id").range(von, von + 999), "Ansätze nicht geladen");
+        alle.push(...teil);
+        if (teil.length < 1000) break;
+      }
+      return alle.map(a => ({ ...a, menge_je_me: Number(a.menge_je_me), faktor: Number(a.faktor), preis: Number(a.preis) }));
+    },
+
+    async ansaetzeSpeichern(standId, { neu = [], aendern = [], loeschen = [] }, { aktuell = [] } = {}) {
+      const nachId = new Map(aktuell.map(a => [a.id, a]));
+      if (loeschen.length) await inBloecken(loeschen, async ids => pruefe(await db().from("kalk_ansaetze").delete().in("id", ids).eq("stand_id", standId)));
+      const schreiben = [...neu.filter(a => !loeschen.includes(a.id)).map(a => nachId.get(a.id) || a), ...aendern.map(x => nachId.get(x.id)).filter(Boolean)];
+      const zeilen = schreiben.map(a => ({ ...Object.fromEntries(ANSATZ_FELDER.map(f => [f, a[f] ?? null])), faktor: a.faktor ?? 1, stand_id: standId, firma_id: firmaId }));
+      await inBloecken(zeilen, async rows => pruefe(await db().from("kalk_ansaetze").upsert(rows)));
+    },
+
+    async ansaetzeImportieren(standId, ansaetze, anlass = "Import") {
+      let n = 0;
+      await inBloecken(ansaetze, async teil => {
+        n += pruefe(await db().rpc("kalk_ansaetze_einfuegen", { p_stand: standId, p_ansaetze: teil.map(a => Object.fromEntries(ANSATZ_FELDER.map(f => [f, a[f] ?? null]))), p_anlass: anlass }), "Ansätze nicht übernommen");
+      });
+      return n;
+    },
+
     async standAendern(id, felder) {
       return pruefe(await db().from("kalk_staende").update(felder).eq("id", id).select().single(), "Stand nicht gespeichert");
     },
@@ -155,9 +182,10 @@ export function supabaseSpeicher({ session, firmaId }) {
         for (const [i, st] of eintrag.staende.entries()) {
           const s = pruefe(await db().from("kalk_staende").insert({
             firma_id: firmaId, kalk_projekt_id: p.id, art: st.art, nummer: ++nr, bezeichnung: st.bezeichnung,
-            nachlass: st.nachlass, mwst: st.mwst, altes_angebot_id: st.altes_angebot_id,
+            nachlass: st.nachlass, mwst: st.mwst, altes_angebot_id: st.altes_angebot_id, zuschlaege: st.zuschlaege || {},
           }).select().single(), "Stand nicht angelegt");
           if (st.knoten.length) await this.knotenImportieren(s.id, st.knoten, `Übernahme aus Angebot ${st.altes_angebot_id}`);
+          if (st.ansaetze?.length) await this.ansaetzeImportieren(s.id, st.ansaetze, `Übernahme aus Angebot ${st.altes_angebot_id}`);
           if (st.gesperrt) await this.standSperren(s.id);
           if (i === eintrag.aktuellerStandIndex) aktuell = s.id;
           onFortschritt?.(++n);

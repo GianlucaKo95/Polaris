@@ -66,3 +66,27 @@ test("Zusammenfassung über alle Stände", () => {
   assert.equal(z.positionen, 3);
   assert.equal(z.mitAbweichung, 1);
 });
+
+test("Alte Positionskalkulationen werden Ansätze; abweichende EP bleiben als EP manuell", async () => {
+  const { lokalSpeicher } = await import("./speicherLokal.js");
+  const kp = [{ id: 1, kategorie: "lohn", bezeichnung: "Facharbeiter", einheit: "h", preis: 50 }, { id: 2, kategorie: "material", bezeichnung: "Beton", einheit: "m³", preis: 100 }];
+  const kalkA = { lohnposten: [{ stammId: 1, menge: 20 }], materialposten: [{ stammId: 2, menge: 10 }], zuschlagLohn: 20, zuschlagMaterial: 10 };
+  const kalkB = { ...kalkA, zuschlagLohn: 50 }; // andere Sätze als der Stand
+  const angebot = { id: 1, projekt_id: 1, status: "entwurf", positionen: [
+    pos("A", 10, 230, { kalk: kalkA }), // 20 h × 50 × 1,2 + 10 × 100 × 1,1 = 2300 → EP 230
+    pos("B", 10, 260, { kalk: kalkB }),
+  ] };
+  const plan = migrationsPlan([angebot], [], { kalkulationspreise: kp });
+  const st = plan[0].staende[0];
+  assert.equal(st.ansaetze.length, 4);
+  assert.deepEqual(st.zuschlaege.saetze, { lohn: 20, material: 10, geraet: 0, fremd: 0, sonstiges: 0 });
+  assert.equal(st.knoten.find(k => k.kurztext === "A").extra.epManuell, undefined);
+  assert.equal(st.knoten.find(k => k.kurztext === "B").extra.epManuell, true);
+  assert.ok(st.pruefung.hinweise.some(h => h.includes("1 von 2")));
+  const s = lokalSpeicher();
+  await s.planUebernehmen(plan);
+  const [p] = await s.projekteLaden();
+  const [stand] = await s.staendeLaden(p.id);
+  assert.equal((await s.ansaetzeLaden(stand.id)).length, 4);
+  assert.equal(stand.zuschlaege.saetze.lohn, 20);
+});
