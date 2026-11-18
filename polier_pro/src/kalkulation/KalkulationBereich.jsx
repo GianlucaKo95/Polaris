@@ -11,6 +11,7 @@ import { Uebernahme } from "./Uebernahme.jsx";
 import { Gesellschaften } from "./Gesellschaften.jsx";
 import { Meldung } from "./ui.jsx";
 import { StammdatenKontext } from "./stammdaten.js";
+import { kiToolAufruf } from "../lib/ai.js";
 import { migrationsPlan, planZusammenfassung } from "../lib/kalk/migration.js";
 
 function ortAusHash() {
@@ -78,7 +79,9 @@ export function KalkulationBereich({ session, firmaId, rolle, firmenName, bauste
   let inhalt;
   if (!projekte) inhalt = <div style={{ padding: 32, color: "var(--text2)" }}>Lädt …</div>;
   else if (ort.seite === "projekt") {
+    const gesId = projekte.find(p => p.id === ort.projektId)?.gesellschaft_id;
     inhalt = <ProjektArbeitsflaeche key={ort.projektId} speicher={speicher} projektId={ort.projektId} recht={projektRecht(ort.projektId)}
+      kiAktiv={gesellschaften.find(g => g.id === gesId)?.ki_aktiv !== false}
       onZurueck={() => { gehe("projekte"); laden(); }} onProjektGeaendert={laden} />;
   } else if (ort.seite === "uebernahme") {
     inhalt = <Uebernahme speicher={speicher} alteAngebote={alteAngebote} baustellen={baustellen} onAbbrechen={() => gehe("projekte")}
@@ -102,7 +105,10 @@ export function KalkulationBereich({ session, firmaId, rolle, firmenName, bauste
     kalkulationspreise: stammdaten.kalkulationspreise || [], stammpositionen: stammdaten.stammpositionen || [],
     kalkulationsgrundlagen: stammdaten.kalkulationsgrundlagen || null, standardZuschlaege: stammdaten.standardZuschlaege || null,
     eigeneFirma: stammdaten.eigeneFirma || null, onStammpositionenAendern: stammdaten.onStammpositionenAendern || null,
-  }), [stammdaten.kalkulationspreise, stammdaten.stammpositionen, stammdaten.kalkulationsgrundlagen, stammdaten.standardZuschlaege, stammdaten.eigeneFirma, stammdaten.onStammpositionenAendern]);
+    einheitspreise: stammdaten.einheitspreise || [], lvVorlagen: stammdaten.lvVorlagen || [],
+    rufeKi: session?.access_token ? (system, messages, tools, toolChoice) => kiToolAufruf({ system, messages, tools, toolChoice, maxTokens: 8000 }, session) : null,
+  }), [stammdaten.kalkulationspreise, stammdaten.stammpositionen, stammdaten.kalkulationsgrundlagen, stammdaten.standardZuschlaege, stammdaten.eigeneFirma,
+    stammdaten.onStammpositionenAendern, stammdaten.einheitspreise, stammdaten.lvVorlagen, session?.access_token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <StammdatenKontext.Provider value={kontext}>

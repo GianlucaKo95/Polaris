@@ -1,8 +1,10 @@
 // Arbeitsfläche eines Kalkulationsprojekts: Übersicht, LV & Kalkulation, Protokoll.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Plus, FolderPlus, MessageSquareText, Trash2, Undo2, Redo2, ListOrdered, Upload, Download, Lock, Copy, Search, AlertTriangle, ChevronLeft, Printer,
+  Plus, FolderPlus, MessageSquareText, Trash2, Undo2, Redo2, ListOrdered, Upload, Download, Lock, Copy, Search, AlertTriangle, ChevronLeft, Printer, Sparkles,
 } from "lucide-react";
+import { KiPanel } from "./KiPanel.jsx";
+import { BefehlZeile } from "./BefehlZeile.jsx";
 import { AnsatzPanel } from "./AnsatzPanel.jsx";
 import { Schlussblatt } from "./Schlussblatt.jsx";
 import { Auswertung } from "./Auswertung.jsx";
@@ -29,7 +31,7 @@ function herunterladen(name, inhalt, typ = "application/xml") {
 }
 const dateiName = s => String(s || "LV").replace(/[^\wäöüÄÖÜß.-]+/g, "_").slice(0, 60);
 
-export function ProjektArbeitsflaeche({ speicher, projektId, onZurueck, onProjektGeaendert, recht }) {
+export function ProjektArbeitsflaeche({ speicher, projektId, onZurueck, onProjektGeaendert, recht, kiAktiv = true }) {
   const [projekt, setProjekt] = useState(null);
   const [staende, setStaende] = useState([]);
   const [standId, setStandId] = useState(null);
@@ -93,7 +95,7 @@ export function ProjektArbeitsflaeche({ speicher, projektId, onZurueck, onProjek
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {reiter === "uebersicht" && <Uebersicht projekt={projekt} staende={staende} onAendern={projektAendern} darf={recht >= 2} onStand={id => { setStandId(id); setReiter("lv"); }} />}
         {["lv", "zuschlaege", "auswertung"].includes(reiter) && stand && (
-          <LvBereich key={stand.id} ansicht={reiter} staende={staende} speicher={speicher} projekt={projekt} stand={stand} darf={recht >= 2}
+          <LvBereich key={stand.id} ansicht={reiter} staende={staende} speicher={speicher} projekt={projekt} stand={stand} darf={recht >= 2} kiAktiv={kiAktiv}
             onStandGeaendert={async neuId => { await ladeProjekt(); if (neuId) setStandId(neuId); onProjektGeaendert?.(); }} onFehler={setFehler} />
         )}
         {reiter === "protokoll" && <Protokoll speicher={speicher} projektId={projekt.id} staende={staende} />}
@@ -151,7 +153,7 @@ function Uebersicht({ projekt, staende, onAendern, darf, onStand }) {
 }
 
 // ── LV & Kalkulation ───────────────────────────────────────────────────────
-function LvBereich({ ansicht, staende, speicher, projekt, stand, darf, onStandGeaendert, onFehler }) {
+function LvBereich({ ansicht, staende, speicher, projekt, stand, darf, kiAktiv, onStandGeaendert, onFehler }) {
   const sd = useStammdaten();
   const gesperrt = stand.gesperrt || !darf;
   const [zLokal, setZLokal] = useState(() => zuschlaegeNormalisieren(stand.zuschlaege));
@@ -167,6 +169,7 @@ function LvBereich({ ansicht, staende, speicher, projekt, stand, darf, onStandGe
   const [dialog, setDialog] = useState(null);
   const [gaebMenue, setGaebMenue] = useState(false);
   const [auswahl, setAuswahl] = useState(null);
+  const [kiOffen, setKiOffen] = useState(false);
   const datei = useRef(null);
 
   useEffect(() => {
@@ -305,7 +308,7 @@ function LvBereich({ ansicht, staende, speicher, projekt, stand, darf, onStandGe
         <label style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 8, height: 28, padding: "0 8px", border: "1px solid var(--border2)", borderRadius: 8, color: "var(--muted)" }}>
           <Search size={14} />
           <input value={suche} onChange={e => setSuche(e.target.value)} onKeyDown={e => { if (e.key === "Enter") sucheWeiter(); }} placeholder="Im LV suchen" aria-label="Im LV suchen"
-            style={{ border: "none", outline: "none", background: "transparent", font: "inherit", fontSize: 13, width: 128, color: "var(--text)" }} />
+            style={{ border: "none", outline: "none", background: "transparent", font: "inherit", fontSize: 13, width: 112, color: "var(--text)" }} />
         </label>
         <div style={{ position: "relative" }}>
           <Knopf klein leise Icon={AlertTriangle} onClick={() => setPruefungOffen(o => !o)} disabled={!hinweise.length}
@@ -323,12 +326,17 @@ function LvBereich({ ansicht, staende, speicher, projekt, stand, darf, onStandGe
           {stand.gesperrt ? <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}><Lock size={13} /> Gesperrt am {datum(stand.gesperrt_am)}</span> : statusText}
           {lv.status === "fehler" && <button className="kb-knopf leise klein" onClick={lv.erneutSpeichern}>Erneut versuchen</button>}
         </span>
-        <Knopf klein Icon={Printer} onClick={drucken}>Drucken</Knopf>
+        {kiAktiv && <Knopf klein Icon={Sparkles} onClick={() => setKiOffen(o => !o)} aria-pressed={kiOffen} style={{ color: "var(--akzent)" }}>KI</Knopf>}
+        <button className="kb-symbol" style={{ width: 32, height: 28 }} onClick={drucken} aria-label="Angebot drucken" title="Angebot als PDF drucken"><Printer size={16} /></button>
         {darf && <Knopf klein Icon={Copy} onClick={() => setDialog({ art: "stand" })}>Neuer Stand</Knopf>}
         {darf && !stand.gesperrt && <Knopf klein Icon={Lock} onClick={sperren}>Sperren</Knopf>}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "clamp(160px, 13vw, 220px) minmax(0, 1fr) clamp(232px, 18vw, 300px)", gap: 16 }}>
+      {kiAktiv && !gesperrt && (
+        <BefehlZeile knoten={knoten} ansaetze={lv.ansaetze} z={zLokal} anwenden={lv.anwenden} onZuschlaege={zuschlaegeSetzen}
+          onStandFelder={async felder => { try { await speicher.standAendern(stand.id, felder); onStandGeaendert(); } catch (e) { onFehler(e.nutzerText || e.message); } }} />
+      )}
+      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `clamp(160px, 13vw, 220px) minmax(0, 1fr) ${kiOffen ? "clamp(320px, 24vw, 420px)" : "clamp(232px, 18vw, 300px)"}`, gap: 16 }}>
         <nav aria-label="Titel" style={{ overflowY: "auto", minHeight: 0 }}>
           <div style={{ fontSize: 12, color: "var(--muted)", padding: "4px 8px" }}>Titel</div>
           {titelListe.length === 0 && <div style={{ fontSize: 13, color: "var(--muted)", padding: "4px 8px" }}>Noch keine Titel</div>}
@@ -340,8 +348,11 @@ function LvBereich({ ansicht, staende, speicher, projekt, stand, darf, onStandGe
             <AnsatzPanel k={gewaehlt} ansaetze={lv.ansaetze.filter(a => a.knoten_id === gewaehlt.id)} z={zLokal} ergebnis={ergebnis?.je.get(gewaehlt.id)}
               saetze={ergebnis?.saetze} gesperrt={gesperrt} anwenden={lv.anwenden} />
           ) : null} />
-        <Details k={gewaehlt} gesperrt={gesperrt} anwenden={lv.anwenden} hinweise={hinweise.filter(h => h.id === gewaehlt?.id)} stand={stand}
-          speicher={speicher} onStandGeaendert={onStandGeaendert} onFehler={onFehler} darf={darf} />
+        {kiOffen
+          ? <KiPanel speicher={speicher} projekt={projekt} stand={stand} knoten={knoten} ansaetze={lv.ansaetze} z={zLokal} saetze={ergebnis?.saetze}
+              gesperrt={gesperrt} anwenden={lv.anwenden} onFokus={setFokusId} onSchliessen={() => setKiOffen(false)} />
+          : <Details k={gewaehlt} gesperrt={gesperrt} anwenden={lv.anwenden} hinweise={hinweise.filter(h => h.id === gewaehlt?.id)} stand={stand}
+              speicher={speicher} onStandGeaendert={onStandGeaendert} onFehler={onFehler} darf={darf} />}
       </div>
 
       {dialog?.art === "info" && <Dialog titel="Hinweis" onSchliessen={() => setDialog(null)} fuss={<Knopf haupt onClick={() => setDialog(null)}>OK</Knopf>}>{dialog.text}</Dialog>}
@@ -401,6 +412,14 @@ function Details({ k, gesperrt, anwenden, hinweise, stand, speicher, onStandGeae
                 <Feld label="STLK"><input className="kb-eingabe" defaultValue={k.stlk || ""} key={k.id} disabled={gesperrt} onBlur={e => { const v = e.target.value.trim() || null; if (v !== (k.stlk || null)) setze({ stlk: v }); }} /></Feld>
               </div>
               {k.extra?.altKalk && <div style={{ fontSize: 12, color: "var(--muted)" }}>Aus der bisherigen Angebotskalkulation übernommen.</div>}
+              {k.extra?.ki && (
+                <div style={{ fontSize: 12, color: "var(--text2)", border: "1px solid var(--border)", borderRadius: 8, padding: 8, display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span style={{ display: "flex", gap: 4, alignItems: "center", color: "var(--akzent)" }}><Sparkles size={12} /> KI-Vorschlag vom {datum(k.extra.ki.am)}, Sicherheit {k.extra.ki.sicherheit}</span>
+                  <span>Quelle: {k.extra.ki.quelle === "rezeptur" ? "Rezeptur aus Kostenbausteinen" : k.extra.ki.quelle}</span>
+                  <span>{k.extra.ki.begruendung}</span>
+                  {k.extra.ki.fehlt?.length > 0 && <span style={{ color: "var(--akzent)" }}>Fehlt: {k.extra.ki.fehlt.join(", ")}</span>}
+                </div>
+              )}
             </>
           )}
           {hinweise.map((h, i) => <Meldung key={i}>{h.text}</Meldung>)}

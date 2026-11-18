@@ -122,7 +122,7 @@ export function katalogBauen({ stammpositionen = [], einheitspreise = [], lvVorl
   return eintraege;
 }
 
-const QUELLEN_RANG = { urkalkulation: -1, stammposition: 0, einheitspreis: 1, mutter_lv: 2 };
+const QUELLEN_RANG = { kalkulation: -2, urkalkulation: -1, stammposition: 0, einheitspreis: 1, mutter_lv: 2 };
 
 // Sucht im Katalog. einheit (optional) bevorzugt passende Einheiten, schließt
 // andere aber nicht aus — eine Leistung in "m" kann auch als "m²"-Position
@@ -145,6 +145,7 @@ export function katalogEintrag(katalog, ref) {
 }
 
 export const QUELLEN_LABEL = {
+  kalkulation: "Eigene frühere Kalkulation",
   stammposition: "Stammposition",
   einheitspreis: "Einheitspreis-Katalog",
   mutter_lv: "Mutter-LV",

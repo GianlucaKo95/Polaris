@@ -195,9 +195,46 @@ export function supabaseSpeicher({ session, firmaId }) {
       return n;
     },
 
+    // Frühere eigene Kalkulationen als Vorlage für die KI: je Projekt der
+    // jüngste Stand mit Ansätzen, ohne das aktuelle Projekt
+    async vergleichsKalkulationen({ ausserProjekt = null, grenze = 12 } = {}) {
+      let q = db().from("kalk_staende").select("id, kalk_projekt_id, nummer, created_at").order("created_at", { ascending: false }).limit(60);
+      if (ausserProjekt) q = q.neq("kalk_projekt_id", ausserProjekt);
+      const staende = pruefe(await q, "Vergleichskalkulationen nicht geladen");
+      if (!staende.length) return [];
+      const ansaetze = [];
+      for (let von = 0; von < 6000; von += 1000) {
+        const teil = pruefe(await db().from("kalk_ansaetze").select([...ANSATZ_FELDER, "stand_id"].join(",")).in("stand_id", staende.map(s => s.id)).range(von, von + 999));
+        ansaetze.push(...teil);
+        if (teil.length < 1000) break;
+      }
+      const mitAnsatz = new Set(ansaetze.map(a => a.stand_id));
+      const gewaehlt = [];
+      const projekte = new Set();
+      for (const s of staende) {
+        if (!mitAnsatz.has(s.id) || projekte.has(s.kalk_projekt_id)) continue;
+        projekte.add(s.kalk_projekt_id);
+        gewaehlt.push(s);
+        if (gewaehlt.length >= grenze) break;
+      }
+      const ids = new Set(gewaehlt.map(s => s.id));
+      const relevant = ansaetze.filter(a => ids.has(a.stand_id)).map(a => ({ ...a, menge_je_me: Number(a.menge_je_me), faktor: Number(a.faktor), preis: Number(a.preis) }));
+      const knotenIds = [...new Set(relevant.map(a => a.knoten_id))];
+      const knoten = [];
+      for (let i = 0; i < knotenIds.length; i += 300) {
+        knoten.push(...pruefe(await db().from("lv_knoten").select([...KNOTEN_FELDER, "stand_id"].join(",")).in("id", knotenIds.slice(i, i + 300))));
+      }
+      const namen = new Map(pruefe(await db().from("kalk_projekte").select("id, name").in("id", [...projekte])).map(p => [p.id, p.name]));
+      return gewaehlt.map(s => ({
+        projektName: namen.get(s.kalk_projekt_id) || "", standNummer: s.nummer,
+        knoten: knoten.filter(k => k.stand_id === s.id).map(k => ({ ...k, menge: Number(k.menge), ep: Number(k.ep) })),
+        ansaetze: relevant.filter(a => a.stand_id === s.id),
+      }));
+    },
+
     // ── Gesellschaften und Rechte ──
     async gesellschaftSpeichern(g) {
-      const zeile = { name: g.name, kuerzel: g.kuerzel || "", parent_id: g.parent_id || null, aktiv: g.aktiv !== false };
+      const zeile = { name: g.name, kuerzel: g.kuerzel || "", parent_id: g.parent_id || null, aktiv: g.aktiv !== false, ...(g.ki_aktiv !== undefined ? { ki_aktiv: g.ki_aktiv !== false } : {}) };
       return g.id
         ? pruefe(await db().from("gesellschaften").update(zeile).eq("id", g.id).select().single(), "Gesellschaft nicht gespeichert")
         : pruefe(await db().from("gesellschaften").insert({ ...zeile, firma_id: firmaId }).select().single(), "Gesellschaft nicht angelegt");

@@ -194,6 +194,23 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
       return kopie(d.protokoll.filter(e => e.kalk_projekt_id === projektId).slice(-grenze).reverse());
     },
 
+    async vergleichsKalkulationen({ ausserProjekt = null, grenze = 12 } = {}) {
+      await warte();
+      const aus = [];
+      const projekte = new Set();
+      for (const s of [...d.staende].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || b.nummer - a.nummer)) {
+        if (s.kalk_projekt_id === ausserProjekt || projekte.has(s.kalk_projekt_id)) continue;
+        const ansaetze = d.ansaetze.filter(a => a.stand_id === s.id);
+        if (!ansaetze.length) continue;
+        projekte.add(s.kalk_projekt_id);
+        const ids = new Set(ansaetze.map(a => a.knoten_id));
+        aus.push({ projektName: d.projekte.find(p => p.id === s.kalk_projekt_id)?.name || "", standNummer: s.nummer,
+          knoten: kopie(d.knoten.filter(k => ids.has(k.id))), ansaetze: kopie(ansaetze) });
+        if (aus.length >= grenze) break;
+      }
+      return aus;
+    },
+
     // ── Gesellschaften und Rechte ──
     async gesellschaftSpeichern(g) {
       await warte();

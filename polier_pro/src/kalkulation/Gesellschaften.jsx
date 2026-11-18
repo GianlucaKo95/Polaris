@@ -45,13 +45,14 @@ export function Gesellschaften({ speicher, gesellschaften, onGeaendert }) {
           <Knopf klein Icon={Plus} onClick={() => setBearbeiten({ name: "", kuerzel: "", parent_id: null })}>Gesellschaft</Knopf>
         </div>
         <table className="kb-tabelle" style={{ background: "var(--surface)", maxWidth: 720 }}>
-          <thead><tr><th>Name</th><th>Kürzel</th><th>Art</th></tr></thead>
+          <thead><tr><th>Name</th><th>Kürzel</th><th>Art</th><th>KI</th></tr></thead>
           <tbody>
             {haupt.flatMap(g => [g, ...gesellschaften.filter(n => n.parent_id === g.id)]).map(g => (
               <tr key={g.id} onClick={() => setBearbeiten(g)}>
                 <td style={{ paddingLeft: g.parent_id ? 32 : 12 }}>{g.name}</td>
                 <td className="kb-zahl">{g.kuerzel}</td>
                 <td style={{ color: "var(--text2)" }}>{g.parent_id ? "Niederlassung" : "Gesellschaft"}</td>
+                <td style={{ color: "var(--text2)" }}>{g.ki_aktiv === false ? "aus" : "an"}</td>
               </tr>
             ))}
           </tbody>
@@ -99,6 +100,10 @@ function GesellschaftDialog({ g, haupt, onSchliessen, onSpeichern }) {
       fuss={<><Knopf onClick={onSchliessen}>Abbrechen</Knopf><Knopf haupt disabled={!f.name?.trim()} onClick={() => onSpeichern({ ...f, name: f.name.trim() })}>Speichern</Knopf></>}>
       <Feld label="Name"><input className="kb-eingabe" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></Feld>
       <Feld label="Kürzel"><input className="kb-eingabe" value={f.kuerzel || ""} onChange={e => setF({ ...f, kuerzel: e.target.value })} /></Feld>
+      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
+        <input type="checkbox" checked={f.ki_aktiv !== false} onChange={e => setF({ ...f, ki_aktiv: e.target.checked })} />
+        KI-Funktionen in dieser Gesellschaft nutzen
+      </label>
       <Feld label="Gehört zu" hinweis="Leer lassen für eine eigene Gesellschaft; sonst ist es eine Niederlassung.">
         <select className="kb-eingabe" value={f.parent_id || ""} onChange={e => setF({ ...f, parent_id: e.target.value || null })}>
           <option value="">Eigene Gesellschaft</option>

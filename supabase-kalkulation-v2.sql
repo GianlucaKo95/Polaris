@@ -31,6 +31,8 @@ create table if not exists gesellschaften (
   created_at  timestamptz not null default now()
 );
 create index if not exists gesellschaften_firma on gesellschaften(firma_id);
+-- KI-Funktionen je Gesellschaft abschaltbar (Phase 3)
+alter table gesellschaften add column if not exists ki_aktiv boolean not null default true;
 
 -- Jede Firma bekommt eine Hauptgesellschaft; kleine Firmen merken davon nichts.
 insert into gesellschaften (firma_id, name)
