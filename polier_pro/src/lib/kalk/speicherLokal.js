@@ -11,7 +11,7 @@ const jetzt = () => new Date().toISOString();
 const kopie = x => JSON.parse(JSON.stringify(x));
 
 function leer() {
-  return { gesellschaften: [{ id: "g-haupt", name: "Hauptgesellschaft", parent_id: null, kuerzel: "" }], projekte: [], staende: [], knoten: [], ansaetze: [], protokoll: [] };
+  return { gesellschaften: [{ id: "g-haupt", name: "Hauptgesellschaft", parent_id: null, kuerzel: "" }], projekte: [], staende: [], knoten: [], ansaetze: [], vergaben: [], protokoll: [] };
 }
 
 export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 } = {}) {
@@ -19,6 +19,7 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
   try { d = speicher ? JSON.parse(speicher.getItem(SCHLUESSEL) || "null") : null; } catch { d = null; }
   if (!d) d = start ? { ...leer(), ...kopie(start) } : leer();
   if (!d.ansaetze) d.ansaetze = [];
+  if (!d.vergaben) d.vergaben = [];
   const sichern = () => { try { speicher?.setItem(SCHLUESSEL, JSON.stringify(d)); } catch { /* voll */ } };
   const warte = () => (verzoegerung ? new Promise(r => setTimeout(r, verzoegerung)) : Promise.resolve());
   const fehler = text => { const e = new Error(text); e.nutzerText = text; throw e; };
@@ -74,6 +75,7 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
       const st = new Set(d.staende.filter(s => s.kalk_projekt_id === id).map(s => s.id));
       d.knoten = d.knoten.filter(k => !st.has(k.stand_id));
       d.ansaetze = d.ansaetze.filter(a => !st.has(a.stand_id));
+      d.vergaben = d.vergaben.filter(v => v.kalk_projekt_id !== id);
       d.staende = d.staende.filter(s => !st.has(s.id));
       d.projekte = d.projekte.filter(p => p.id !== id);
       sichern();
@@ -187,6 +189,42 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
       protokoll("kalk_staende", s.id, p.id, s.id, "anlegen", { kurz: `${bezeichnung || art} aus Stand ${b.nummer}` });
       sichern();
       return kopie(s);
+    },
+
+    // ── Vergaben (Phase 4) ──
+    async vergabenLaden(projektId) {
+      await warte();
+      return kopie(d.vergaben.filter(v => v.kalk_projekt_id === projektId).sort((a, b) => a.nummer - b.nummer));
+    },
+
+    async vergabeSpeichern(projektId, v) {
+      await warte();
+      if (v.stand_id && !d.staende.some(s => s.id === v.stand_id && s.kalk_projekt_id === projektId)) fehler("Der Stand gehört nicht zu diesem Projekt");
+      if (v.status === "vergeben" && !v.vergeben_an) fehler("Vergabe ohne Bieter");
+      const alt = d.vergaben.find(x => x.id === v.id);
+      const neu = { ...kopie(v), kalk_projekt_id: projektId, updated_at: jetzt() };
+      if (alt) {
+        const diff = {};
+        for (const [k, w] of Object.entries(neu)) if (k !== "updated_at" && JSON.stringify(alt[k] ?? null) !== JSON.stringify(w ?? null)) diff[k] = [alt[k] ?? null, w];
+        Object.assign(alt, neu);
+        if (Object.keys(diff).length) protokoll("kalk_vergaben", v.id, projektId, v.stand_id, "aendern", diff);
+      } else {
+        neu.nummer = neu.nummer || Math.max(0, ...d.vergaben.filter(x => x.kalk_projekt_id === projektId).map(x => x.nummer)) + 1;
+        neu.created_at = jetzt();
+        d.vergaben.push(neu);
+        protokoll("kalk_vergaben", v.id, projektId, v.stand_id, "anlegen", { kurz: v.titel });
+      }
+      sichern();
+      return kopie(d.vergaben.find(x => x.id === v.id));
+    },
+
+    async vergabeLoeschen(id) {
+      await warte();
+      const v = d.vergaben.find(x => x.id === id);
+      if (!v) return;
+      d.vergaben = d.vergaben.filter(x => x.id !== id);
+      protokoll("kalk_vergaben", id, v.kalk_projekt_id, v.stand_id, "loeschen", { kurz: v.titel });
+      sichern();
     },
 
     async protokollLaden(projektId, { grenze = 200 } = {}) {

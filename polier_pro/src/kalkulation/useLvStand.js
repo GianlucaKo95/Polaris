@@ -39,6 +39,10 @@ function ansaetzeBereinigen(ansaetze, knoten) {
   return ansaetze.filter(a => ids.has(a.knoten_id));
 }
 
+// Laufende Speichervorgänge je Stand: ein neu geöffneter Reiter lädt erst,
+// wenn ein anderer (gerade geschlossener) Reiter fertig gespeichert hat.
+const laufend = new Map();
+
 export function useLvStand(speicher, standId, { zuschlaege = null, gesperrt = false } = {}) {
   const [daten, setDaten] = useState(null); // { knoten, ansaetze }
   const [ladeFehler, setLadeFehler] = useState(null);
@@ -59,6 +63,7 @@ export function useLvStand(speicher, standId, { zuschlaege = null, gesperrt = fa
   const laden = useCallback(async () => {
     setLadeFehler(null);
     try {
+      await laufend.get(standId)?.catch(() => {});
       const [knoten, ansaetze] = await Promise.all([speicher.knotenLaden(standId), speicher.ansaetzeLaden ? speicher.ansaetzeLaden(standId) : []]);
       ref.current = { knoten, ansaetze };
       setDaten(ref.current);
@@ -75,6 +80,9 @@ export function useLvStand(speicher, standId, { zuschlaege = null, gesperrt = fa
     warteschlange.current = [];
     setStatus("speichert");
     let ok = false;
+    let fertig;
+    const versprechen = new Promise(r => { fertig = r; });
+    laufend.set(standId, versprechen);
     try {
       const { ansaetze, ...knotenTeil } = paket;
       if (!leerTeil(knotenTeil)) await speicher.knotenSpeichern(standId, knotenTeil, { aktuell: ref.current.knoten });
@@ -92,6 +100,8 @@ export function useLvStand(speicher, standId, { zuschlaege = null, gesperrt = fa
       setFehler(e.nutzerText || e.message);
       setStatus("fehler");
     } finally {
+      fertig();
+      if (laufend.get(standId) === versprechen) laufend.delete(standId);
       laeuft.current = false;
       if (ok && warteschlange.current.length) timer.current = setTimeout(() => flush(), VERZOEGERUNG);
     }

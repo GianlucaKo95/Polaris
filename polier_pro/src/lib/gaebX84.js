@@ -108,7 +108,7 @@ function itemXml({ rnopart, p }, id, phase = 84) {
   return `<Item ID="I${id}" RNoPart="${xmlEscape(rnopart)}">`
     + `<Qty>${zahl(p.menge, 3)}</Qty><QU>${xmlEscape(p.einheit || "")}</QU>`
     + (provis ? `<Provis>${provis}</Provis>` : "")
-    + (phase === 84 ? `<UP>${zahl(up, 2)}</UP><IT>${zahl(it, 2)}</IT>` : "")
+    + (phase >= 84 ? `<UP>${zahl(up, 2)}</UP><IT>${zahl(it, 2)}</IT>` : "")
     + `<Description>${p.stlk ? `<StLNo Type="StLK">${xmlEscape(p.stlk)}</StLNo>` : ""}`
     + `<CompleteText><DetailTxt><Text>${textXml(bez)}${langtext}</Text></DetailTxt>`
     + `<OutlineText><OutlTxt><TextOutlTxt>${textXml(bez.slice(0, 70))}</TextOutlTxt></OutlTxt></OutlineText>`
@@ -122,7 +122,7 @@ function bodyXml(knoten, zaehler, phase = 84) {
     const inner = bodyXml(kind, zaehler, phase);
     summe += inner.summe;
     xml += `<BoQCtgy ID="C${zaehler.n++}" RNoPart="${xmlEscape(teil)}"><LblTx>${textXml(kind.label)}</LblTx>`
-      + inner.xml + (phase === 84 ? `<Totals><Total>${zahl(inner.summe, 2)}</Total></Totals>` : "") + `</BoQCtgy>`;
+      + inner.xml + (phase >= 84 ? `<Totals><Total>${zahl(inner.summe, 2)}</Total></Totals>` : "") + `</BoQCtgy>`;
   }
   if (knoten.items.length) {
     xml += "<Itemlist>";
@@ -136,7 +136,8 @@ function bodyXml(knoten, zaehler, phase = 84) {
   return { xml: xml + "</BoQBody>", summe };
 }
 
-// phase 84 = Angebotsabgabe mit Preisen (Standard), 83 = Angebotsaufforderung ohne Preise
+// phase 84 = Angebotsabgabe mit Preisen (Standard), 83 = Angebotsaufforderung ohne Preise,
+// 86 = Auftragserteilung (mit Preisen, z.B. NU-Auftrag)
 export function gaebX84Schreiben(positionen, { projektTitel = "Angebot", datum = new Date().toISOString().slice(0, 10), bieter = null, phase = 84 } = {}) {
   const warnungen = [];
   const { wurzel } = baumBauen(positionen || [], warnungen);
@@ -160,7 +161,7 @@ export function gaebX84Schreiben(positionen, { projektTitel = "Angebot", datum =
 <GAEBInfo><Version>3.3</Version><VersDate>2021-05</VersDate><Date>${datum}</Date><ProgSystem>Polaris</ProgSystem><ProgName>Polaris</ProgName></GAEBInfo>
 <PrjInfo><LblPrj>${xmlEscape(projektTitel)}</LblPrj><Cur>EUR</Cur><CurLbl>Euro</CurLbl></PrjInfo>
 <Award><DP>${phase}</DP><AwardInfo><Cur>EUR</Cur><CurLbl>Euro</CurLbl></AwardInfo>${ctr}
-<BoQ ID="BoQ1"><BoQInfo><LblBoQ>${xmlEscape(projektTitel)}</LblBoQ><Date>${datum}</Date>${bkdn.join("")}${phase === 84 ? `<Totals><Total>${zahl(summe, 2)}</Total></Totals>` : ""}</BoQInfo>
+<BoQ ID="BoQ1"><BoQInfo><LblBoQ>${xmlEscape(projektTitel)}</LblBoQ><Date>${datum}</Date>${bkdn.join("")}${phase >= 84 ? `<Totals><Total>${zahl(summe, 2)}</Total></Totals>` : ""}</BoQInfo>
 ${body}
 </BoQ></Award>
 </GAEB>

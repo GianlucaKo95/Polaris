@@ -43,3 +43,21 @@ test("Übernahme legt gesperrte Stände mit eingefrorener Summe an und ist wiede
   const zweiterPlan = migrationsPlan(angebote, [], { bereitsMigriert: await s.bereitsMigriert() });
   assert.equal(zweiterPlan.length, 0);
 });
+
+test("Vergaben: anlegen mit Nummer, ändern protokolliert, Regeln wie in der Datenbank", async () => {
+  const s = lokalSpeicher();
+  const p = await s.projektAnlegen({ name: "Kita" });
+  const [st] = await s.staendeLaden(p.id);
+  const v1 = await s.vergabeSpeichern(p.id, { id: "v1", stand_id: st.id, titel: "Abdichtung", art: "nu", status: "entwurf", zeilen: [], bieter: [] });
+  const v2 = await s.vergabeSpeichern(p.id, { id: "v2", stand_id: st.id, titel: "Beton", art: "lieferant", status: "entwurf", zeilen: [], bieter: [] });
+  assert.equal(v1.nummer, 1);
+  assert.equal(v2.nummer, 2);
+  await assert.rejects(s.vergabeSpeichern(p.id, { ...v1, status: "vergeben" }), /ohne Bieter/);
+  await assert.rejects(s.vergabeSpeichern(p.id, { ...v1, stand_id: "fremd" }), /gehört nicht/);
+  await s.vergabeSpeichern(p.id, { ...v1, status: "vergeben", vergeben_an: "b1" });
+  assert.equal((await s.vergabenLaden(p.id))[0].status, "vergeben");
+  await s.vergabeLoeschen("v2");
+  assert.equal((await s.vergabenLaden(p.id)).length, 1);
+  const prot = (await s.protokollLaden(p.id)).filter(x => x.tabelle === "kalk_vergaben");
+  assert.deepEqual(prot.map(x => x.aktion).sort(), ["aendern", "anlegen", "anlegen", "loeschen"]);
+});

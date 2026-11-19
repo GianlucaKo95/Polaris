@@ -419,3 +419,27 @@ textarea.kb-eingabe { height: auto; padding: 8px 10px; line-height: 20px; resize
 .ans-feld:hover:not(:disabled) { border-color: var(--border2); }
 .ans-feld:focus { outline: none; border-color: var(--akzent); background: var(--surface); }
 .ans-feld:disabled { color: inherit; }
+
+/* ── Vergabe (Phase 4) ── */
+.vg-paket { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 8px 10px; border: none; border-radius: 8px; background: none; font: inherit; font-size: 14px; color: var(--text); cursor: pointer; }
+.vg-paket:hover { background: var(--bg); }
+.vg-paket[aria-current="true"] { background: var(--surface2); box-shadow: inset 0 0 0 1px var(--border); }
+.vg-wahl { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.vg-wahl:last-child { border-bottom: none; }
+.vg-wahl:hover { background: var(--bg); }
+.vg-bieter { min-width: 200px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); font-size: 14px; }
+.vg-bieter[data-gewinner] { border-color: var(--green); }
+.vg-spiegel { width: 100%; border-collapse: collapse; font-size: 14px; }
+.vg-spiegel th { text-align: left; font-weight: 400; font-size: 13px; color: var(--text2); padding: 0 10px; height: 36px; border-bottom: 1px solid var(--border); white-space: nowrap; background: var(--surface); position: sticky; top: 0; }
+.vg-spiegel td { padding: 0 10px; height: 36px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.vg-spiegel td:nth-child(2) { white-space: normal; max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+.vg-spiegel .r { text-align: right; }
+.vg-spiegel tfoot td { height: 32px; color: var(--text2); background: var(--surface); }
+.vg-spiegel tfoot tr.stark td { color: var(--text); font-weight: 500; border-top: 1px solid var(--border2); }
+.vg-preis { width: 92px; height: 28px; padding: 0 6px; text-align: right; border: 1px solid transparent; border-radius: 6px; background: none; font: inherit; font-family: var(--font-zahl); font-variant-numeric: tabular-nums; color: var(--text); }
+.vg-preis:hover:not(:disabled) { border-color: var(--border); }
+.vg-preis:focus { outline: none; border-color: var(--text2); background: var(--surface); }
+.vg-preis.min { font-weight: 600; }
+.vg-preis.ausreisser { color: var(--akzent); }
+.vg-preis.spekulation { color: var(--red); }
+.vg-vorschlag { padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); font-size: 14px; }

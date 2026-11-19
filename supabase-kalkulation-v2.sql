@@ -292,6 +292,8 @@ begin
     projekt := (zeile ->> 'id')::uuid;
   elsif tg_table_name = 'kalk_staende' then
     projekt := (zeile ->> 'kalk_projekt_id')::uuid; stand := (zeile ->> 'id')::uuid;
+  elsif zeile ? 'kalk_projekt_id' then
+    projekt := (zeile ->> 'kalk_projekt_id')::uuid; stand := (zeile ->> 'stand_id')::uuid;
   else
     stand := (zeile ->> 'stand_id')::uuid;
     select kalk_projekt_id into projekt from kalk_staende where id = stand;
@@ -300,7 +302,7 @@ begin
   insert into kalk_protokoll (firma_id, tabelle, datensatz_id, kalk_projekt_id, stand_id, aktion, aenderung, user_id)
   values ((zeile ->> 'firma_id')::int, tg_table_name, (zeile ->> 'id')::uuid, projekt, stand,
           case tg_op when 'INSERT' then 'anlegen' when 'UPDATE' then 'aendern' else 'loeschen' end,
-          case when tg_op = 'UPDATE' then diff else jsonb_build_object('kurz', coalesce(zeile ->> 'kurztext', zeile ->> 'name', zeile ->> 'bezeichnung', '')) end,
+          case when tg_op = 'UPDATE' then diff else jsonb_build_object('kurz', coalesce(zeile ->> 'kurztext', zeile ->> 'name', zeile ->> 'bezeichnung', zeile ->> 'titel', '')) end,
           auth.uid());
   return null;
 end $$;
@@ -505,3 +507,67 @@ do $$ begin
     begin alter publication supabase_realtime add table kalk_staende; exception when duplicate_object then null; end;
   end if;
 end $$;
+
+
+-- ═══ Phase 4: AVA und Vergabe ══════════════════════════════════════════════
+-- Ein Vergabepaket bündelt Positionen (NU) oder Ressourcen (Lieferant) eines Stands,
+-- sammelt Bieterpreise, bildet den Preisspiegel und hält die Vergabe fest.
+-- Zeilen und Bieter liegen als jsonb vor (Struktur: lib/kalk/vergabe.js).
+-- Vergaben sind nicht an die Standsperre gebunden: vergeben wird nach dem Auftrag.
+create table if not exists kalk_vergaben (
+  id               uuid primary key default gen_random_uuid(),
+  firma_id         int not null references firmen(id) on delete cascade,
+  kalk_projekt_id  uuid not null references kalk_projekte(id) on delete cascade,
+  stand_id         uuid references kalk_staende(id) on delete set null,
+  nummer           int not null default 1,
+  titel            text not null default '',
+  art              text not null default 'nu' check (art in ('nu','lieferant')),
+  status           text not null default 'entwurf' check (status in ('entwurf','angefragt','ausgewertet','vergeben','aufgehoben')),
+  frist            date,
+  zeilen           jsonb not null default '[]'::jsonb,
+  bieter           jsonb not null default '[]'::jsonb,
+  vergeben_an      text,                   -- Bieter-ID aus bieter
+  vergeben_am      timestamptz,
+  vergabe_summe    numeric(16,2),          -- Netto nach Nachlass, beim Vergeben eingefroren
+  budget_summe     numeric(16,2),
+  auftrag          jsonb not null default '{}'::jsonb,
+  notiz            text default '',
+  created_at       timestamptz not null default now(),
+  created_by       uuid default auth.uid(),
+  updated_at       timestamptz not null default now()
+);
+create index if not exists kalk_vergaben_projekt on kalk_vergaben(kalk_projekt_id);
+
+drop trigger if exists kalk_vergaben_protokoll on kalk_vergaben;
+create trigger kalk_vergaben_protokoll after insert or update or delete on kalk_vergaben
+  for each row execute function kalk_protokollieren();
+drop trigger if exists kalk_vergaben_updated on kalk_vergaben;
+create trigger kalk_vergaben_updated before update on kalk_vergaben
+  for each row execute function update_updated_at();
+
+-- Stand muss zum Projekt gehören
+create or replace function kalk_vergabe_pruefen()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.stand_id is not null and not exists
+     (select 1 from kalk_staende where id = new.stand_id and kalk_projekt_id = new.kalk_projekt_id) then
+    raise exception 'Der Stand gehört nicht zu diesem Projekt';
+  end if;
+  if new.status = 'vergeben' and new.vergeben_an is null then
+    raise exception 'Vergabe ohne Bieter';
+  end if;
+  return new;
+end $$;
+drop trigger if exists kalk_vergaben_pruefen on kalk_vergaben;
+create trigger kalk_vergaben_pruefen before insert or update on kalk_vergaben
+  for each row execute function kalk_vergabe_pruefen();
+
+alter table kalk_vergaben enable row level security;
+drop policy if exists kalk_vergaben_lesen on kalk_vergaben;
+create policy kalk_vergaben_lesen on kalk_vergaben for select
+  using (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 1);
+drop policy if exists kalk_vergaben_schreiben on kalk_vergaben;
+create policy kalk_vergaben_schreiben on kalk_vergaben for all
+  using (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 2)
+  with check (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 2);
+grant select, insert, update, delete on kalk_vergaben to authenticated;

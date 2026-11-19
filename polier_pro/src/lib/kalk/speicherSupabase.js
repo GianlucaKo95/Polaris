@@ -6,6 +6,7 @@ import { sbClientMitToken } from "../supabase.js";
 
 const KNOTEN_FELDER = ["id", "parent_id", "sort", "typ", "oz", "art", "kurztext", "langtext", "menge", "einheit", "ep", "rabatt", "stlk", "extra"];
 const BLOCK = 500;
+const VERGABE_FELDER = ["id", "stand_id", "nummer", "titel", "art", "status", "frist", "zeilen", "bieter", "vergeben_an", "vergeben_am", "vergabe_summe", "budget_summe", "auftrag", "notiz"];
 const ANSATZ_FELDER = ["id", "knoten_id", "sort", "kostenart", "ressource_id", "bezeichnung", "einheit", "menge_je_me", "faktor", "preis", "formel", "kommentar"];
 
 function nutzerFehler(error, standard = "Speichern fehlgeschlagen") {
@@ -158,6 +159,24 @@ export function supabaseSpeicher({ session, firmaId }) {
     async standKopieren(basisId, art, bezeichnung = "") {
       const neuId = pruefe(await db().rpc("kalk_stand_kopieren", { p_basis: basisId, p_art: art, p_bezeichnung: bezeichnung }), "Stand nicht angelegt");
       return pruefe(await db().from("kalk_staende").select("*").eq("id", neuId).single());
+    },
+
+    // ── Vergaben (Phase 4) ──
+    async vergabenLaden(projektId) {
+      return pruefe(await db().from("kalk_vergaben").select("*").eq("kalk_projekt_id", projektId).order("nummer"), "Vergaben nicht geladen");
+    },
+
+    async vergabeSpeichern(projektId, v) {
+      const felder = Object.fromEntries(VERGABE_FELDER.filter(f => f in v).map(f => [f, v[f] ?? null]));
+      if (!felder.nummer) {
+        const vorhanden = pruefe(await db().from("kalk_vergaben").select("nummer").eq("kalk_projekt_id", projektId).order("nummer", { ascending: false }).limit(1), "Vergaben nicht geladen");
+        felder.nummer = (vorhanden[0]?.nummer || 0) + 1;
+      }
+      return pruefe(await db().from("kalk_vergaben").upsert({ ...felder, firma_id: firmaId, kalk_projekt_id: projektId }).select().single(), "Vergabe nicht gespeichert");
+    },
+
+    async vergabeLoeschen(id) {
+      pruefe(await db().from("kalk_vergaben").delete().eq("id", id), "Vergabe nicht gelöscht");
     },
 
     async protokollLaden(projektId, { grenze = 200 } = {}) {
