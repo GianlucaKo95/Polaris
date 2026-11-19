@@ -245,6 +245,18 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
       return kopie(s);
     },
 
+    // ── Konzern und Export (Phase 7) ──
+    async konzernDaten() {
+      await warte();
+      const auftrag = new Map();
+      for (const st of [...d.staende].filter(x => x.art === "auftrag").sort((a, b) => a.nummer - b.nummer)) auftrag.set(st.kalk_projekt_id, st.gesperrt ? Number(st.summe_netto) : standSumme(st.id));
+      return { meldungen: kopie(d.leistungsmeldungen.filter(m => m.status === "gemeldet")), auftragssummen: [...auftrag].map(([kalk_projekt_id, summe]) => ({ kalk_projekt_id, summe })) };
+    },
+    async exportDaten() {
+      await warte();
+      return kopie({ rechnungen: d.rechnungen, nuRechnungen: d.nu_rechnungen, vergaben: d.vergaben, meldungen: d.leistungsmeldungen });
+    },
+
     // ── Abrechnung (Phase 5) ──
     async aufmassLaden(projektId) { await warte(); return kopie(d.aufmass.filter(a => a.kalk_projekt_id === projektId)); },
     async aufmassSpeichern(projektId, { neu = [], aendern = [], loeschen = [] }) {

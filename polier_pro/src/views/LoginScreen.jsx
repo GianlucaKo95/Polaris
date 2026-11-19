@@ -55,6 +55,7 @@ function Hauptknopf({ aktiv, onClick, children }) {
 }
 
 function DesktopAnmeldung({ auth, onDemoLogin, email, setEmail, password, setPassword, showPw, setShowPw, onReset }) {
+  const [sso, setSso] = useState(false);
   const bereit = !!email && !!password && !auth.loading;
   const senden = () => bereit && auth.anmelden(email, password);
   return (
@@ -83,6 +84,20 @@ function DesktopAnmeldung({ auth, onDemoLogin, email, setEmail, password, setPas
       <Hauptknopf aktiv={bereit} onClick={senden}>
         {auth.loading ? "Wird angemeldet" : <>Anmelden <ArrowRight size={16} strokeWidth={1.5} /></>}
       </Hauptknopf>
+      {auth.supabaseKonfiguriert && auth.ssoAnmelden && (sso ? (
+        <div style={{ marginTop: 24 }}>
+          <label style={feldLabel} htmlFor="anmelde-sso">Firmen-Domain</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input id="anmelde-sso" className="anmelde-feld" placeholder="musterbau.de" autoCapitalize="none" value={email.includes("@") ? email.split("@")[1] : email}
+              onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && auth.ssoAnmelden(email)} style={{ ...feld, flex: 1 }} />
+            <button className="desk-nav" onClick={() => auth.ssoAnmelden(email)} disabled={auth.loading}
+              style={{ height: 40, padding: "0 14px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--text)", fontFamily: "inherit", fontSize: 14, cursor: "pointer" }}>Weiter</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setSso(true)} style={{ marginTop: 16, background: "none", border: "none", padding: 0, color: "var(--text2)", fontFamily: "inherit", fontSize: 13,
+          cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>Mit Single Sign-On der Firma anmelden</button>
+      ))}
 
       {!auth.supabaseKonfiguriert && (
         <div style={{ marginTop: 40, paddingTop: 24, borderTop: "1px solid var(--border)" }}>

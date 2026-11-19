@@ -191,6 +191,27 @@ export function supabaseSpeicher({ session, firmaId }) {
         nachlass: vorlage.nachlass || 0, mwst: vorlage.mwst ?? 19, zuschlaege: vorlage.zuschlaege || {} }).select().single(), "Stand nicht angelegt");
     },
 
+    // ── Konzern und Export (Phase 7) ──
+    async konzernDaten() {
+      const meldungen = pruefe(await db().from("kalk_leistungsmeldungen").select("kalk_projekt_id, monat, status, werte").eq("status", "gemeldet").order("monat"), "Leistungsmeldungen nicht geladen");
+      const st = pruefe(await db().from("kalk_staende").select("id, kalk_projekt_id, nummer, gesperrt, summe_netto").eq("art", "auftrag").order("nummer"), "Stände nicht geladen");
+      const offen = st.filter(s => !s.gesperrt).map(s => s.id);
+      const view = offen.length ? pruefe(await db().from("kalk_stand_summen").select("stand_id, netto").in("stand_id", offen), "Summen nicht geladen") : [];
+      const netto = new Map(view.map(v => [v.stand_id, Number(v.netto) || 0]));
+      const auftrag = new Map();
+      for (const s of st) auftrag.set(s.kalk_projekt_id, s.gesperrt ? Number(s.summe_netto) || 0 : netto.get(s.id) || 0);
+      return { meldungen, auftragssummen: [...auftrag].map(([kalk_projekt_id, summe]) => ({ kalk_projekt_id, summe })) };
+    },
+    async exportDaten() {
+      const [rechnungen, nuRechnungen, vergaben, meldungen] = await Promise.all([
+        db().from("kalk_rechnungen").select("*").neq("status", "entwurf"),
+        db().from("kalk_nu_rechnungen").select("*").neq("status", "eingegangen"),
+        db().from("kalk_vergaben").select("id, kalk_projekt_id, titel, vergeben_an, bieter").eq("status", "vergeben"),
+        db().from("kalk_leistungsmeldungen").select("*").eq("status", "gemeldet")]);
+      return { rechnungen: pruefe(rechnungen, "Rechnungen nicht geladen"), nuRechnungen: pruefe(nuRechnungen, "NU-Rechnungen nicht geladen"),
+        vergaben: pruefe(vergaben, "Vergaben nicht geladen"), meldungen: pruefe(meldungen, "Leistungsmeldungen nicht geladen") };
+    },
+
     // ── Abrechnung (Phase 5) ──
     async aufmassLaden(projektId) {
       const alle = [];

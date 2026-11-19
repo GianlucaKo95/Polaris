@@ -805,3 +805,39 @@ create policy kalk_leistungsmeldungen_schreiben on kalk_leistungsmeldungen for a
   using (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 2)
   with check (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 2);
 grant select, insert, update, delete on kalk_leistungsmeldungen to authenticated;
+
+-- ═══ Phase 7: Enterprise ═══════════════════════════════════════════════════
+-- ARGE-Partner und Quoten am Projekt (lib/kalk/arge.js)
+alter table kalk_projekte add column if not exists arge jsonb not null default '{}'::jsonb;
+
+-- Lesesichten für ERP-Anbindungen (SAP, Microsoft Dynamics …). Sie laufen mit
+-- den Rechten des Abfragenden (security_invoker), RLS gilt also weiter: Eine
+-- Schnittstelle bekommt einen eigenen Benutzer mit Leserecht auf die
+-- Gesellschaften, deren Daten sie holen darf.
+create or replace view kalk_export_controlling with (security_invoker = true) as
+select p.firma_id, p.id as projekt_id, p.nummer as projektnummer, p.name as projekt, p.gesellschaft_id,
+       to_char(m.monat, 'YYYY-MM') as periode, k ->> 'kostenart' as kostenart,
+       (k ->> 'sollKum')::numeric as soll_kumuliert, (k ->> 'istKum')::numeric as ist_kumuliert, (k ->> 'prognose')::numeric as prognose,
+       m.gemeldet_am
+from kalk_leistungsmeldungen m
+join kalk_projekte p on p.id = m.kalk_projekt_id
+cross join lateral jsonb_array_elements(coalesce(m.werte -> 'kostenarten', '[]'::jsonb)) k
+where m.status = 'gemeldet';
+
+create or replace view kalk_export_ergebnis with (security_invoker = true) as
+select p.firma_id, p.id as projekt_id, p.nummer as projektnummer, p.name as projekt, p.gesellschaft_id, to_char(m.monat, 'YYYY-MM') as periode,
+       (m.werte #>> '{erloes,kum}')::numeric as leistung_kumuliert, (m.werte #>> '{erloes,prognose}')::numeric as auftrag_prognose,
+       (m.werte #>> '{kosten,istKum}')::numeric as ist_kosten, (m.werte #>> '{kosten,prognose}')::numeric as kosten_prognose,
+       (m.werte #>> '{ergebnis,kalkuliert}')::numeric as ergebnis_kalkuliert, (m.werte #>> '{ergebnis,prognose}')::numeric as ergebnis_prognose,
+       coalesce(((p.arge -> 'partner') -> 0) is not null and (p.arge ->> 'aktiv')::boolean, false) as arge,
+       m.gemeldet_am
+from kalk_leistungsmeldungen m join kalk_projekte p on p.id = m.kalk_projekt_id
+where m.status = 'gemeldet';
+
+create or replace view kalk_export_rechnungen with (security_invoker = true) as
+select r.firma_id, p.id as projekt_id, p.nummer as projektnummer, p.name as projekt, r.nummer, r.art, r.datum, r.leistung_von, r.leistung_bis,
+       r.status, r.netto, r.brutto, r.steuerschuld_umkehr, r.bezahlt_am, r.bezahlt_betrag
+from kalk_rechnungen r join kalk_projekte p on p.id = r.kalk_projekt_id
+where r.status <> 'entwurf';
+
+grant select on kalk_export_controlling, kalk_export_ergebnis, kalk_export_rechnungen to authenticated;

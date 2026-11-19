@@ -27,8 +27,36 @@ export function useAuth() {
       setInviteType(type);
       // Hash aus URL entfernen
       window.history.replaceState({}, "", window.location.pathname);
+    } else if (token && !type && sessionStorage.getItem("polaris-sso")) {
+      // Rückkehr vom Single Sign-On (SAML über Supabase): Token prüfen und als
+      // Session übernehmen wie bei der Anmeldung mit Passwort.
+      sessionStorage.removeItem("polaris-sso");
+      window.history.replaceState({}, "", window.location.pathname);
+      supabase.auth.getUser(token).then(({ data, error }) => {
+        if (error || !data?.user) { setFehler("Die Anmeldung über Single Sign-On ist fehlgeschlagen."); return; }
+        const neu = { access_token: token, refresh_token: refresh || "", expires_in: Number(params.get("expires_in")) || 3600, user: data.user };
+        localStorage.setItem("polaris-session", JSON.stringify(neu));
+        setSession(neu);
+      });
     }
   }, []);
+
+  // Single Sign-On über den Identity Provider der Firma (Azure AD/Entra ID,
+  // Okta, Google Workspace …), in Supabase als SAML-Anbieter je Domain eingerichtet.
+  async function ssoAnmelden(domain) {
+    const d = String(domain || "").trim().toLowerCase().replace(/^.*@/, "");
+    if (!d.includes(".")) { setFehler("Bitte die Firmen-Domain angeben, z. B. musterbau.de."); return; }
+    setLoading(true); setFehler("");
+    try {
+      const { data, error } = await supabase.auth.signInWithSSO({ domain: d, options: { redirectTo: window.location.origin + window.location.pathname } });
+      if (error || !data?.url) throw error || new Error("keine Adresse");
+      sessionStorage.setItem("polaris-sso", "1");
+      window.location.href = data.url;
+    } catch {
+      setFehler(`Für ${d} ist kein Single Sign-On eingerichtet. Bitte mit Passwort anmelden oder den Administrator fragen.`);
+      setLoading(false);
+    }
+  }
 
   // Versucht, eine per bestätigtem 401 als ungültig erkannte Session über den
   // (separaten) Refresh-Token zu retten, BEVOR abgemeldet wird. Der
@@ -280,5 +308,5 @@ export function useAuth() {
 
   return { session, profil, rolle, rolleConfig, loading, fehler,
     anmelden, abmelden, profilAktualisieren, supabaseKonfiguriert,
-    inviteToken, inviteType, passwortSetzen, passwortVergessen };
+    inviteToken, inviteType, passwortSetzen, passwortVergessen, ssoAnmelden };
 }

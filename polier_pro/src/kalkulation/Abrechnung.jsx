@@ -1,7 +1,9 @@
 // Abrechnung (Phase 5): Aufmaß je Position, Nachträge, Rechnungen, NU-Rechnungen.
 // Grundlage ist der Auftragsstand und die Stände der Nachträge. Logik: lib/kalk/abrechnung.js.
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, Upload, Download, Printer, Sparkles, Ruler, Search, FileText } from "lucide-react";
+import { Plus, Trash2, Upload, Download, Printer, Sparkles, Ruler, Search, FileText, Box } from "lucide-react";
+import { BimDialog } from "./Bim.jsx";
+import { bimInsAufmass } from "../lib/kalk/bim.js";
 import { useStammdaten } from "./stammdaten.js";
 import { Knopf, Feld, Dialog, Meldung, Leer, BetragFeld, euro, menge as mengeText } from "./ui.jsx";
 import { RechnungenBereich, NuRechnungenBereich } from "./Rechnungen.jsx";
@@ -78,10 +80,11 @@ export function AbrechnungBereich({ speicher, projekt, staende, darf, kiAktiv, o
 }
 
 // ── Aufmaß ─────────────────────────────────────────────────────────────────
-function AufmassBereich({ speicher, projekt, auftrag, darf, sd, onFehler, d, setD, alleTeile }) {
+function AufmassBereich({ speicher, projekt, auftrag, darf, sd, kiAktiv, onFehler, d, setD, alleTeile }) {
   const [auswahl, setAuswahl] = useState(null); // schluessel
   const [suche, setSuche] = useState("");
   const [messen, setMessen] = useState(false);
+  const [bim, setBim] = useState(false);
   const [meldung, setMeldung] = useState(null);
   const x31Datei = useRef(null);
   const timer = useRef({});
@@ -148,6 +151,7 @@ function AufmassBereich({ speicher, projekt, auftrag, darf, sd, onFehler, d, set
             </div>
             <Knopf klein leise Icon={Download} onClick={x31Export} title="Aufmaß als GAEB X31">X31</Knopf>
             {darf && <Knopf klein leise Icon={Upload} onClick={() => x31Datei.current?.click()} title="Aufmaß aus GAEB X31 übernehmen">X31</Knopf>}
+            {darf && <Knopf klein leise Icon={Box} onClick={() => setBim(true)} title="Aufmaß aus einem IFC-Modell">BIM</Knopf>}
             <input ref={x31Datei} type="file" hidden accept=".x31,.xml" onChange={e => e.target.files?.[0] && x31Import(e.target.files[0])} />
           </div>
         </div>
@@ -219,6 +223,14 @@ function AufmassBereich({ speicher, projekt, auftrag, darf, sd, onFehler, d, set
           </div>}
         </>}
       </main>
+      {bim && <BimDialog knoten={d.knoten.get(auftrag.id) || []} ziel="aufmass" sd={sd} kiAktiv={kiAktiv} onSchliessen={() => setBim(false)}
+        onUebernehmen={async ({ gruppen, zuordnung, datei }) => {
+          const n = bimInsAufmass(gruppen, zuordnung, { standId: auftrag.id, datei, neueZeile: neueAufmassZeile });
+          setD(x => ({ ...x, aufmass: [...x.aufmass, ...n] }));
+          await speichern({ neu: n });
+          setBim(false);
+          setMeldung(`${n.length} Aufmaßzeilen aus ${datei} angelegt (Blatt „BIM“).`);
+        }} />}
       {messen && aktiv && <Suspense fallback={null}><AufmassWerkzeug ziel={{ bez: aktiv.kurztext, einheit: aktiv.einheit }} session={sd.session || null} onUebernehmen={ausWerkzeug} onClose={() => setMessen(false)} /></Suspense>}
     </div>
   );

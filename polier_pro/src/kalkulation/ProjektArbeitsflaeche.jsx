@@ -1,8 +1,10 @@
 // Arbeitsfläche eines Kalkulationsprojekts: Übersicht, LV & Kalkulation, Protokoll.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Plus, FolderPlus, MessageSquareText, Trash2, Undo2, Redo2, ListOrdered, Upload, Download, Lock, Copy, Search, AlertTriangle, ChevronLeft, Printer, Sparkles,
+  Plus, FolderPlus, MessageSquareText, Trash2, Undo2, Redo2, ListOrdered, Upload, Download, Lock, Copy, Search, AlertTriangle, ChevronLeft, Printer, Sparkles, Box,
 } from "lucide-react";
+import { BimDialog } from "./Bim.jsx";
+import { bimInsLv } from "../lib/kalk/bim.js";
 import { KiPanel } from "./KiPanel.jsx";
 import { BefehlZeile } from "./BefehlZeile.jsx";
 import { AnsatzPanel } from "./AnsatzPanel.jsx";
@@ -186,6 +188,7 @@ function LvBereich({ ansicht, staende, speicher, projekt, stand, darf, kiAktiv, 
   const [gaebMenue, setGaebMenue] = useState(false);
   const [auswahl, setAuswahl] = useState(null);
   const [kiOffen, setKiOffen] = useState(false);
+  const [bimOffen, setBimOffen] = useState(false);
   const datei = useRef(null);
 
   useEffect(() => {
@@ -342,12 +345,15 @@ function LvBereich({ ansicht, staende, speicher, projekt, stand, darf, kiAktiv, 
           {stand.gesperrt ? <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}><Lock size={13} /> Gesperrt am {datum(stand.gesperrt_am)}</span> : statusText}
           {lv.status === "fehler" && <button className="kb-knopf leise klein" onClick={lv.erneutSpeichern}>Erneut versuchen</button>}
         </span>
+        {!gesperrt && <Knopf klein leise Icon={Box} onClick={() => setBimOffen(true)} title="Mengen aus einem IFC-Modell">BIM</Knopf>}
         {kiAktiv && <Knopf klein Icon={Sparkles} onClick={() => setKiOffen(o => !o)} aria-pressed={kiOffen} style={{ color: "var(--akzent)" }}>KI</Knopf>}
         <button className="kb-symbol" style={{ width: 32, height: 28 }} onClick={drucken} aria-label="Angebot drucken" title="Angebot als PDF drucken"><Printer size={16} /></button>
         {darf && <Knopf klein Icon={Copy} onClick={() => setDialog({ art: "stand" })}>Neuer Stand</Knopf>}
         {darf && !stand.gesperrt && <Knopf klein Icon={Lock} onClick={sperren}>Sperren</Knopf>}
       </div>
 
+      {bimOffen && <BimDialog knoten={knoten} ziel="lv" sd={sd} kiAktiv={kiAktiv} onSchliessen={() => setBimOffen(false)}
+        onUebernehmen={({ gruppen, zuordnung, datei }) => { lv.anwenden(bimInsLv(knoten, gruppen, zuordnung, { datei })); setBimOffen(false); }} />}
       {kiAktiv && !gesperrt && (
         <BefehlZeile knoten={knoten} ansaetze={lv.ansaetze} z={zLokal} anwenden={lv.anwenden} onZuschlaege={zuschlaegeSetzen}
           onStandFelder={async felder => { try { await speicher.standAendern(stand.id, felder); onStandGeaendert(); } catch (e) { onFehler(e.nutzerText || e.message); } }} />

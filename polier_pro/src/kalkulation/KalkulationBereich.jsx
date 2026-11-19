@@ -2,20 +2,21 @@
 // Arbeitsfläche. Gemeinsam mit Polaris sind Anmeldung, Firma, Rollen und
 // Baustellen. Nur Desktop.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderKanban, ArrowDownToLine, Building, ArrowLeft, Moon, Sun } from "lucide-react";
+import { FolderKanban, ArrowDownToLine, Building, ArrowLeft, Moon, Sun, BarChart3 } from "lucide-react";
 import { lokalSpeicher } from "../lib/kalk/speicherLokal.js";
 import { supabaseSpeicher } from "../lib/kalk/speicherSupabase.js";
 import { ProjektListe } from "./ProjektListe.jsx";
 import { ProjektArbeitsflaeche } from "./ProjektArbeitsflaeche.jsx";
 import { Uebernahme } from "./Uebernahme.jsx";
 import { Gesellschaften } from "./Gesellschaften.jsx";
+import { KonzernBereich } from "./Konzern.jsx";
 import { Meldung } from "./ui.jsx";
 import { StammdatenKontext } from "./stammdaten.js";
 import { kiToolAufruf } from "../lib/ai.js";
 import { migrationsPlan, planZusammenfassung } from "../lib/kalk/migration.js";
 
 function ortAusHash() {
-  const m = (typeof location !== "undefined" ? location.hash : "").match(/^#kalkulation(?:\/(projekt|uebernahme|gesellschaften))?(?:\/([\w-]+))?/);
+  const m = (typeof location !== "undefined" ? location.hash : "").match(/^#kalkulation(?:\/(projekt|uebernahme|gesellschaften|konzern))?(?:\/([\w-]+))?/);
   if (!m) return { seite: "projekte", projektId: null };
   if (m[1] === "projekt" && m[2]) return { seite: "projekt", projektId: m[2] };
   return { seite: m[1] || "projekte", projektId: null };
@@ -72,6 +73,7 @@ export function KalkulationBereich({ session, firmaId, rolle, firmenName, bauste
   const nav = [
     { id: "projekte", label: "Projekte", Icon: FolderKanban, zahl: projekte?.length || null },
     offeneUebernahme > 0 && { id: "uebernahme", label: "Angebote übernehmen", Icon: ArrowDownToLine, zahl: offeneUebernahme },
+    { id: "konzern", label: "Konzern", Icon: BarChart3 },
     istVerwalter && { id: "gesellschaften", label: "Gesellschaften & Rechte", Icon: Building },
   ].filter(Boolean);
   const aktivNav = ort.seite === "projekt" ? "projekte" : ort.seite;
@@ -86,6 +88,8 @@ export function KalkulationBereich({ session, firmaId, rolle, firmenName, bauste
   } else if (ort.seite === "uebernahme") {
     inhalt = <Uebernahme speicher={speicher} alteAngebote={alteAngebote} baustellen={baustellen} onAbbrechen={() => gehe("projekte")}
       onFertig={() => { gehe("projekte"); laden(); }} />;
+  } else if (ort.seite === "konzern") {
+    inhalt = <KonzernBereich speicher={speicher} projekte={projekte} gesellschaften={gesellschaften} onOeffnen={id => gehe("projekt", id)} />;
   } else if (ort.seite === "gesellschaften" && istVerwalter) {
     inhalt = <Gesellschaften speicher={speicher} gesellschaften={gesellschaften} onGeaendert={laden} />;
   } else {

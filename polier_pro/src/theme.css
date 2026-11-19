@@ -468,3 +468,8 @@ textarea.kb-eingabe { height: auto; padding: 8px 10px; line-height: 20px; resize
 .co-karte h2 { margin: 0 0 12px; font-size: 16px; font-weight: 500; }
 .co-text { margin: 0 0 12px; font-size: 13px; color: var(--text2); line-height: 1.5; }
 @media (max-width: 1280px) { .co-kennzahlen { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* ── Konzern (Phase 7) ── */
+.ko-tabelle tr.ko-ebene td { font-weight: 500; background: var(--bg); cursor: pointer; }
+.ko-tabelle tr.ko-projekt { cursor: pointer; }
+.ko-tabelle tr.ko-projekt:hover td { background: var(--surface2); }

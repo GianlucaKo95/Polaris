@@ -9,6 +9,7 @@ import {
   STANDARD_EINSTELLUNGEN, MIN_SOLL_STUNDEN,
 } from "../lib/kalk/controlling.js";
 import { zeitansaetzeAnpassen } from "../lib/nachkalkulation.js";
+import { argePruefen, argeAufteilung, argeBerichtHtml, neuerPartner } from "../lib/kalk/arge.js";
 
 const heuteMonat = () => monatsErster(new Date().toISOString().slice(0, 10));
 const prozent = x => (x == null ? "—" : `${(x * 100).toLocaleString("de-DE", { maximumFractionDigits: 1 })} %`);
@@ -192,6 +193,7 @@ export function ControllingBereich({ speicher, projekt, staende, darf, onFehler,
           </div>
         </section>
       </div>
+      <ArgeKarte key={JSON.stringify(projekt.arge || {})} projekt={projekt} darf={darf} c={anzeige.erloes ? { ...c, ...anzeige } : c} monat={monat} onAendern={onProjektAendern} onFehler={onFehler} />
       {stammDialog && <StammDialog faktor={c.stunden.faktor} sd={sd} projekt={projekt} onSchliessen={() => setStammDialog(false)} onFertig={n => { setStammDialog(false); setMeldung(`${n} Stammpositionen angepasst.`); }} />}
     </div>
   );
@@ -320,3 +322,48 @@ function StammDialog({ faktor, sd, projekt, onSchliessen, onFertig }) {
   );
 }
 
+
+// ── ARGE ───────────────────────────────────────────────────────────────────
+export function ArgeKarte({ projekt, darf, c, monat, onAendern, onFehler }) {
+  const [arge, setArge] = useState(() => ({ aktiv: false, partner: [], ...(projekt.arge || {}) }));
+  const fehler = argePruefen(arge);
+  const geaendert = JSON.stringify(arge) !== JSON.stringify({ aktiv: false, partner: [], ...(projekt.arge || {}) });
+  const setP = (i, f) => setArge(a => ({ ...a, partner: a.partner.map((p, j) => (j === i ? { ...p, ...f } : (f.eigene ? { ...p, eigene: false } : f.federfuehrend ? { ...p, federfuehrend: false } : p))) }));
+  const kennzahlen = { auftrag: c.erloes.prognose, leistung: c.erloes.kum, istKosten: c.kosten.istKum, ergebnisKalk: c.ergebnis.kalkuliert, ergebnisPrognose: c.ergebnis.prognose };
+  const aufteilung = !fehler.length && arge.aktiv ? argeAufteilung(kennzahlen, arge) : [];
+  const bericht = async () => {
+    try { const { druckePDF } = await import("../lib/pdf.jsx"); await druckePDF(argeBerichtHtml(projekt, monatName(monat), kennzahlen, arge), `ARGE_${String(projekt.name).replace(/\W+/g, "_")}.pdf`); }
+    catch (e) { onFehler(`Drucken fehlgeschlagen: ${e.message}`); }
+  };
+  return (
+    <section className="co-karte">
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <h2 style={{ flex: 1 }}>ARGE</h2>
+        <label style={{ fontSize: 14, display: "flex", gap: 6 }}><input type="checkbox" checked={!!arge.aktiv} disabled={!darf}
+          onChange={e => setArge(a => ({ ...a, aktiv: e.target.checked, partner: a.partner.length ? a.partner : [neuerPartner({ name: "", quote: 50, eigene: true, federfuehrend: true }), neuerPartner({ quote: 50 })] }))} /> Projekt in einer Arbeitsgemeinschaft</label>
+      </div>
+      {arge.aktiv && <>
+        <table className="vg-spiegel" style={{ marginTop: 8 }}>
+          <thead><tr><th>Partner</th><th className="r">Quote %</th><th>Eigene Firma</th><th>Federführend</th>{aufteilung.length > 0 && <><th className="r">Anteil Auftrag</th><th className="r">Anteil Ergebnis Prognose</th></>}<th /></tr></thead>
+          <tbody>{arge.partner.map((p, i) => (
+            <tr key={p.id}>
+              <td><input className="am-feld" value={p.name} disabled={!darf} placeholder={p.eigene ? "Eigene Firma" : "Partnerfirma"} onChange={e => setP(i, { name: e.target.value })} aria-label="Partner" /></td>
+              <td className="r"><input className="vg-preis kb-zahl" style={{ width: 72 }} value={String(p.quote).replace(".", ",")} disabled={!darf} aria-label="Quote"
+                onChange={e => { const v = zahlLesen(e.target.value); if (v != null) setP(i, { quote: v }); }} /></td>
+              <td><input type="radio" name="eigene" checked={!!p.eigene} disabled={!darf} onChange={() => setP(i, { eigene: true })} aria-label="Eigene Firma" /></td>
+              <td><input type="radio" name="ff" checked={!!p.federfuehrend} disabled={!darf} onChange={() => setP(i, { federfuehrend: true })} aria-label="Federführend" /></td>
+              {aufteilung.length > 0 && <><td className="r kb-zahl">{euro(aufteilung[i].werte.auftrag)}</td><td className="r kb-zahl">{euro(aufteilung[i].werte.ergebnisPrognose)}</td></>}
+              <td>{darf && arge.partner.length > 2 && <button className="kb-symbol" aria-label="Partner entfernen" onClick={() => setArge(a => ({ ...a, partner: a.partner.filter((_, j) => j !== i) }))}>×</button>}</td>
+            </tr>))}</tbody>
+        </table>
+        {fehler.length > 0 && <div style={{ color: "var(--red)", fontSize: 13, marginTop: 8 }}>{fehler.join(" ")}</div>}
+      </>}
+      {darf && <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        {arge.aktiv && <Knopf leise onClick={() => setArge(a => ({ ...a, partner: [...a.partner, neuerPartner()] }))}>Partner</Knopf>}
+        {geaendert && <Knopf haupt disabled={arge.aktiv && fehler.length > 0} onClick={() => onAendern({ arge })}>Speichern</Knopf>}
+        {arge.aktiv && !fehler.length && !geaendert && <Knopf leise onClick={bericht}>ARGE-Bericht</Knopf>}
+      </div>}
+      <p className="co-text" style={{ marginTop: 12, marginBottom: 0 }}>Im Konzern zählt bei ARGE-Projekten wahlweise nur die eigene Quote. Die Aufteilung ist centgenau.</p>
+    </section>
+  );
+}
