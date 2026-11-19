@@ -42,8 +42,8 @@ export function vergleichsEintraege(vergleiche) {
       const liste = ans.get(k.id);
       if (k.typ !== "position" || !liste?.length || k.extra?.epManuell || !String(k.kurztext || "").trim()) continue;
       const ref = `KP:${k.id}`;
-      eintraege.push({ ref, quelle: "kalkulation", bez: k.kurztext, langtext: kurz(k.langtext, 300), gewerk: v.projektName || "", einheit: k.einheit || "", ep: Number(k.ep) || 0 });
-      nachRef.set(ref, { knoten: k, ansaetze: liste, herkunft: `${v.projektName || "Projekt"}, Stand ${v.standNummer ?? ""}`.trim() });
+      eintraege.push({ ref, quelle: "kalkulation", bez: k.kurztext, langtext: kurz(k.langtext, 300), gewerk: `${v.istWerte ? "Ist-Werte " : ""}${v.projektName || ""}`.trim(), einheit: k.einheit || "", ep: Number(k.ep) || 0 });
+      nachRef.set(ref, { knoten: k, ansaetze: liste, herkunft: `${v.istWerte ? "Ist-Werte aus " : ""}${v.projektName || "Projekt"}, Stand ${v.standNummer ?? ""}`.trim() });
     }
   }
   return { eintraege, nachRef };

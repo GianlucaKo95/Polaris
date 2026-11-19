@@ -209,6 +209,16 @@ export function supabaseSpeicher({ session, firmaId }) {
     ...tabelle("kalk_nachtraege", "nachtraege", "nachtrag", NACHTRAG_FELDER, { nummer: true }),
     ...tabelle("kalk_rechnungen", "rechnungen", "rechnung", RECHNUNG_FELDER),
     ...tabelle("kalk_nu_rechnungen", "nuRechnungen", "nuRechnung", NU_RECHNUNG_FELDER),
+    ...tabelle("kalk_leistungsmeldungen", "leistungsmeldungen", "leistungsmeldung", ["id", "monat", "status", "ist", "werte", "bemerkung"]),
+    async istStundenLaden(baustelleId) {
+      if (!baustelleId) return [];
+      const alle = [];
+      for (let von = 0; ; von += 1000) {
+        const teil = pruefe(await db().from("zeitbuchungen").select("eingestempelt_at, netto_minuten, status").eq("projekt_id", baustelleId).order("eingestempelt_at").range(von, von + 999), "Zeitbuchungen nicht geladen");
+        alle.push(...teil);
+        if (teil.length < 1000) return alle;
+      }
+    },
 
     // ── Vergaben (Phase 4) ──
     async vergabenLaden(projektId) {
@@ -266,7 +276,7 @@ export function supabaseSpeicher({ session, firmaId }) {
     // Frühere eigene Kalkulationen als Vorlage für die KI: je Projekt der
     // jüngste Stand mit Ansätzen, ohne das aktuelle Projekt
     async vergleichsKalkulationen({ ausserProjekt = null, grenze = 12 } = {}) {
-      let q = db().from("kalk_staende").select("id, kalk_projekt_id, nummer, created_at").order("created_at", { ascending: false }).limit(60);
+      let q = db().from("kalk_staende").select("id, kalk_projekt_id, nummer, art, created_at").order("created_at", { ascending: false }).limit(80);
       if (ausserProjekt) q = q.neq("kalk_projekt_id", ausserProjekt);
       const staende = pruefe(await q, "Vergleichskalkulationen nicht geladen");
       if (!staende.length) return [];
@@ -277,6 +287,8 @@ export function supabaseSpeicher({ session, firmaId }) {
         if (teil.length < 1000) break;
       }
       const mitAnsatz = new Set(ansaetze.map(a => a.stand_id));
+      // Je Projekt ein Stand: Nachkalkulation (Ist-Werte) vor allem anderen, sonst der neueste
+      staende.sort((a, b) => (a.art === "nachkalkulation" ? 0 : 1) - (b.art === "nachkalkulation" ? 0 : 1));
       const gewaehlt = [];
       const projekte = new Set();
       for (const s of staende) {
@@ -294,7 +306,7 @@ export function supabaseSpeicher({ session, firmaId }) {
       }
       const namen = new Map(pruefe(await db().from("kalk_projekte").select("id, name").in("id", [...projekte])).map(p => [p.id, p.name]));
       return gewaehlt.map(s => ({
-        projektName: namen.get(s.kalk_projekt_id) || "", standNummer: s.nummer,
+        projektName: namen.get(s.kalk_projekt_id) || "", standNummer: s.nummer, istWerte: s.art === "nachkalkulation",
         knoten: knoten.filter(k => k.stand_id === s.id).map(k => ({ ...k, menge: Number(k.menge), ep: Number(k.ep) })),
         ansaetze: relevant.filter(a => a.stand_id === s.id),
       }));

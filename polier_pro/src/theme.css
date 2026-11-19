@@ -460,3 +460,11 @@ textarea.kb-eingabe { height: auto; padding: 8px 10px; line-height: 20px; resize
 .am-feld:hover:not(:disabled) { border-color: var(--border); }
 .am-feld:focus { outline: none; border-color: var(--text2); background: var(--surface); }
 .am-feld[aria-invalid="true"] { border-color: var(--red); }
+
+/* ── Controlling (Phase 6) ── */
+.co-kennzahlen { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.co-kz { padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.co-karte { padding: 16px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); min-width: 0; }
+.co-karte h2 { margin: 0 0 12px; font-size: 16px; font-weight: 500; }
+.co-text { margin: 0 0 12px; font-size: 13px; color: var(--text2); line-height: 1.5; }
+@media (max-width: 1280px) { .co-kennzahlen { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

@@ -11,7 +11,7 @@ const jetzt = () => new Date().toISOString();
 const kopie = x => JSON.parse(JSON.stringify(x));
 
 function leer() {
-  return { gesellschaften: [{ id: "g-haupt", name: "Hauptgesellschaft", parent_id: null, kuerzel: "" }], projekte: [], staende: [], knoten: [], ansaetze: [], vergaben: [], aufmass: [], nachtraege: [], rechnungen: [], nu_rechnungen: [], protokoll: [] };
+  return { gesellschaften: [{ id: "g-haupt", name: "Hauptgesellschaft", parent_id: null, kuerzel: "" }], projekte: [], staende: [], knoten: [], ansaetze: [], vergaben: [], aufmass: [], nachtraege: [], rechnungen: [], nu_rechnungen: [], leistungsmeldungen: [], protokoll: [] };
 }
 
 export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 } = {}) {
@@ -20,7 +20,7 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
   if (!d) d = start ? { ...leer(), ...kopie(start) } : leer();
   if (!d.ansaetze) d.ansaetze = [];
   if (!d.vergaben) d.vergaben = [];
-  for (const t of ["aufmass", "nachtraege", "rechnungen", "nu_rechnungen"]) if (!d[t]) d[t] = [];
+  for (const t of ["aufmass", "nachtraege", "rechnungen", "nu_rechnungen", "leistungsmeldungen"]) if (!d[t]) d[t] = [];
   const sichern = () => { try { speicher?.setItem(SCHLUESSEL, JSON.stringify(d)); } catch { /* voll */ } };
   const warte = () => (verzoegerung ? new Promise(r => setTimeout(r, verzoegerung)) : Promise.resolve());
   const fehler = text => { const e = new Error(text); e.nutzerText = text; throw e; };
@@ -111,11 +111,12 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
     async projektLoeschen(id) {
       await warte();
       if (d.rechnungen.some(r => r.kalk_projekt_id === id && r.status !== "entwurf")) fehler("Ein Projekt mit gestellten Rechnungen kann nicht gelöscht werden");
+      if (d.leistungsmeldungen.some(r => r.kalk_projekt_id === id && r.status === "gemeldet")) fehler("Ein Projekt mit gemeldeten Leistungsmeldungen kann nicht gelöscht werden");
       if (d.staende.some(s => s.kalk_projekt_id === id && s.gesperrt)) fehler("Ein Projekt mit gesperrten Ständen kann nicht gelöscht werden");
       const st = new Set(d.staende.filter(s => s.kalk_projekt_id === id).map(s => s.id));
       d.knoten = d.knoten.filter(k => !st.has(k.stand_id));
       d.ansaetze = d.ansaetze.filter(a => !st.has(a.stand_id));
-      for (const t of ["vergaben", "aufmass", "nachtraege", "rechnungen", "nu_rechnungen"]) d[t] = d[t].filter(v => v.kalk_projekt_id !== id);
+      for (const t of ["vergaben", "aufmass", "nachtraege", "rechnungen", "nu_rechnungen", "leistungsmeldungen"]) d[t] = d[t].filter(v => v.kalk_projekt_id !== id);
       d.staende = d.staende.filter(s => !st.has(s.id));
       d.projekte = d.projekte.filter(p => p.id !== id);
       sichern();
@@ -269,6 +270,18 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
         if (r.nummer && r.status !== "storniert" && d.rechnungen.some(x => x.id !== r.id && x.nummer === r.nummer && x.status !== "storniert")) fehler("Diese Rechnungsnummer gibt es schon");
       },
       loeschenPruefen: r => { if (r.status !== "entwurf") fehler("Gestellte Rechnungen werden storniert, nicht gelöscht"); } }),
+    ...einfacheTabelle("leistungsmeldungen", "kalk_leistungsmeldungen", "leistungsmeldung", {
+      pruefen: (m, projektId, alt) => {
+        if (!/^\d{4}-\d{2}-01$/.test(String(m.monat))) fehler("Monat muss der Erste des Monats sein");
+        if (alt && alt.status === "gemeldet" && ["ist", "werte", "monat", "status"].some(f => f in m && JSON.stringify(m[f] ?? null) !== JSON.stringify(alt[f] ?? null))) fehler("Die Leistungsmeldung ist gemeldet und unveränderlich");
+        if (d.leistungsmeldungen.some(x => x.id !== m.id && x.kalk_projekt_id === projektId && x.monat === m.monat)) fehler("Für diesen Monat gibt es schon eine Leistungsmeldung");
+        if (m.status === "gemeldet" && alt?.status !== "gemeldet") m.gemeldet_am = jetzt();
+      },
+      loeschenPruefen: m => { if (m.status === "gemeldet") fehler("Gemeldete Leistungsmeldungen bleiben erhalten"); } }),
+    async istStundenLaden(baustelleId) {
+      await warte();
+      return kopie((d.zeitbuchungen || []).filter(z => String(z.projekt_id) === String(baustelleId)));
+    },
     ...einfacheTabelle("nu_rechnungen", "kalk_nu_rechnungen", "nuRechnung", {
       pruefen: (r, projektId) => { if (r.vergabe_id && !d.vergaben.some(v => v.id === r.vergabe_id && v.kalk_projekt_id === projektId)) fehler("Die Vergabe gehört nicht zu diesem Projekt"); } }),
 
@@ -317,13 +330,15 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
       await warte();
       const aus = [];
       const projekte = new Set();
-      for (const s of [...d.staende].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || b.nummer - a.nummer)) {
+      // Je Projekt ein Stand: Nachkalkulation (Ist-Werte) vor allem anderen, sonst der neueste
+      const rang = s => (s.art === "nachkalkulation" ? 0 : 1);
+      for (const s of [...d.staende].sort((a, b) => rang(a) - rang(b) || String(b.created_at).localeCompare(String(a.created_at)) || b.nummer - a.nummer)) {
         if (s.kalk_projekt_id === ausserProjekt || projekte.has(s.kalk_projekt_id)) continue;
         const ansaetze = d.ansaetze.filter(a => a.stand_id === s.id);
         if (!ansaetze.length) continue;
         projekte.add(s.kalk_projekt_id);
         const ids = new Set(ansaetze.map(a => a.knoten_id));
-        aus.push({ projektName: d.projekte.find(p => p.id === s.kalk_projekt_id)?.name || "", standNummer: s.nummer,
+        aus.push({ projektName: d.projekte.find(p => p.id === s.kalk_projekt_id)?.name || "", standNummer: s.nummer, istWerte: s.art === "nachkalkulation",
           knoten: kopie(d.knoten.filter(k => ids.has(k.id))), ansaetze: kopie(ansaetze) });
         if (aus.length >= grenze) break;
       }

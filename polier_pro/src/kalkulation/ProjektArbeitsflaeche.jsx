@@ -10,6 +10,7 @@ import { Schlussblatt } from "./Schlussblatt.jsx";
 import { Auswertung } from "./Auswertung.jsx";
 import { VergabeBereich } from "./Vergabe.jsx";
 import { AbrechnungBereich } from "./Abrechnung.jsx";
+import { ControllingBereich } from "./Controlling.jsx";
 import { useStammdaten } from "./stammdaten.js";
 import { standBerechnen, zuschlaegeNormalisieren } from "../lib/kalk/rechenkern.js";
 import { angebotHtml } from "../lib/kalk/angebotDruck.js";
@@ -22,7 +23,7 @@ import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 import { parseGaeb90, gaeb90DateiLesen } from "../lib/gaeb90.js";
 import { gaebX84Schreiben } from "../lib/gaebX84.js";
 
-const REITER = [["uebersicht", "Übersicht"], ["lv", "LV & Kalkulation"], ["zuschlaege", "Zuschläge"], ["auswertung", "Auswertung"], ["vergabe", "Vergabe"], ["abrechnung", "Abrechnung"], ["protokoll", "Protokoll"]];
+const REITER = [["uebersicht", "Übersicht"], ["lv", "LV & Kalkulation"], ["zuschlaege", "Zuschläge"], ["auswertung", "Auswertung"], ["vergabe", "Vergabe"], ["abrechnung", "Abrechnung"], ["controlling", "Controlling"], ["protokoll", "Protokoll"]];
 
 function herunterladen(name, inhalt, typ = "application/xml") {
   const blob = inhalt instanceof Blob ? inhalt : new Blob([inhalt], { type: typ });
@@ -106,6 +107,11 @@ export function ProjektArbeitsflaeche({ speicher, projektId, onZurueck, onProjek
         {reiter === "abrechnung" && (
           <AbrechnungBereich speicher={speicher} projekt={projekt} staende={staende} darf={recht >= 2} kiAktiv={kiAktiv} onFehler={setFehler}
             onStandGeaendert={async neuId => { await ladeProjekt(); if (neuId) setStandId(neuId); onProjektGeaendert?.(); }}
+            onStandOeffnen={id => { setStandId(id); setReiter("lv"); }} />
+        )}
+        {reiter === "controlling" && (
+          <ControllingBereich speicher={speicher} projekt={projekt} staende={staende} darf={recht >= 2} onFehler={setFehler} onProjektAendern={projektAendern}
+            onStandGeaendert={async () => { await ladeProjekt(); onProjektGeaendert?.(); }}
             onStandOeffnen={id => { setStandId(id); setReiter("lv"); }} />
         )}
         {reiter === "protokoll" && <Protokoll speicher={speicher} projektId={projekt.id} staende={staende} />}
@@ -510,7 +516,7 @@ function Protokoll({ speicher, projektId, staende }) {
             <tr key={e.id} style={{ cursor: "default" }}>
               <td className="kb-zahl" style={{ whiteSpace: "nowrap" }}>{zeitpunkt(e.zeit)}</td>
               <td className="kb-zahl">{standNr(e.stand_id) ?? ""}</td>
-              <td>{{ kalk_projekte: "Projekt", kalk_staende: "Stand", lv_knoten: "LV-Zeile", kalk_ansaetze: "Ansatz", kalk_vergaben: "Vergabe", kalk_nachtraege: "Nachtrag", kalk_rechnungen: "Rechnung", kalk_nu_rechnungen: "NU-Rechnung" }[e.tabelle] || e.tabelle} {{ anlegen: "angelegt", aendern: "geändert", loeschen: "gelöscht" }[e.aktion]}</td>
+              <td>{{ kalk_projekte: "Projekt", kalk_staende: "Stand", lv_knoten: "LV-Zeile", kalk_ansaetze: "Ansatz", kalk_vergaben: "Vergabe", kalk_nachtraege: "Nachtrag", kalk_rechnungen: "Rechnung", kalk_nu_rechnungen: "NU-Rechnung", kalk_leistungsmeldungen: "Leistungsmeldung" }[e.tabelle] || e.tabelle} {{ anlegen: "angelegt", aendern: "geändert", loeschen: "gelöscht" }[e.aktion]}</td>
               <td style={{ color: "var(--text2)" }}>
                 {e.aenderung?.kurz != null ? e.aenderung.kurz
                   : Object.entries(e.aenderung || {}).filter(([f]) => f !== "kurz").map(([f, [a, n]]) => `${FELD_LABEL[f] || f}: ${kurzWert(a)} → ${kurzWert(n)}`).join(" · ")}

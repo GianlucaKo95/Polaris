@@ -734,3 +734,74 @@ begin
 end $$;
 drop trigger if exists kalk_rechnungen_loeschen on kalk_rechnungen;
 create trigger kalk_rechnungen_loeschen before delete on kalk_rechnungen for each row execute function kalk_rechnung_loeschen_pruefen();
+
+-- ═══ Phase 6: Controlling ══════════════════════════════════════════════════
+-- Nachkalkulation als eigene Standart (Ist-Aufwandswerte für künftige Angebote),
+-- Einstellungen der Prognose am Projekt, monatliche Leistungsmeldungen.
+-- Logik: lib/kalk/controlling.js.
+do $$
+declare c text;
+begin
+  select conname into c from pg_constraint where conrelid = 'kalk_staende'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%arbeitskalkulation%';
+  if c is not null then execute format('alter table kalk_staende drop constraint %I', c); end if;
+  alter table kalk_staende add constraint kalk_staende_art_check
+    check (art in ('angebot','verhandlung','auftrag','arbeitskalkulation','nachtrag','nachkalkulation'));
+end $$;
+
+alter table kalk_projekte add column if not exists controlling jsonb not null default '{}'::jsonb;
+
+create table if not exists kalk_leistungsmeldungen (
+  id               uuid primary key default gen_random_uuid(),
+  firma_id         int not null references firmen(id) on delete cascade,
+  kalk_projekt_id  uuid not null references kalk_projekte(id) on delete cascade,
+  monat            date not null,                  -- erster Tag des Monats
+  status           text not null default 'entwurf' check (status in ('entwurf','gemeldet')),
+  ist              jsonb not null default '{}'::jsonb,   -- Eingaben: Ist-Kosten je Kostenart, Stunden, Restkosten-Korrekturen
+  werte            jsonb not null default '{}'::jsonb,   -- beim Melden eingefrorene Auswertung
+  bemerkung        text default '',
+  gemeldet_am      timestamptz,
+  gemeldet_von     uuid,
+  created_at       timestamptz not null default now(),
+  created_by       uuid default auth.uid(),
+  updated_at       timestamptz not null default now(),
+  unique (kalk_projekt_id, monat)
+);
+
+create or replace function kalk_meldung_pruefen()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if extract(day from new.monat) <> 1 then raise exception 'Monat muss der Erste des Monats sein'; end if;
+  if tg_op = 'UPDATE' and old.status = 'gemeldet' then
+    if (new.ist, new.werte, new.monat, new.status) is distinct from (old.ist, old.werte, old.monat, old.status) then
+      raise exception 'Die Leistungsmeldung ist gemeldet und unveränderlich';
+    end if;
+  end if;
+  if new.status = 'gemeldet' and (tg_op = 'INSERT' or old.status <> 'gemeldet') then
+    new.gemeldet_am := now(); new.gemeldet_von := auth.uid();
+  end if;
+  return new;
+end $$;
+
+create or replace function kalk_meldung_loeschen_pruefen()
+returns trigger language plpgsql as $$
+begin
+  if old.status = 'gemeldet' then raise exception 'Gemeldete Leistungsmeldungen bleiben erhalten'; end if;
+  return old;
+end $$;
+
+drop trigger if exists kalk_leistungsmeldungen_pruefen on kalk_leistungsmeldungen;
+create trigger kalk_leistungsmeldungen_pruefen before insert or update on kalk_leistungsmeldungen for each row execute function kalk_meldung_pruefen();
+drop trigger if exists kalk_leistungsmeldungen_loeschen on kalk_leistungsmeldungen;
+create trigger kalk_leistungsmeldungen_loeschen before delete on kalk_leistungsmeldungen for each row execute function kalk_meldung_loeschen_pruefen();
+drop trigger if exists kalk_leistungsmeldungen_updated on kalk_leistungsmeldungen;
+create trigger kalk_leistungsmeldungen_updated before update on kalk_leistungsmeldungen for each row execute function update_updated_at();
+drop trigger if exists kalk_leistungsmeldungen_protokoll on kalk_leistungsmeldungen;
+create trigger kalk_leistungsmeldungen_protokoll after insert or update or delete on kalk_leistungsmeldungen for each row execute function kalk_protokollieren();
+alter table kalk_leistungsmeldungen enable row level security;
+drop policy if exists kalk_leistungsmeldungen_lesen on kalk_leistungsmeldungen;
+create policy kalk_leistungsmeldungen_lesen on kalk_leistungsmeldungen for select using (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 1);
+drop policy if exists kalk_leistungsmeldungen_schreiben on kalk_leistungsmeldungen;
+create policy kalk_leistungsmeldungen_schreiben on kalk_leistungsmeldungen for all
+  using (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 2)
+  with check (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 2);
+grant select, insert, update, delete on kalk_leistungsmeldungen to authenticated;

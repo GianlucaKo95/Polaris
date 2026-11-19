@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 
 const eur = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const zahl3 = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
-export const euro = x => eur.format(Number(x) || 0);
+export const euro = x => eur.format(Number(x) || 0).replace("-", "−");
 export const menge = x => zahl3.format(Number(x) || 0);
 export const datum = d => (d ? new Date(d).toLocaleDateString("de-DE") : "");
 export const zeitpunkt = d => (d ? new Date(d).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
@@ -25,7 +25,7 @@ export const PROJEKT_STATUS = [
 export const STATUS_LABEL = Object.fromEntries(PROJEKT_STATUS);
 const STATUS_FARBE = { auftrag: "var(--green)", abgegeben: "var(--blue)", verloren: "var(--muted)", anfrage: "var(--akzent)" };
 
-export const STAND_ARTEN = [["angebot", "Angebot"], ["verhandlung", "Verhandlung"], ["auftrag", "Auftrag"], ["arbeitskalkulation", "Arbeitskalkulation"], ["nachtrag", "Nachtrag"]];
+export const STAND_ARTEN = [["angebot", "Angebot"], ["verhandlung", "Verhandlung"], ["auftrag", "Auftrag"], ["arbeitskalkulation", "Arbeitskalkulation"], ["nachtrag", "Nachtrag"], ["nachkalkulation", "Nachkalkulation"]];
 export const STAND_LABEL = Object.fromEntries(STAND_ARTEN);
 
 export function StatusPunkt({ status }) {
