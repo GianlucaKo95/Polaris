@@ -54,6 +54,8 @@ export function gpCent(k) {
 
 export const gp = k => gpCent(k) / 100;
 export const rundeCent = x => Number(teileGerundet(ganz(x, 1e6), 10000n)) / 100;
+// OZ vergleichbar machen: "01.0010" = "1.10" = "01 0010"
+export const ozNorm = oz => String(oz || "").split(/[.\s]+/).filter(Boolean).map(t => t.replace(/^0+(?=\d)/, "")).join(".");
 export const rundeMenge = x => Math.round((Number(x) || 0) * 1000) / 1000;
 
 // ── Baumstruktur ────────────────────────────────────────────────────────────

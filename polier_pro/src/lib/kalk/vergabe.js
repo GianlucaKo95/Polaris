@@ -19,7 +19,7 @@
 // ausgewiesen, aber nicht gewertet.
 // Rechenregel wie überall: GP = Menge × EP auf Cent, Summen aus Cent.
 
-import { baumIndex, nachfahren, inSumme as zaehltInSumme, gpCent as gpCentLv, rundeCent, rundeMenge, neueId } from "./lvBaum.js";
+import { baumIndex, nachfahren, inSumme as zaehltInSumme, gpCent as gpCentLv, rundeCent, rundeMenge, neueId, ozNorm } from "./lvBaum.js";
 import { standBerechnen, ressourcenListe, KOSTENART_LABEL } from "./rechenkern.js";
 import { knotenZuFlach } from "./lvFlach.js";
 import { gaebX84Schreiben } from "../gaebX84.js";
@@ -203,7 +203,6 @@ export function vergabeUebersicht(vergaben) {
 
 // ── Bieterpreise zuordnen (GAEB X84/D84 oder KI) ───────────────────────────
 
-const ozNorm = oz => String(oz || "").split(/[.\s]+/).filter(Boolean).map(t => t.replace(/^0+(?=\d)/, "")).join(".");
 
 // positionen: [{ oz, bez|kurztext, einheit, ep, quellPosId? }] → { preise, hinweise, zugeordnet, nichtZugeordnet }
 export function preiseZuordnen(zeilen, positionen) {

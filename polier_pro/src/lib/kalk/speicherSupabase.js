@@ -6,6 +6,10 @@ import { sbClientMitToken } from "../supabase.js";
 
 const KNOTEN_FELDER = ["id", "parent_id", "sort", "typ", "oz", "art", "kurztext", "langtext", "menge", "einheit", "ep", "rabatt", "stlk", "extra"];
 const BLOCK = 500;
+const AUFMASS_FELDER = ["id", "stand_id", "knoten_id", "blatt", "ort", "bezeichnung", "formel", "menge", "abzug", "quelle", "toleranz", "datum", "sort"];
+const NACHTRAG_FELDER = ["id", "stand_id", "nummer", "titel", "grund", "status", "begruendung", "angemeldet_am", "angeboten_am", "beauftragt_am", "betrag_angeboten", "betrag_beauftragt", "extra"];
+const RECHNUNG_FELDER = ["id", "nummer", "art", "lfd_nr", "datum", "leistung_von", "leistung_bis", "status", "positionen", "summen", "netto", "brutto", "einbehalt_prozent", "mwst", "steuerschuld_umkehr", "bezahlt_am", "bezahlt_betrag", "notiz"];
+const NU_RECHNUNG_FELDER = ["id", "vergabe_id", "nummer", "art", "datum", "eingang", "status", "positionen", "gefordert", "geprueft", "pruefung", "notiz"];
 const VERGABE_FELDER = ["id", "stand_id", "nummer", "titel", "art", "status", "frist", "zeilen", "bieter", "vergeben_an", "vergeben_am", "vergabe_summe", "budget_summe", "auftrag", "notiz"];
 const ANSATZ_FELDER = ["id", "knoten_id", "sort", "kostenart", "ressource_id", "bezeichnung", "einheit", "menge_je_me", "faktor", "preis", "formel", "kommentar"];
 
@@ -31,6 +35,25 @@ async function inBloecken(liste, fn) {
 
 export function supabaseSpeicher({ session, firmaId }) {
   const db = () => sbClientMitToken(session);
+
+  function tabelle(name, plural, wort, felderListe, { nummer = false } = {}) {
+    return {
+      async [`${plural}Laden`](projektId) {
+        return pruefe(await db().from(name).select("*").eq("kalk_projekt_id", projektId).order("created_at"), "Daten nicht geladen");
+      },
+      async [`${wort}Speichern`](projektId, x) {
+        const felder = Object.fromEntries(felderListe.filter(f => f in x).map(f => [f, x[f] ?? null]));
+        if (nummer && !felder.nummer) {
+          const v = pruefe(await db().from(name).select("nummer").eq("kalk_projekt_id", projektId).order("nummer", { ascending: false }).limit(1), "Daten nicht geladen");
+          felder.nummer = (v[0]?.nummer || 0) + 1;
+        }
+        return pruefe(await db().from(name).upsert({ ...felder, firma_id: firmaId, kalk_projekt_id: projektId }).select().single(), "Nicht gespeichert");
+      },
+      async [`${wort}Loeschen`](id) {
+        pruefe(await db().from(name).delete().eq("id", id), "Nicht gelöscht");
+      },
+    };
+  }
 
   async function summenFuer(standIds) {
     if (!standIds.length) return new Map();
@@ -160,6 +183,32 @@ export function supabaseSpeicher({ session, firmaId }) {
       const neuId = pruefe(await db().rpc("kalk_stand_kopieren", { p_basis: basisId, p_art: art, p_bezeichnung: bezeichnung }), "Stand nicht angelegt");
       return pruefe(await db().from("kalk_staende").select("*").eq("id", neuId).single());
     },
+
+    async standAnlegen(projektId, { art = "nachtrag", bezeichnung = "" } = {}) {
+      const st = pruefe(await db().from("kalk_staende").select("nummer, art, nachlass, mwst, zuschlaege").eq("kalk_projekt_id", projektId).order("nummer"), "Stände nicht geladen");
+      const vorlage = st.find(s => s.art === "auftrag") || st.at(-1) || {};
+      return pruefe(await db().from("kalk_staende").insert({ firma_id: firmaId, kalk_projekt_id: projektId, art, bezeichnung, nummer: Math.max(0, ...st.map(s => s.nummer)) + 1,
+        nachlass: vorlage.nachlass || 0, mwst: vorlage.mwst ?? 19, zuschlaege: vorlage.zuschlaege || {} }).select().single(), "Stand nicht angelegt");
+    },
+
+    // ── Abrechnung (Phase 5) ──
+    async aufmassLaden(projektId) {
+      const alle = [];
+      for (let von = 0; ; von += 1000) {
+        const teil = pruefe(await db().from("kalk_aufmass").select("*").eq("kalk_projekt_id", projektId).order("id").range(von, von + 999), "Aufmaß nicht geladen");
+        alle.push(...teil);
+        if (teil.length < 1000) return alle;
+      }
+    },
+    async aufmassSpeichern(projektId, { neu = [], aendern = [], loeschen = [] }) {
+      const zeile = a => ({ ...Object.fromEntries(AUFMASS_FELDER.map(f => [f, a[f] ?? null])), extra: a.extra || {}, firma_id: firmaId, kalk_projekt_id: projektId });
+      if (loeschen.length) await inBloecken(loeschen, async ids => pruefe(await db().from("kalk_aufmass").delete().in("id", ids), "Aufmaß nicht gelöscht"));
+      for (const { id, felder } of aendern) pruefe(await db().from("kalk_aufmass").update(felder).eq("id", id), "Aufmaß nicht gespeichert");
+      if (neu.length) await inBloecken(neu, async b => pruefe(await db().from("kalk_aufmass").insert(b.map(zeile)), "Aufmaß nicht gespeichert"));
+    },
+    ...tabelle("kalk_nachtraege", "nachtraege", "nachtrag", NACHTRAG_FELDER, { nummer: true }),
+    ...tabelle("kalk_rechnungen", "rechnungen", "rechnung", RECHNUNG_FELDER),
+    ...tabelle("kalk_nu_rechnungen", "nuRechnungen", "nuRechnung", NU_RECHNUNG_FELDER),
 
     // ── Vergaben (Phase 4) ──
     async vergabenLaden(projektId) {

@@ -11,7 +11,7 @@ const jetzt = () => new Date().toISOString();
 const kopie = x => JSON.parse(JSON.stringify(x));
 
 function leer() {
-  return { gesellschaften: [{ id: "g-haupt", name: "Hauptgesellschaft", parent_id: null, kuerzel: "" }], projekte: [], staende: [], knoten: [], ansaetze: [], vergaben: [], protokoll: [] };
+  return { gesellschaften: [{ id: "g-haupt", name: "Hauptgesellschaft", parent_id: null, kuerzel: "" }], projekte: [], staende: [], knoten: [], ansaetze: [], vergaben: [], aufmass: [], nachtraege: [], rechnungen: [], nu_rechnungen: [], protokoll: [] };
 }
 
 export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 } = {}) {
@@ -20,6 +20,7 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
   if (!d) d = start ? { ...leer(), ...kopie(start) } : leer();
   if (!d.ansaetze) d.ansaetze = [];
   if (!d.vergaben) d.vergaben = [];
+  for (const t of ["aufmass", "nachtraege", "rechnungen", "nu_rechnungen"]) if (!d[t]) d[t] = [];
   const sichern = () => { try { speicher?.setItem(SCHLUESSEL, JSON.stringify(d)); } catch { /* voll */ } };
   const warte = () => (verzoegerung ? new Promise(r => setTimeout(r, verzoegerung)) : Promise.resolve());
   const fehler = text => { const e = new Error(text); e.nutzerText = text; throw e; };
@@ -28,6 +29,44 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
   const stand = id => d.staende.find(s => s.id === id) || fehler("Stand nicht gefunden");
   const offen = id => { if (stand(id).gesperrt) fehler("Der Stand ist gesperrt. Für Änderungen einen neuen Stand anlegen."); };
   const standSumme = id => summen(d.knoten.filter(k => k.stand_id === id)).gesamt;
+
+  // Tabelle mit Laden/Speichern/Löschen je Projekt, Protokoll und Regeln wie in der Datenbank
+  function einfacheTabelle(name, tabelle, wort, { pruefen = () => {}, loeschenPruefen = () => {}, nummer = false } = {}) {
+    return {
+      async [`${name.replace(/_(\w)/g, (_, c) => c.toUpperCase())}Laden`](projektId) {
+        await warte();
+        return kopie(d[name].filter(x => x.kalk_projekt_id === projektId).sort((a, b) => (a.nummer ?? 0) - (b.nummer ?? 0) || String(a.created_at).localeCompare(String(b.created_at))));
+      },
+      async [`${wort}Speichern`](projektId, x) {
+        await warte();
+        const alt = d[name].find(y => y.id === x.id);
+        pruefen(x, projektId, alt);
+        const neu = { ...kopie(x), kalk_projekt_id: projektId, updated_at: jetzt() };
+        if (alt) {
+          const diff = {};
+          for (const [k, w] of Object.entries(neu)) if (k !== "updated_at" && JSON.stringify(alt[k] ?? null) !== JSON.stringify(w ?? null)) diff[k] = [alt[k] ?? null, w];
+          Object.assign(alt, neu);
+          if (Object.keys(diff).length) protokoll(tabelle, x.id, projektId, x.stand_id || null, "aendern", diff);
+        } else {
+          if (nummer) neu.nummer = neu.nummer || Math.max(0, ...d[name].filter(y => y.kalk_projekt_id === projektId).map(y => y.nummer || 0)) + 1;
+          neu.created_at = jetzt();
+          d[name].push(neu);
+          protokoll(tabelle, x.id, projektId, x.stand_id || null, "anlegen", { kurz: x.titel || x.nummer || "" });
+        }
+        sichern();
+        return kopie(d[name].find(y => y.id === x.id));
+      },
+      async [`${wort}Loeschen`](id) {
+        await warte();
+        const x = d[name].find(y => y.id === id);
+        if (!x) return;
+        loeschenPruefen(x);
+        d[name] = d[name].filter(y => y.id !== id);
+        protokoll(tabelle, id, x.kalk_projekt_id, x.stand_id || null, "loeschen", { kurz: x.titel || x.nummer || "" });
+        sichern();
+      },
+    };
+  }
 
   return {
     art: "lokal",
@@ -71,11 +110,12 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
 
     async projektLoeschen(id) {
       await warte();
+      if (d.rechnungen.some(r => r.kalk_projekt_id === id && r.status !== "entwurf")) fehler("Ein Projekt mit gestellten Rechnungen kann nicht gelöscht werden");
       if (d.staende.some(s => s.kalk_projekt_id === id && s.gesperrt)) fehler("Ein Projekt mit gesperrten Ständen kann nicht gelöscht werden");
       const st = new Set(d.staende.filter(s => s.kalk_projekt_id === id).map(s => s.id));
       d.knoten = d.knoten.filter(k => !st.has(k.stand_id));
       d.ansaetze = d.ansaetze.filter(a => !st.has(a.stand_id));
-      d.vergaben = d.vergaben.filter(v => v.kalk_projekt_id !== id);
+      for (const t of ["vergaben", "aufmass", "nachtraege", "rechnungen", "nu_rechnungen"]) d[t] = d[t].filter(v => v.kalk_projekt_id !== id);
       d.staende = d.staende.filter(s => !st.has(s.id));
       d.projekte = d.projekte.filter(p => p.id !== id);
       sichern();
@@ -190,6 +230,47 @@ export function lokalSpeicher({ speicher = null, start = null, verzoegerung = 0 
       sichern();
       return kopie(s);
     },
+
+    // Leerer Stand, z. B. für einen Nachtrag (aktueller Stand bleibt)
+    async standAnlegen(projektId, { art = "nachtrag", bezeichnung = "" } = {}) {
+      await warte();
+      const basis = d.staende.filter(s => s.kalk_projekt_id === projektId);
+      const vorlage = basis.find(s => s.art === "auftrag") || basis.at(-1) || {};
+      const s = { id: neueId(), kalk_projekt_id: projektId, art, nummer: Math.max(0, ...basis.map(x => x.nummer)) + 1, bezeichnung, basis_id: null, gesperrt: false,
+        freigabe_status: "offen", nachlass: vorlage.nachlass || 0, mwst: vorlage.mwst ?? 19, zuschlaege: kopie(vorlage.zuschlaege || {}), summe_netto: null, altes_angebot_id: null, created_at: jetzt() };
+      d.staende.push(s);
+      protokoll("kalk_staende", s.id, projektId, s.id, "anlegen", { kurz: bezeichnung || art });
+      sichern();
+      return kopie(s);
+    },
+
+    // ── Abrechnung (Phase 5) ──
+    async aufmassLaden(projektId) { await warte(); return kopie(d.aufmass.filter(a => a.kalk_projekt_id === projektId)); },
+    async aufmassSpeichern(projektId, { neu = [], aendern = [], loeschen = [] }) {
+      await warte();
+      const pruefe = a => { if (!d.knoten.some(k => k.id === a.knoten_id && k.stand_id === a.stand_id) || !d.staende.some(s => s.id === a.stand_id && s.kalk_projekt_id === projektId)) fehler("Die Position gehört nicht zu diesem Stand oder Projekt"); };
+      neu.forEach(pruefe);
+      const weg = new Set(loeschen);
+      d.aufmass = d.aufmass.filter(a => !weg.has(a.id));
+      for (const { id, felder } of aendern) { const a = d.aufmass.find(x => x.id === id); if (a) { pruefe({ ...a, ...felder }); Object.assign(a, kopie(felder), { updated_at: jetzt() }); } }
+      for (const a of neu) d.aufmass.push({ ...kopie(a), kalk_projekt_id: projektId, created_at: jetzt(), updated_at: jetzt() });
+      sichern();
+    },
+    ...einfacheTabelle("nachtraege", "kalk_nachtraege", "nachtrag", {
+      pruefen: (n, projektId) => { if (n.stand_id && !d.staende.some(s => s.id === n.stand_id && s.kalk_projekt_id === projektId)) fehler("Der Stand gehört nicht zu diesem Projekt"); },
+      nummer: true }),
+    ...einfacheTabelle("rechnungen", "kalk_rechnungen", "rechnung", {
+      pruefen: (r, _p, alt) => {
+        if (alt && alt.status !== "entwurf") {
+          const felder = ["positionen", "summen", "netto", "brutto", "nummer", "art", "datum", "einbehalt_prozent", "mwst", "steuerschuld_umkehr", "leistung_bis"];
+          if (felder.some(f => f in r && JSON.stringify(r[f] ?? null) !== JSON.stringify(alt[f] ?? null))) fehler("Die Rechnung ist gestellt und kann nicht mehr geändert werden. Bei Fehlern stornieren und neu stellen.");
+          if (r.status === "entwurf") fehler("Eine gestellte Rechnung kann nicht zurück in den Entwurf");
+        }
+        if (r.nummer && r.status !== "storniert" && d.rechnungen.some(x => x.id !== r.id && x.nummer === r.nummer && x.status !== "storniert")) fehler("Diese Rechnungsnummer gibt es schon");
+      },
+      loeschenPruefen: r => { if (r.status !== "entwurf") fehler("Gestellte Rechnungen werden storniert, nicht gelöscht"); } }),
+    ...einfacheTabelle("nu_rechnungen", "kalk_nu_rechnungen", "nuRechnung", {
+      pruefen: (r, projektId) => { if (r.vergabe_id && !d.vergaben.some(v => v.id === r.vergabe_id && v.kalk_projekt_id === projektId)) fehler("Die Vergabe gehört nicht zu diesem Projekt"); } }),
 
     // ── Vergaben (Phase 4) ──
     async vergabenLaden(projektId) {

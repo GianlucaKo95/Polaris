@@ -61,3 +61,29 @@ test("Vergaben: anlegen mit Nummer, ändern protokolliert, Regeln wie in der Dat
   const prot = (await s.protokollLaden(p.id)).filter(x => x.tabelle === "kalk_vergaben");
   assert.deepEqual(prot.map(x => x.aktion).sort(), ["aendern", "anlegen", "anlegen", "loeschen"]);
 });
+
+test("Abrechnung: Aufmaß nur auf Positionen des Projekts, gestellte Rechnungen unveränderlich, Nachtragsstand", async () => {
+  const s = lokalSpeicher();
+  const p = await s.projektAnlegen({ name: "Kita" });
+  const [st] = await s.staendeLaden(p.id);
+  const ae = einfuegen([], { felder: { kurztext: "Aushub", menge: 10, ep: 12.5, einheit: "m3" } });
+  await s.knotenSpeichern(st.id, ae);
+  const k = (await s.knotenLaden(st.id))[0];
+  await s.aufmassSpeichern(p.id, { neu: [{ id: "a1", stand_id: st.id, knoten_id: k.id, formel: "4*2", menge: 8 }] });
+  await assert.rejects(s.aufmassSpeichern(p.id, { neu: [{ id: "a2", stand_id: st.id, knoten_id: "gibtsnicht", menge: 1 }] }), /gehört nicht/);
+  await s.aufmassSpeichern(p.id, { aendern: [{ id: "a1", felder: { menge: 9 } }] });
+  assert.equal((await s.aufmassLaden(p.id))[0].menge, 9);
+  const ns = await s.standAnlegen(p.id, { art: "nachtrag", bezeichnung: "Nachtrag 1" });
+  assert.equal(ns.nummer, 2);
+  assert.equal((await s.projekteLaden())[0].aktueller_stand, st.id);
+  const n = await s.nachtragSpeichern(p.id, { id: "n1", stand_id: ns.id, titel: "Mehr", status: "entwurf" });
+  assert.equal(n.nummer, 1);
+  await s.rechnungSpeichern(p.id, { id: "r1", nummer: "AR-1", status: "entwurf", netto: 100 });
+  await s.rechnungSpeichern(p.id, { id: "r1", nummer: "AR-1", status: "gestellt", netto: 100 });
+  await assert.rejects(s.rechnungSpeichern(p.id, { id: "r1", nummer: "AR-1", status: "gestellt", netto: 120 }), /gestellt/);
+  await assert.rejects(s.rechnungLoeschen("r1"), /storniert/);
+  await assert.rejects(s.rechnungSpeichern(p.id, { id: "r2", nummer: "AR-1", status: "entwurf" }), /schon/);
+  await s.rechnungSpeichern(p.id, { id: "r1", nummer: "AR-1", status: "bezahlt", netto: 100, bezahlt_betrag: 119 });
+  await assert.rejects(s.projektLoeschen(p.id), /gestellten Rechnungen/);
+  assert.equal((await s.rechnungenLaden(p.id))[0].status, "bezahlt");
+});

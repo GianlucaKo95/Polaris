@@ -106,6 +106,7 @@ export function KalkulationBereich({ session, firmaId, rolle, firmenName, bauste
     kalkulationsgrundlagen: stammdaten.kalkulationsgrundlagen || null, standardZuschlaege: stammdaten.standardZuschlaege || null,
     eigeneFirma: stammdaten.eigeneFirma || null, onStammpositionenAendern: stammdaten.onStammpositionenAendern || null,
     einheitspreise: stammdaten.einheitspreise || [], lvVorlagen: stammdaten.lvVorlagen || [],
+    session: session?.access_token ? session : null,
     rufeKi: session?.access_token ? (system, messages, tools, toolChoice) => kiToolAufruf({ system, messages, tools, toolChoice, maxTokens: 8000 }, session) : null,
   }), [stammdaten.kalkulationspreise, stammdaten.stammpositionen, stammdaten.kalkulationsgrundlagen, stammdaten.standardZuschlaege, stammdaten.eigeneFirma,
     stammdaten.onStammpositionenAendern, stammdaten.einheitspreise, stammdaten.lvVorlagen, session?.access_token]); // eslint-disable-line react-hooks/exhaustive-deps

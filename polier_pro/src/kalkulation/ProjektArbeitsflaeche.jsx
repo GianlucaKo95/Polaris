@@ -9,6 +9,7 @@ import { AnsatzPanel } from "./AnsatzPanel.jsx";
 import { Schlussblatt } from "./Schlussblatt.jsx";
 import { Auswertung } from "./Auswertung.jsx";
 import { VergabeBereich } from "./Vergabe.jsx";
+import { AbrechnungBereich } from "./Abrechnung.jsx";
 import { useStammdaten } from "./stammdaten.js";
 import { standBerechnen, zuschlaegeNormalisieren } from "../lib/kalk/rechenkern.js";
 import { angebotHtml } from "../lib/kalk/angebotDruck.js";
@@ -21,7 +22,7 @@ import { parseGaebXml, gaebXmlDateiLesen } from "../lib/gaebXml.js";
 import { parseGaeb90, gaeb90DateiLesen } from "../lib/gaeb90.js";
 import { gaebX84Schreiben } from "../lib/gaebX84.js";
 
-const REITER = [["uebersicht", "Übersicht"], ["lv", "LV & Kalkulation"], ["zuschlaege", "Zuschläge"], ["auswertung", "Auswertung"], ["vergabe", "Vergabe"], ["protokoll", "Protokoll"]];
+const REITER = [["uebersicht", "Übersicht"], ["lv", "LV & Kalkulation"], ["zuschlaege", "Zuschläge"], ["auswertung", "Auswertung"], ["vergabe", "Vergabe"], ["abrechnung", "Abrechnung"], ["protokoll", "Protokoll"]];
 
 function herunterladen(name, inhalt, typ = "application/xml") {
   const blob = inhalt instanceof Blob ? inhalt : new Blob([inhalt], { type: typ });
@@ -78,7 +79,7 @@ export function ProjektArbeitsflaeche({ speicher, projektId, onZurueck, onProjek
           {stand && (
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text2)" }}>
               Stand
-              <select className="kb-eingabe" value={standId || ""} onChange={e => setStandId(e.target.value)} style={{ height: 32, width: "auto" }} aria-label="Stand wählen">
+              <select className="kb-eingabe" value={standId || ""} onChange={e => setStandId(e.target.value)} style={{ height: 32, width: "auto", maxWidth: 320 }} aria-label="Stand wählen">
                 {staende.map(s => <option key={s.id} value={s.id}>{s.nummer} · {s.bezeichnung || STAND_LABEL[s.art]}{s.gesperrt ? " (gesperrt)" : ""}</option>)}
               </select>
             </label>
@@ -101,6 +102,11 @@ export function ProjektArbeitsflaeche({ speicher, projektId, onZurueck, onProjek
         )}
         {reiter === "vergabe" && stand && (
           <VergabeBereich key={stand.id} speicher={speicher} projekt={projekt} stand={stand} darf={recht >= 2} kiAktiv={kiAktiv} onFehler={setFehler} />
+        )}
+        {reiter === "abrechnung" && (
+          <AbrechnungBereich speicher={speicher} projekt={projekt} staende={staende} darf={recht >= 2} kiAktiv={kiAktiv} onFehler={setFehler}
+            onStandGeaendert={async neuId => { await ladeProjekt(); if (neuId) setStandId(neuId); onProjektGeaendert?.(); }}
+            onStandOeffnen={id => { setStandId(id); setReiter("lv"); }} />
         )}
         {reiter === "protokoll" && <Protokoll speicher={speicher} projektId={projekt.id} staende={staende} />}
       </div>
@@ -504,7 +510,7 @@ function Protokoll({ speicher, projektId, staende }) {
             <tr key={e.id} style={{ cursor: "default" }}>
               <td className="kb-zahl" style={{ whiteSpace: "nowrap" }}>{zeitpunkt(e.zeit)}</td>
               <td className="kb-zahl">{standNr(e.stand_id) ?? ""}</td>
-              <td>{{ kalk_projekte: "Projekt", kalk_staende: "Stand", lv_knoten: "LV-Zeile", kalk_ansaetze: "Ansatz", kalk_vergaben: "Vergabe" }[e.tabelle] || e.tabelle} {{ anlegen: "angelegt", aendern: "geändert", loeschen: "gelöscht" }[e.aktion]}</td>
+              <td>{{ kalk_projekte: "Projekt", kalk_staende: "Stand", lv_knoten: "LV-Zeile", kalk_ansaetze: "Ansatz", kalk_vergaben: "Vergabe", kalk_nachtraege: "Nachtrag", kalk_rechnungen: "Rechnung", kalk_nu_rechnungen: "NU-Rechnung" }[e.tabelle] || e.tabelle} {{ anlegen: "angelegt", aendern: "geändert", loeschen: "gelöscht" }[e.aktion]}</td>
               <td style={{ color: "var(--text2)" }}>
                 {e.aenderung?.kurz != null ? e.aenderung.kurz
                   : Object.entries(e.aenderung || {}).filter(([f]) => f !== "kurz").map(([f, [a, n]]) => `${FELD_LABEL[f] || f}: ${kurzWert(a)} → ${kurzWert(n)}`).join(" · ")}

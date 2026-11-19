@@ -571,3 +571,166 @@ create policy kalk_vergaben_schreiben on kalk_vergaben for all
   using (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 2)
   with check (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 2);
 grant select, insert, update, delete on kalk_vergaben to authenticated;
+
+-- ═══ Phase 5: Abrechnung ═══════════════════════════════════════════════════
+-- Aufmaß je Position (REB-Rechenansätze), Nachträge als eigene Stände,
+-- Abschlags- und Schlussrechnungen als eingefrorene Momentaufnahme,
+-- Prüfung der NU-Rechnungen. Logik: lib/kalk/abrechnung.js.
+
+-- Aufmaßzeilen: gehören zu einer Position eines Stands (Auftrag oder Nachtrag).
+-- Unabhängig von der Standsperre: aufgemessen wird nach dem Auftrag.
+create table if not exists kalk_aufmass (
+  id               uuid primary key default gen_random_uuid(),
+  firma_id         int not null references firmen(id) on delete cascade,
+  kalk_projekt_id  uuid not null references kalk_projekte(id) on delete cascade,
+  stand_id         uuid not null references kalk_staende(id) on delete cascade,
+  knoten_id        uuid not null references lv_knoten(id) on delete cascade,
+  blatt            text default '',           -- Aufmaßblatt
+  ort              text default '',           -- Achse, Raum, Bauteil
+  bezeichnung      text default '',
+  formel           text default '',           -- Rechenansatz, z. B. 12,40*2,75
+  menge            numeric(16,3) not null default 0,
+  abzug            boolean not null default false,
+  quelle           text not null default 'hand' check (quelle in ('hand','messung','plantext','foto','ki','import')),
+  toleranz         numeric(5,3),
+  datum            date not null default current_date,
+  sort             double precision not null default 0,
+  extra            jsonb not null default '{}'::jsonb,
+  created_at       timestamptz not null default now(),
+  created_by       uuid default auth.uid(),
+  updated_at       timestamptz not null default now()
+);
+create index if not exists kalk_aufmass_stand on kalk_aufmass(stand_id, knoten_id);
+create index if not exists kalk_aufmass_projekt on kalk_aufmass(kalk_projekt_id);
+
+create table if not exists kalk_nachtraege (
+  id               uuid primary key default gen_random_uuid(),
+  firma_id         int not null references firmen(id) on delete cascade,
+  kalk_projekt_id  uuid not null references kalk_projekte(id) on delete cascade,
+  stand_id         uuid references kalk_staende(id) on delete set null,  -- LV des Nachtrags (Stand der Art nachtrag)
+  nummer           int not null default 1,
+  titel            text not null default '',
+  grund            text not null default 'geaendert' check (grund in ('geaendert','zusaetzlich','menge','behinderung','stundenlohn','sonstig')),
+  status           text not null default 'entwurf' check (status in ('entwurf','angemeldet','angeboten','beauftragt','teilweise','abgelehnt','zurueckgezogen')),
+  begruendung      text default '',
+  angemeldet_am    date,
+  angeboten_am     date,
+  beauftragt_am    date,
+  betrag_angeboten numeric(16,2),
+  betrag_beauftragt numeric(16,2),
+  extra            jsonb not null default '{}'::jsonb,
+  created_at       timestamptz not null default now(),
+  created_by       uuid default auth.uid(),
+  updated_at       timestamptz not null default now()
+);
+create index if not exists kalk_nachtraege_projekt on kalk_nachtraege(kalk_projekt_id);
+
+create table if not exists kalk_rechnungen (
+  id               uuid primary key default gen_random_uuid(),
+  firma_id         int not null references firmen(id) on delete cascade,
+  kalk_projekt_id  uuid not null references kalk_projekte(id) on delete cascade,
+  nummer           text not null default '',
+  art              text not null default 'abschlag' check (art in ('abschlag','teilschluss','schluss')),
+  lfd_nr           int not null default 1,
+  datum            date not null default current_date,
+  leistung_von     date,
+  leistung_bis     date,
+  status           text not null default 'entwurf' check (status in ('entwurf','gestellt','bezahlt','storniert')),
+  positionen       jsonb not null default '[]'::jsonb,  -- Momentaufnahme, siehe abrechnung.js
+  summen           jsonb not null default '{}'::jsonb,  -- kumuliert, Nachlass, Einbehalt, bisher, netto, MwSt, brutto
+  netto            numeric(16,2),            -- Betrag dieser Rechnung netto
+  brutto           numeric(16,2),
+  einbehalt_prozent numeric(5,2) not null default 0,
+  mwst             numeric(5,2) not null default 19,
+  steuerschuld_umkehr boolean not null default false,  -- § 13b UStG
+  bezahlt_am       date,
+  bezahlt_betrag   numeric(16,2),
+  notiz            text default '',
+  created_at       timestamptz not null default now(),
+  created_by       uuid default auth.uid(),
+  updated_at       timestamptz not null default now()
+);
+create index if not exists kalk_rechnungen_projekt on kalk_rechnungen(kalk_projekt_id);
+create unique index if not exists kalk_rechnungen_nummer on kalk_rechnungen(firma_id, nummer) where nummer <> '' and status <> 'storniert';
+
+create table if not exists kalk_nu_rechnungen (
+  id               uuid primary key default gen_random_uuid(),
+  firma_id         int not null references firmen(id) on delete cascade,
+  kalk_projekt_id  uuid not null references kalk_projekte(id) on delete cascade,
+  vergabe_id       uuid references kalk_vergaben(id) on delete set null,
+  nummer           text not null default '',  -- Rechnungsnummer des NU
+  art              text not null default 'abschlag' check (art in ('abschlag','teilschluss','schluss')),
+  datum            date,
+  eingang          date not null default current_date,
+  status           text not null default 'eingegangen' check (status in ('eingegangen','geprueft','freigegeben','bezahlt','zurueckgewiesen')),
+  positionen       jsonb not null default '[]'::jsonb,  -- [{ key, menge, ep }] wie gefordert
+  gefordert        numeric(16,2),            -- Betrag laut NU netto (diese Rechnung)
+  geprueft         numeric(16,2),            -- nach Prüfung netto (diese Rechnung)
+  pruefung         jsonb not null default '{}'::jsonb,  -- Befunde, Summen
+  notiz            text default '',
+  created_at       timestamptz not null default now(),
+  created_by       uuid default auth.uid(),
+  updated_at       timestamptz not null default now()
+);
+create index if not exists kalk_nu_rechnungen_projekt on kalk_nu_rechnungen(kalk_projekt_id);
+
+-- Prüfungen
+create or replace function kalk_abrechnung_pruefen()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_table_name = 'kalk_aufmass' then
+    if not exists (select 1 from lv_knoten k join kalk_staende s on s.id = k.stand_id
+                   where k.id = new.knoten_id and k.stand_id = new.stand_id and s.kalk_projekt_id = new.kalk_projekt_id) then
+      raise exception 'Die Position gehört nicht zu diesem Stand oder Projekt';
+    end if;
+  elsif tg_table_name = 'kalk_nachtraege' then
+    if new.stand_id is not null and not exists (select 1 from kalk_staende where id = new.stand_id and kalk_projekt_id = new.kalk_projekt_id) then
+      raise exception 'Der Stand gehört nicht zu diesem Projekt';
+    end if;
+  elsif tg_table_name = 'kalk_rechnungen' then
+    -- Gestellte Rechnungen sind unveränderlich; nur Zahlung, Status und Notiz dürfen sich ändern
+    if tg_op = 'UPDATE' and old.status <> 'entwurf' then
+      if (new.positionen, new.summen, new.netto, new.brutto, new.nummer, new.art, new.datum, new.einbehalt_prozent, new.mwst, new.steuerschuld_umkehr, new.leistung_bis)
+         is distinct from (old.positionen, old.summen, old.netto, old.brutto, old.nummer, old.art, old.datum, old.einbehalt_prozent, old.mwst, old.steuerschuld_umkehr, old.leistung_bis) then
+        raise exception 'Die Rechnung ist gestellt und kann nicht mehr geändert werden. Bei Fehlern stornieren und neu stellen.';
+      end if;
+      if new.status = 'entwurf' then raise exception 'Eine gestellte Rechnung kann nicht zurück in den Entwurf'; end if;
+    end if;
+  elsif tg_table_name = 'kalk_nu_rechnungen' then
+    if new.vergabe_id is not null and not exists (select 1 from kalk_vergaben where id = new.vergabe_id and kalk_projekt_id = new.kalk_projekt_id) then
+      raise exception 'Die Vergabe gehört nicht zu diesem Projekt';
+    end if;
+  end if;
+  return new;
+end $$;
+
+create or replace function kalk_rechnung_loeschen_pruefen()
+returns trigger language plpgsql as $$
+begin
+  if old.status <> 'entwurf' then raise exception 'Gestellte Rechnungen werden storniert, nicht gelöscht'; end if;
+  return old;
+end $$;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['kalk_aufmass','kalk_nachtraege','kalk_rechnungen','kalk_nu_rechnungen'] loop
+    execute format('drop trigger if exists %1$s_pruefen on %1$s', t);
+    execute format('create trigger %1$s_pruefen before insert or update on %1$s for each row execute function kalk_abrechnung_pruefen()', t);
+    execute format('drop trigger if exists %1$s_updated on %1$s', t);
+    execute format('create trigger %1$s_updated before update on %1$s for each row execute function update_updated_at()', t);
+    execute format('alter table %1$s enable row level security', t);
+    execute format('drop policy if exists %1$s_lesen on %1$s', t);
+    execute format('create policy %1$s_lesen on %1$s for select using (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 1)', t);
+    execute format('drop policy if exists %1$s_schreiben on %1$s', t);
+    execute format('create policy %1$s_schreiben on %1$s for all using (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 2) with check (firma_id = eigene_firma_id() and kalk_projekt_recht(kalk_projekt_id) >= 2)', t);
+    execute format('grant select, insert, update, delete on %1$s to authenticated', t);
+  end loop;
+  -- Protokoll: Nachträge, Rechnungen und NU-Rechnungen einzeln; Aufmaßzeilen sind zu viele
+  foreach t in array array['kalk_nachtraege','kalk_rechnungen','kalk_nu_rechnungen'] loop
+    execute format('drop trigger if exists %1$s_protokoll on %1$s', t);
+    execute format('create trigger %1$s_protokoll after insert or update or delete on %1$s for each row execute function kalk_protokollieren()', t);
+  end loop;
+end $$;
+drop trigger if exists kalk_rechnungen_loeschen on kalk_rechnungen;
+create trigger kalk_rechnungen_loeschen before delete on kalk_rechnungen for each row execute function kalk_rechnung_loeschen_pruefen();

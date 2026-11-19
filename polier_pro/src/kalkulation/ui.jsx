@@ -1,5 +1,5 @@
 // Gemeinsame Bausteine des Kalkulationsbereichs (Werkplan-Gestaltung).
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
 const eur = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -103,4 +103,14 @@ export function Leer({ titel, text, children }) {
 
 export function Taste({ children }) {
   return <kbd className="kb-taste">{children}</kbd>;
+}
+
+// Geldbetrag mit deutscher Eingabe, übernimmt beim Verlassen
+export function BetragFeld({ wert, onSetzen, disabled }) {
+  const fmt = w => (w == null ? "" : Number(w).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const [t, setT] = useState(fmt(wert));
+  useEffect(() => { setT(fmt(wert)); }, [wert]);
+  return <input className="kb-eingabe kb-zahl" inputMode="decimal" value={t} disabled={disabled} onChange={e => setT(e.target.value)}
+    onBlur={() => { const v = t.trim() ? zahlLesen(t) : null; if (v === undefined || (t.trim() && v == null)) { setT(fmt(wert)); return; } if (v !== wert) onSetzen(v); }}
+    onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} style={{ textAlign: "right" }} />;
 }
