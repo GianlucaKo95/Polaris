@@ -41,6 +41,40 @@ function positionsartLabel(art) {
   return labels.length ? labels.join(", ") : null;
 }
 
+// OZ-Maske aus dem Kopfsatz 00, z.B. "1122PPPPI": je Ziffer eine Stelle der
+// Titelebene mit dieser Nummer, P = Positionsnummer, I = Index. Wenn die Datei
+// sie mitbringt, ist sie maßgeblich — sonst gilt die Erkennung über die
+// Ziffernlänge (ozAusZiffern). Wichtig für Masken mit optionalen Ebenen:
+// "01  0001" (Titel 01 ohne Untertitel) und Indexpositionen "030100031".
+export function ozMaskeLesen(zeile00) {
+  const m = String(zeile00 || "").slice(30).match(/([1-9]{1,12}P{1,6}I?)/);
+  return m ? m[1] : null;
+}
+
+export function ozNachMaske(feld, maske) {
+  const teile = [];
+  let i = 0, index = "";
+  for (const g of maske.match(/(.)\1*/g)) {
+    let wert = String(feld || "").slice(i, i + g.length).trim();
+    i += g.length;
+    // Ziffern auf die Stellenzahl der Maske auffüllen ("  30" → "0030"), wie OZ üblich angezeigt werden
+    if (/^\d+$/.test(wert) && g[0] !== "I") wert = wert.padStart(g.length, "0");
+    if (g[0] === "I") index = wert;
+    else if (wert) teile.push(wert);
+  }
+  if (!teile.length) return null;
+  // Buchstaben-Index direkt anhängen (bisheriges Format "01.01.0010a"), Ziffern-Index mit Punkt
+  return teile.join(".") + (index ? (/^\d+$/.test(index) ? `.${index}` : index) : "");
+}
+
+// Rest eines Positionssatzes nach dem OZ-Feld: Art, Menge, Einheit (Einheit 4 Stellen fest)
+function positionNachMaske(rest, maske) {
+  const oz = ozNachMaske(rest.slice(0, maske.length), maske);
+  const m = rest.slice(maske.length).match(/^\s*([A-Z ]{3})\s*(\S{0,4})?\s*(\d{11})(.{0,4})/);
+  if (!oz || !m) return null;
+  return { oz, art: m[1], menge: mengeAusZiffern(m[3]), einheit: m[4].trim() };
+}
+
 export function parseGaeb90(text) {
   const zeilen = text.split(/\r?\n/);
   const warnungen = [];
@@ -49,6 +83,7 @@ export function parseGaeb90(text) {
   let titelPfad = [];  // Breadcrumb der aktuellen Titel-/Untertitel-Ebenen
   let aktPos = null;   // Eintrag, der gerade Kurz-/Langtext sammelt
   let projektTitel = "";
+  let maske = null;
 
   function pushPos(p) {
     positionen.push(p);
@@ -70,6 +105,10 @@ export function parseGaeb90(text) {
         // Vertragliche Regelungen (Vorbemerkungen) vor dem eigentlichen
         // LV — AngebotEditor hat kein Langtext-Vorbemerkungsfeld, daher
         // v1 bewusst übersprungen statt an eine Position anzuhängen.
+        break;
+
+      case "00":
+        maske = ozMaskeLesen(rohzeile);
         break;
 
       case "01": {
@@ -110,6 +149,14 @@ export function parseGaeb90(text) {
         break;
 
       case "21": {
+        if (maske) {
+          const pm = positionNachMaske(rest, maske);
+          if (pm) {
+            pushPos({ typ:"position", titelPfad: titelPfad.join(" / "), oz: pm.oz, art: positionsartLabel(pm.art), istLeit: pm.art?.[2] === "L",
+              bez:"", menge: pm.menge, einheit: pm.einheit || "Stk", ep:0 });
+            break;
+          }
+        }
         // Position: zwei real beobachtete Dialekte (siehe ozAusZiffern()
         // weiter unten, dieselbe Unterscheidung wie beim D84-Preisimport).
         // "Kaufland"-Dialekt: Untertitel-OZ und Positionsnummer stehen als
@@ -285,6 +332,7 @@ export function parseGaeb90Preise(text) {
   const zeilen = text.split(/\r?\n/);
   const warnungen = [];
   const preise = [];
+  let maske = null;
 
   for (const rohzeile of zeilen) {
     if (rohzeile.length < 2) continue;
@@ -294,6 +342,12 @@ export function parseGaeb90Preise(text) {
     if (/^\d{6}$/.test(moeglSatznr) && rest.length > 6) rest = rest.slice(0, -6);
     rest = rest.replace(/\s+$/, "");
 
+    if (satzart === "00") { maske = ozMaskeLesen(rohzeile); continue; }
+    if (satzart === "23" && maske) {
+      const oz = ozNachMaske(rest.slice(0, maske.length), maske);
+      const m = rest.slice(maske.length).match(/^\s*(\d{11})\s(\d{12})/);
+      if (oz && m) { preise.push({ oz, ep: Number(m[1]) / 1000, gp: Number(m[2]) / 100 }); continue; }
+    }
     if (satzart === "23") {
       // "01010010  00004482000 000000448200" bzw. mit Index-Suffix
       // "01010010a 00000889390 000000355756" (Bedarfs-/Zulage-Variante

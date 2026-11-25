@@ -473,3 +473,4 @@ textarea.kb-eingabe { height: auto; padding: 8px 10px; line-height: 20px; resize
 .ko-tabelle tr.ko-ebene td { font-weight: 500; background: var(--bg); cursor: pointer; }
 .ko-tabelle tr.ko-projekt { cursor: pointer; }
 .ko-tabelle tr.ko-projekt:hover td { background: var(--surface2); }
+.vg-preis.nur-ep { text-decoration: underline dotted var(--akzent); text-underline-offset: 3px; }

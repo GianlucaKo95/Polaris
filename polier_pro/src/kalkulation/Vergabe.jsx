@@ -11,7 +11,7 @@ import { zuschlaegeNormalisieren, KOSTENART_LABEL } from "../lib/kalk/rechenkern
 import { zeilen as lvZeilen } from "../lib/kalk/lvBaum.js";
 import {
   zeilenNu, zeilenLieferant, ressourcenFuerAnfrage, neueVergabe, neuerBieter, preisspiegel, vergabeVorschlag, vergeben, vergabeUebersicht,
-  preiseZuordnen, zeilenFuerKi, kiErgebnisZuBieter, lieferantErgebnisZuBieter, inKalkulationUebernehmen, anfrageGaeb, auftragGaeb,
+  preiseZuordnen, d84ZuPositionen, zeilenFuerKi, kiErgebnisZuBieter, lieferantErgebnisZuBieter, inKalkulationUebernehmen, anfrageGaeb, auftragGaeb,
   auftragHtml, preisspiegelHtml, anfrageZeilen, budgetSumme, VERGABE_STATUS, VERGABE_STATUS_LABEL, BIETER_STATUS_LABEL, STANDARD_BEDINGUNGEN, LIEFER_BEDINGUNGEN,
 } from "../lib/kalk/vergabe.js";
 import { anfrageText, paketeVorschlagen } from "../lib/anfragen.js";
@@ -264,10 +264,13 @@ function PaketDetail({ v, speicher, projekt, stand, lv, darf, kiAktiv, sd, onAen
         felder = { name: name.replace(/\.[^.]+$/, ""), preise: r.preise, hinweise: r.hinweise, quelle: "gaeb", status: "abgegeben" };
         setMeldung(`${r.zugeordnet} Preise aus ${name} zugeordnet${r.nichtZugeordnet ? `, ${r.nichtZugeordnet} Positionen der Datei passten nicht` : ""}.`);
       } else if (/\.[dp]8[46]$/i.test(name)) {
-        const { gaeb90DateiLesen, parseGaeb90Preise, gaeb90PreiseZuPositionen } = await import("../lib/gaeb90.js");
-        const r = preiseZuordnen(v.zeilen, gaeb90PreiseZuPositionen(parseGaeb90Preise(await gaeb90DateiLesen(file))));
-        felder = { name: name.replace(/\.[^.]+$/, ""), preise: r.preise, quelle: "gaeb", status: "abgegeben" };
-        setMeldung(`${r.zugeordnet} Preise aus ${name} zugeordnet.`);
+        const { gaeb90DateiLesen, parseGaeb90Preise } = await import("../lib/gaeb90.js");
+        const text = await gaeb90DateiLesen(file);
+        const r = preiseZuordnen(v.zeilen, d84ZuPositionen(parseGaeb90Preise(text)));
+        const bieterName = (text.match(/^04(.{0,60})/m)?.[1] || "").trim();
+        felder = { name: bieterName || name.replace(/\.[^.]+$/, ""), preise: r.preise, nurEp: r.nurEp, quelle: "gaeb", status: "abgegeben" };
+        const n = Object.keys(r.nurEp).length;
+        setMeldung(`${r.zugeordnet} Preise aus ${name} zugeordnet${n ? `. ${n} Positionen hat der Bieter nur mit Einheitspreis angeboten, ohne Gesamtbetrag; sie sind im Preisspiegel markiert` : ""}.`);
       } else {
         if (!sd.rufeKi || !kiAktiv) throw new Error("PDF, Fotos und Mailtext liest die KI. Sie ist für diese Gesellschaft nicht aktiv oder du bist nicht angemeldet.");
         const { anhangAusDatei } = await import("../lib/anhaenge.js");
@@ -397,9 +400,9 @@ function PaketDetail({ v, speicher, projekt, stand, lv, darf, kiAktiv, sd, onAen
                   {ps.bieter.map((pb, i) => {
                     const b = v.bieter.find(x => x.id === pb.id);
                     const p = z.preise[i];
-                    const klasse = [i === z.minIndex && "min", z.ausreisser[i] && "ausreisser", z.spekulation[i] && "spekulation"].filter(Boolean).join(" ");
+                    const klasse = [i === z.minIndex && "min", z.ausreisser[i] && "ausreisser", z.spekulation[i] && "spekulation", b.nurEp?.[z.key] && "nur-ep"].filter(Boolean).join(" ");
                     return (
-                      <td key={pb.id} className="r" title={[b.hinweise?.[z.key], z.budgetAbw[i] != null && `${prozentText(z.budgetAbw[i])} zum Budget`, z.ausreisser[i] && `${z.ausreisser[i] === "hoch" ? "Mehr" : "Weniger"} als 30 % vom Median`, z.spekulation[i] && "Unter der Hälfte des Medians"].filter(Boolean).join(" · ")}>
+                      <td key={pb.id} className="r" title={[b.nurEp?.[z.key] && "Nur Einheitspreis, vom Bieter nicht in die Summe genommen", b.hinweise?.[z.key], z.budgetAbw[i] != null && `${prozentText(z.budgetAbw[i])} zum Budget`, z.ausreisser[i] && `${z.ausreisser[i] === "hoch" ? "Mehr" : "Weniger"} als 30 % vom Median`, z.spekulation[i] && "Unter der Hälfte des Medians"].filter(Boolean).join(" · ")}>
                         <PreisZelle wert={p} disabled={!offen} klasse={klasse} onSetzen={n => preisSetzen(b, z.key, n)} />
                       </td>
                     );
@@ -408,7 +411,8 @@ function PaketDetail({ v, speicher, projekt, stand, lv, darf, kiAktiv, sd, onAen
               ))}
             </tbody>
             <tfoot>
-              <FussZeile label="Summe netto" budget={euro(ps.budget)} werte={ps.bieter.map(b => g(b, x => euro(x.brutto)))} />
+              <FussZeile label="Summe netto" hinweis="Rechnerisch: Menge × Einheitspreis (VOB/A § 16c)" budget={euro(ps.budget)} werte={ps.bieter.map(b => g(b, x => euro(x.brutto)))} />
+              {ps.bieter.some(b => b.nurEp?.length) && <FussZeile label="Summe laut Bieter" hinweis="Ohne Positionen, die der Bieter nur mit Einheitspreis angeboten hat" werte={ps.bieter.map(b => g(b, x => x.nurEp?.length ? <span style={{ color: "var(--akzent)" }}>{euro(x.bruttoLautBieter)}</span> : euro(x.brutto)))} />}
               <FussZeile label="Nachlass" werte={ps.bieter.map(b => {
                 const bb = v.bieter.find(x => x.id === b.id);
                 return offen ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><PreisZelle nk={0} wert={bb.nachlass || null} onSetzen={n => bieterSetzen(b.id, { nachlass: n || 0 })} /> %</span>

@@ -48,7 +48,7 @@ test("GAEB 90 D83 wird zum Baum", () => {
   assert.deepEqual(ub.map(x => x.extra.unterNr), ["01", "02", "03"]);
   assert.ok(ub[0].kurztext.startsWith("Unterbeschreibung 01: Kalksandst"));
   assert.equal(ub[2].extra.menge, 120);
-  assert.deepEqual(k.filter(x => x.typ === "titel").map(x => x.oz), ["01", "0101", "02", "0201", "0202", "0203"]);
+  assert.deepEqual(k.filter(x => x.typ === "titel").map(x => x.oz), ["01", "01.01", "02", "02.01", "02.02", "02.03"]);
   assert.ok(zeilen(k).length === k.length, "jeder Knoten erreichbar");
   assert.ok(pos.some(p => p.art === "alternativ"));
 });
@@ -102,10 +102,10 @@ test("Export eines GAEB-90-LVs: Gliederung, Titelnamen und Unterbeschreibungen b
   assert.deepEqual(r.warnungen, []);
   const zurueck = parseGaebXml(r.text).positionen.filter(p => p.typ === "position");
   assert.equal(zurueck.length, k.filter(x => x.typ === "position").length);
-  const wand = zurueck.find(p => p.oz === "01.01.10");
-  assert.ok(wand, "OZ 0101.10 wird zu 01.01.10");
+  const wand = zurueck.find(p => p.oz === "01.01.0010");
+  assert.ok(wand, "OZ nach Maske: 01.01.0010");
   assert.ok(wand.titelPfad.includes("MAUERARBEITEN") && wand.titelPfad.includes("WAENDE"), wand.titelPfad);
-  const leit = zurueck.find(p => p.oz === "01.01.60");
+  const leit = zurueck.find(p => p.oz === "01.01.0060");
   assert.ok(leit.bez.includes("Unterbeschreibung 01") && leit.bez.includes("Unterbeschreibung 03"), "Unterbeschreibungen im Langtext der Leitposition");
   assert.equal(Math.round(r.summe * 100), summen(k).gesamtCent);
 });

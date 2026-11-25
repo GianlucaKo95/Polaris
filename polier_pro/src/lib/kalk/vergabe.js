@@ -103,17 +103,24 @@ export function budgetSumme(zeilen) {
 
 const hatPreis = (b, key) => b?.preise && b.preise[key] != null && b.preise[key] !== "" && Number.isFinite(Number(b.preise[key]));
 
+// Rechnerisch nach VOB/A § 16c Abs. 2: Menge × EP, der Einheitspreis ist maßgebend.
+// Hat der Bieter Positionen nur mit EP angeboten (nurEp), steht zusätzlich seine
+// eigene Summe ohne diese Positionen da — die Differenz ist aufzuklären.
 export function bieterSumme(zeilen, b) {
-  let bruttoC = 0;
-  const fehlend = [];
+  let bruttoC = 0, nurEpC = 0;
+  const fehlend = [], nurEp = [];
   for (const z of zeilen || []) {
     if (!hatPreis(b, z.key)) { if (z.inSumme !== false) fehlend.push(z.key); continue; }
-    if (z.inSumme !== false) bruttoC += gpCent(z.menge, b.preise[z.key]);
+    if (z.inSumme === false) continue;
+    const c = gpCent(z.menge, b.preise[z.key]);
+    bruttoC += c;
+    if (b.nurEp?.[z.key]) { nurEpC += c; nurEp.push(z.key); }
   }
   const nachlassC = Math.round(bruttoC * (Number(b?.nachlass) || 0) / 100);
   const nettoC = bruttoC - nachlassC;
   const skontoC = Math.round(nettoC * (Number(b?.skonto) || 0) / 100);
-  return { brutto: eur(bruttoC), nachlass: eur(nachlassC), netto: eur(nettoC), skonto: eur(skontoC), nachSkonto: eur(nettoC - skontoC), fehlend, vollstaendig: fehlend.length === 0 };
+  return { brutto: eur(bruttoC), nachlass: eur(nachlassC), netto: eur(nettoC), skonto: eur(skontoC), nachSkonto: eur(nettoC - skontoC), fehlend, vollstaendig: fehlend.length === 0,
+    nurEp, nurEpBetrag: eur(nurEpC), bruttoLautBieter: eur(bruttoC - nurEpC) };
 }
 
 const hatPreise = b => Object.keys(b?.preise || {}).some(k => hatPreis(b, k));
@@ -173,6 +180,7 @@ export function vergabeVorschlag(v) {
   }
   if (!best.vollstaendig) warnungen.push(`${best.fehlend.length} Positionen ohne Preis; in der Wertung mit dem Höchstpreis der anderen Bieter aufgefüllt (${eurText(best.aufgefuellt)}).`);
   if (best.vorbehalte.length) warnungen.push(`Vorbehalte: ${best.vorbehalte.join("; ")}.`);
+  for (const x of rang.filter(x => x.nurEp?.length)) warnungen.push(`${x.name || "Bieter"}: ${x.nurEp.length} Positionen nur mit Einheitspreis, ohne Gesamtbetrag (${eurText(x.nurEpBetrag)}). Summe laut Bieter ${eurText(x.bruttoLautBieter)}, rechnerisch ${eurText(x.brutto)}. Nach VOB/A § 16c gilt der Einheitspreis; aufklären, ob die Leistungen enthalten sind.`);
   if (best.spekulation.length) warnungen.push(`${best.spekulation.length} Preise unter der Hälfte des Medians (Spekulationspreise prüfen, besonders bei Mengenrisiko).`);
   if (rang[1] && best.netto > rang[1].netto && best.wertung < rang[1].wertung) gruende.push("Ein anderer Bieter ist auf dem Papier billiger, hat aber Lücken.");
   if (best.skonto > 0) gruende.push(`Zusätzlich ${eurText(best.skonto)} Skonto möglich (nicht gewertet).`);
@@ -208,6 +216,7 @@ export function vergabeUebersicht(vergaben) {
 export function preiseZuordnen(zeilen, positionen) {
   const preise = {};
   const hinweise = {};
+  const nurEp = {};
   const frei = (positionen || []).filter(p => Number(p.ep) > 0 && !String(p.bez || "").startsWith("──"));
   const benutzt = new Set();
   const nachOz = new Map();
@@ -227,9 +236,15 @@ export function preiseZuordnen(zeilen, positionen) {
     benutzt.add(t);
     preise[z.key] = rundeCent(t.ep);
     if (t.hinweis) hinweise[z.key] = String(t.hinweis);
+    if (t.nurEp && z.inSumme !== false) nurEp[z.key] = true;
   }
-  return { preise, hinweise, zugeordnet: Object.keys(preise).length, nichtZugeordnet: frei.length - benutzt.size };
+  return { preise, hinweise, nurEp, zugeordnet: Object.keys(preise).length, nichtZugeordnet: frei.length - benutzt.size };
 }
+
+// GAEB 90 D84/D86 (parseGaeb90Preise) → Positionen für preiseZuordnen. EP ohne
+// Gesamtbetrag (GP 0) heißt: der Bieter nennt den Preis, nimmt die Position aber
+// nicht in seine Summe (Stundenlohn, Zulagen, eigene Alternativen …).
+export const d84ZuPositionen = ({ preise }) => (preise || []).map(p => ({ oz: p.oz, ep: p.ep, gp: p.gp, nurEp: p.ep > 0 && !p.gp }));
 
 // Paketzeilen im Format, das angebotEinlesen.js (KI) erwartet
 export const zeilenFuerKi = zeilen => (zeilen || []).map(z => ({ id: z.key, oz: z.oz, bez: z.kurztext, menge: z.menge, einheit: z.einheit }));

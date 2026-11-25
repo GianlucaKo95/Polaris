@@ -53,7 +53,7 @@ test("parseGaeb90 erkennt Projekttitel und Titel-/Untertitel-Hierarchie", () => 
 
 test("parseGaeb90 dekodiert Menge (11-stellig) und Einheit korrekt", () => {
   const { positionen } = parseGaeb90(beispielDatei);
-  const mauerwerk = positionen.find(p => p.oz === "0101.30");
+  const mauerwerk = positionen.find(p => p.oz === "01.01.0030"); // OZ nach Maske 1122PPPPI aus dem Kopfsatz
   assert.equal(mauerwerk.menge, 104);
   assert.equal(mauerwerk.einheit, "m3");
 });
@@ -232,4 +232,37 @@ test("gaeb90PreiseSchreiben + parseGaeb90Preise round-trip im einstufigen GGG.PP
   const nachOz = Object.fromEntries(preise.map(p => [p.oz, p]));
   assert.equal(nachOz["001.0001"].ep, 0.68);
   assert.equal(nachOz["001.0010"].gp, 577.50);
+});
+
+// OZ-Maske mit optionaler Untertitelebene und Index (Muster aus einem echten
+// Dachdecker-LV: "1122PPPPI", Titel 01 ohne Untertitel, Titel 03 mit)
+const satz = (s, nr) => `${s.padEnd(72)}${String(nr).padStart(6, "0")}`;
+const kopf = satz("00        81L202/17         S 101 05                          1122PPPPI90", 1);
+const d81Maske = [kopf,
+  satz("1101", 2), satz("12Umkehrdach", 3),
+  satz("2101  0001 NNN         00000390000m2", 4), satz("25Untergrundvorarbeiten", 5),
+  satz("1103", 6), satz("12Klempnerarbeiten", 7), satz("110301", 8), satz("12Abdeckungen", 9),
+  satz("2103010003 NNN         00000082000m", 10), satz("25Attikaabdeckung Zink", 11),
+  satz("21030100031NNN         00000082000m", 12), satz("25Zulage zur Vorposition", 13),
+  satz("2104  0024 NEN         00000320000m2", 14), satz("25Wässern", 15),
+].join("\r\n");
+const d84Maske = [satz("00        84L202/17         S 101 05                          1122PPPPI90", 1),
+  satz("2301  0001  00000001200 000000046800", 2), satz("2303010003  00000062980 000000516436", 3),
+  satz("23030100031 00000012570 000000000000", 4)].join("\r\n");
+
+test("GAEB 90 mit OZ-Maske: optionale Titelebene, Index, Menge und Einheit", () => {
+  const { positionen, warnungen } = parseGaeb90(d81Maske);
+  assert.deepEqual(warnungen, []);
+  const p = positionen.filter(x => x.typ === "position");
+  assert.deepEqual(p.map(x => x.oz), ["01.0001", "03.01.0003", "03.01.0003.1", "04.0024"]);
+  assert.equal(p[0].menge, 390);
+  assert.equal(p[0].einheit, "m2");
+  assert.equal(p[1].einheit, "m");
+  assert.match(p[3].art, /Bedarfsposition/);
+});
+
+test("D84 mit OZ-Maske: alle Preise, EP ohne Gesamtbetrag bleibt erkennbar", () => {
+  const { preise, warnungen } = parseGaeb90Preise(d84Maske);
+  assert.deepEqual(warnungen, []);
+  assert.deepEqual(preise, [{ oz: "01.0001", ep: 1.2, gp: 468 }, { oz: "03.01.0003", ep: 62.98, gp: 5164.36 }, { oz: "03.01.0003.1", ep: 12.57, gp: 0 }]);
 });

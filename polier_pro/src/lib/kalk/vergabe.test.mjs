@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   positionenAusAuswahl, zeilenNu, zeilenLieferant, ressourcenFuerAnfrage, neueVergabe, neuerBieter, budgetSumme, bieterSumme,
-  preisspiegel, vergabeVorschlag, vergeben, vergabeUebersicht, preiseZuordnen, kiErgebnisZuBieter, lieferantErgebnisZuBieter,
+  preisspiegel, vergabeVorschlag, vergeben, vergabeUebersicht, preiseZuordnen, d84ZuPositionen, kiErgebnisZuBieter, lieferantErgebnisZuBieter,
   inKalkulationUebernehmen, anfrageGaeb, auftragGaeb, auftragHtml, preisspiegelHtml, anfrageZeilen,
 } from "./vergabe.js";
 import { aenderungenAnwenden } from "./lvBaum.js";
@@ -217,4 +217,17 @@ test("Lieferant: Bestellung statt NU-Auftrag", () => {
   const h = auftragHtml(vg, knoten, {});
   assert.ok(h.includes("Bestellung B-004") && h.includes("frei Baustelle") && h.includes("Lieferant"));
   assert.ok(!h.includes("VOB/B"));
+});
+
+test("Bieter mit Positionen nur zum Einheitspreis: rechnerische Summe und Summe laut Bieter", () => {
+  const zeilen = [{ key: "a", oz: "01.0001", kurztext: "Untergrund", menge: 390, einheit: "m2", budgetEp: 1, inSumme: true },
+    { key: "b", oz: "03.01.0003.1", kurztext: "Zulage", menge: 82, einheit: "m", budgetEp: 10, inSumme: true }];
+  const r = preiseZuordnen(zeilen, d84ZuPositionen({ preise: [{ oz: "01.0001", ep: 1.2, gp: 468 }, { oz: "03.01.0003.1", ep: 12.57, gp: 0 }] }));
+  assert.deepEqual(r.nurEp, { b: true });
+  const v = neueVergabe({ zeilen });
+  v.bieter = [neuerBieter({ id: "x", name: "Dach GmbH", preise: r.preise, nurEp: r.nurEp })];
+  const s = bieterSumme(zeilen, v.bieter[0]);
+  assert.equal(s.brutto, 468 + 1030.74);
+  assert.equal(s.bruttoLautBieter, 468);
+  assert.ok(vergabeVorschlag(v).warnungen.some(w => w.includes("§ 16c")));
 });
