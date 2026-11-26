@@ -8,7 +8,7 @@ import { useMemo, useRef, useState } from "react";
 import { Upload, Undo2, Check, Minus, Plus, Trash2, Grid3x3, ScanSearch, Wand2 } from "lucide-react";
 import { Knopf, Dialog, Meldung, menge as mengeText } from "./ui.jsx";
 import { schluessel } from "../lib/kalk/abrechnung.js";
-import { dachErkennen, zuordnungVorschlagen } from "../lib/kalk/dachAssistent.js";
+import { PROFILE, profil as profilNach, profilVorschlagen, planErkennen, zuordnen } from "../lib/kalk/planAssistent.js";
 import { achsenAusBlasen, rasterAusAchsen, abschnittBerechnen, abschnittInsAufmass, gebuchtAusAufmass, fortschritt,
   bezugGesamt, zellenDesBereichs, oeffnungenFinden, polygonFlaeche } from "../lib/kalk/planAbschnitt.js";
 
@@ -37,7 +37,8 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
   const planDaten = useRef(null);                  // Linien, Flächen, Texte des geladenen Plans (Meter)
   const [dach, setDach] = useState(null);          // Ergebnis Dach-Assistent
   const [zuord, setZuord] = useState({});          // posKey → Mengen-ID
-  const [rsEingabe, setRsEingabe] = useState("");
+  const [profilId, setProfilId] = useState(null);  // null = Vorschlag aus dem LV
+  const [optWerte, setOptWerte] = useState({});
   const [ueberschreiben, setUeberschreiben] = useState(false);
 
   const positionen = useMemo(() => zeilen.filter(z => artFuerEinheit(z.einheit)).map(z => ({
@@ -64,33 +65,46 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
       if (!ms) throw new Error("Kein Maßstab im Plan gefunden (z. B. „M 1:50“ im Schriftfeld).");
       const m = pdfObjekteInMeter(geo, ms);
       const { achsen, einzeln } = achsenAusBlasen(m);
-      if (rasterAusAchsen(achsen).fehler.length) throw new Error("Keine Achsen in zwei Richtungen erkannt. Polaris sucht Achsbeschriftungen in Kreisen an beiden Linienenden.");
+      const ohneAchsen = rasterAusAchsen(achsen).fehler.length > 0;
       setLaeuft("Zeichne den Plan …");
       const r = await pdfSeiteRendern(f, 1, 4000);
       const punkte = [];
       for (const l of m.linien) punkte.push(l.p1, l.p2);
       planDaten.current = m;
-      setBild({ ...r, f: PT_IN_M * ms, punkte, plan: { texte: m.texte, umrisse: m.umrisse } });
+      setBild({ ...r, f: PT_IN_M * ms, punkte, datei: f.name, massstab: ms, achsen: ohneAchsen ? [] : achsen, plan: { texte: m.texte, umrisse: m.umrisse } });
       const alt = (plan.achsen || []).map(a => a.tag).sort().join(",");
-      aendern(p => ({ ...p, datei: f.name, massstab: ms, achsen }));
-      if (alt && alt !== achsen.map(a => a.tag).sort().join(",")) setFehler(`Achsen weichen von der bisherigen Einrichtung ab (${alt}). Gezeichnete Geometrie bitte prüfen.`);
+      if (!ohneAchsen) aendern(p => ({ ...p, datei: f.name, massstab: ms, achsen }));
+      setDach(null);
+      if (ohneAchsen) setHinweis("Keine Achsen erkannt (Achsbeschriftungen in Kreisen an beiden Linienenden). Der Plan-Assistent funktioniert trotzdem; für „Abschnitt melden“ braucht es einen Plan mit Achsen.");
+      else if (alt && alt !== achsen.map(a => a.tag).sort().join(",")) setFehler(`Achsen weichen von der bisherigen Einrichtung ab (${alt}). Gezeichnete Geometrie bitte prüfen.`);
       else if (einzeln.length) setFehler(`Ohne Gegenstück und darum nicht verwendet: Achse ${einzeln.join(", ")}.`);
     } catch (e) { setFehler(e.message); }
     finally { setLaeuft(null); if (datei.current) datei.current.value = ""; }
   };
 
   // Dach-Assistent: Umrisse, Längen, Öffnungen, Durchführungen → Mengen + Zuordnung
+  const aktProfil = profilId || profilVorschlagen(positionen, planDaten.current?.texte || []);
   const erkennen = start => {
     if (!planDaten.current) return;
-    const xs = (plan.achsen || []).flatMap(a => [a.p1.x, a.p2.x]), ys = (plan.achsen || []).flatMap(a => [a.p1.y, a.p2.y]);
+    const xs = (bild?.achsen || []).flatMap(a => [a.p1.x, a.p2.x]), ys = (bild?.achsen || []).flatMap(a => [a.p1.y, a.p2.y]);
     const bereich = xs.length ? [{ x: Math.min(...xs) - 3, y: Math.min(...ys) - 3 }, { x: Math.max(...xs) + 3, y: Math.min(...ys) - 3 },
       { x: Math.max(...xs) + 3, y: Math.max(...ys) + 3 }, { x: Math.min(...xs) - 3, y: Math.max(...ys) + 3 }] : undefined;
-    const rs = rsEingabe.trim() === "" ? undefined : Number(rsEingabe.replace(",", "."));
-    const e = dachErkennen(planDaten.current, { start, bereich, randstreifen: Number.isFinite(rs) ? rs : undefined });
+    const opt = {};
+    for (const o of profilNach(aktProfil).optionen) {
+      const v = String(optWerte[`${aktProfil}.${o.id}`] ?? "").trim();
+      if (v !== "" && Number.isFinite(Number(v.replace(",", ".")))) opt[o.id] = Number(v.replace(",", "."));
+    }
+    const e = planErkennen(aktProfil, planDaten.current, { start, bereich, ...opt });
     setDach(e);
     if (!e.fehler) {
-      setZuord(Object.fromEntries(zuordnungVorschlagen(positionen, e.mengen).map(z => [z.key, z.id || ""])));
-      if (rsEingabe.trim() === "") setRsEingabe(String(e.randstreifen ?? "").replace(".", ","));
+      setZuord(Object.fromEntries(zuordnen(aktProfil, positionen, e.mengen).map(z => [z.key, z.id || ""])));
+      // erkannte Werte in leere Felder übernehmen
+      const erkannt = { randstreifen: e.randstreifen, neigung: e.neigung };
+      setOptWerte(w => {
+        const n = { ...w };
+        for (const o of profilNach(aktProfil).optionen) if ((n[`${aktProfil}.${o.id}`] ?? "") === "" && erkannt[o.id] != null) n[`${aktProfil}.${o.id}`] = String(erkannt[o.id]).replace(".", ",");
+        return n;
+      });
     }
   };
   const zuordnungUebernehmen = () => {
@@ -183,13 +197,14 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
   // Ausschnitt: Achsraster samt Achsblasen, etwas Rand
   const ausschnitt = useMemo(() => {
     if (!bild) return null;
-    const pts = (plan.achsen || []).flatMap(a => [zuPx(a.p1), zuPx(a.p2)]);
+    const flaeche = reiter === "assistent" && dach && !dach.fehler ? (dach.aussen?.punkte || dach.innen.punkte) : null;
+    const pts = flaeche ? flaeche.map(zuPx) : (bild.achsen || []).flatMap(a => [zuPx(a.p1), zuPx(a.p2)]);
     if (pts.length < 4) return [0, 0, bild.breite, bild.hoehe];
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-    const r = Math.max(x1 - x0, y1 - y0) * 0.04;
+    const r = Math.max(x1 - x0, y1 - y0) * (flaeche ? 0.12 : 0.04);
     return [x0 - r, y0 - r, x1 - x0 + 2 * r, y1 - y0 + 2 * r];
-  }, [bild, plan.achsen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [bild, dach, reiter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const planAnsicht = bild && (
     <div style={{ flex: "none", border: "1px solid var(--border)", borderRadius: 8, overflow: "auto", height: reiter === "melden" ? "36vh" : reiter === "assistent" ? "46vh" : "56vh", background: "#fff" }}>
@@ -197,7 +212,7 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
         style={{ display: "block", ...(zoom === 1 ? { width: "100%", height: "100%" } : { width: `${zoom * 100}%`, height: "auto" }), cursor: aktiv && darf && reiter === "einrichten" ? "crosshair" : "default" }}>
         <clipPath id="plan-ausschnitt"><rect x={ausschnitt[0]} y={ausschnitt[1]} width={ausschnitt[2]} height={ausschnitt[3]} /></clipPath>
         <image href={bild.url} x={0} y={0} width={bild.breite} height={bild.hoehe} clipPath="url(#plan-ausschnitt)" />
-        {raster.felder.flatMap(f => f.achsen.map(a => {
+        {(bild.achsen?.length ? raster.felder : []).flatMap(f => f.achsen.map(a => {
           const ach = plan.achsen.find(x => x.tag === a.tag);
           const [x1, y1] = zuPx(ach.p1), [x2, y2] = zuPx(ach.p2);
           return <line key={a.tag} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#ea580c" strokeWidth={3} strokeDasharray="18 10" opacity={0.55} />;
@@ -207,8 +222,13 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
           {dach.aussen && <polygon points={dach.aussen.punkte.map(p => zuPx(p).join(",")).join(" ")} fill="none" stroke="#7c3aed" strokeWidth={4} />}
           <polygon points={dach.innen.punkte.map(p => zuPx(p).join(",")).join(" ")} fill="rgba(22,163,74,0.14)" stroke="#16a34a" strokeWidth={5} />
           {dach.feld && <polygon points={dach.feld.map(p => zuPx(p).join(",")).join(" ")} fill="none" stroke="#16a34a" strokeWidth={3} strokeDasharray="14 8" />}
+          {dach.kanten?.filter(k => k.typ === "ortgang").map((k, i) => { const [x1, y1] = zuPx(k.a), [x2, y2] = zuPx(k.b); return <line key={`o${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#0891b2" strokeWidth={8} />; })}
+          {dach.dachlinien?.map((d, i) => { const [x1, y1] = zuPx(d.p1), [x2, y2] = zuPx(d.p2);
+            return <line key={`d${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={{ first: "#ea580c", grat: "#7c3aed", kehle: "#2563eb" }[d.typ]} strokeWidth={7} />; })}
+          {dach.stellplaetze?.markierung.map(([a, b], i) => { const [x1, y1] = zuPx(a), [x2, y2] = zuPx(b); return <line key={`m${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#ea580c" strokeWidth={5} />; })}
+          {dach.stellplaetze?.plaetze.map((sp, i) => { const [x, y] = zuPx(sp.c); return <circle key={`s${i}`} cx={x} cy={y} r={12} fill="#ea580c" opacity={0.8} />; })}
           {dach.oeffnungen.map((o, i) => <polygon key={i} points={o.punkte.map(p => zuPx(p).join(",")).join(" ")} fill={FARBE.abzug} stroke="#dc2626" strokeWidth={4} />)}
-          {dach.mengen.filter(m => m.id.startsWith("df_")).flatMap(m => m.bezug.teile[0].punkte.map((p, i) => { const [x, y] = zuPx(p); return <circle key={m.id + i} cx={x} cy={y} r={12} fill="#2563eb" opacity={0.8} />; }))}
+          {dach.mengen.filter(m => m.id.startsWith("df_") || m.id === "ablaeufe").flatMap(m => m.bezug.teile[0].punkte.map((p, i) => { const [x, y] = zuPx(p); return <circle key={m.id + i} cx={x} cy={y} r={12} fill="#2563eb" opacity={0.8} />; }))}
         </>}
         {reiter === "einrichten" && Object.entries(plan.bezuege).map(([key, b]) => {
           const an = key === aktiv;
@@ -246,11 +266,12 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
         {darf && <Knopf haupt disabled={!geaendert || !!laeuft} onClick={speichern}>Einrichtung speichern</Knopf>}
       </>}>
       <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-        {[["melden", "Abschnitt melden"], ["einrichten", "Einrichten"], ["assistent", "Dach-Assistent"]].map(([id, l]) =>
+        {[["melden", "Abschnitt melden"], ["einrichten", "Einrichten"], ["assistent", "Plan-Assistent"]].map(([id, l]) =>
           <button key={id} className="kb-knopf klein" aria-pressed={reiter === id} onClick={() => setReiter(id)}
             style={{ background: reiter === id ? "var(--surface2)" : "none", border: "none", fontWeight: reiter === id ? 500 : 400 }}>{l}</button>)}
         <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--text2)" }}>
-          {plan.achsen?.length ? `${plan.datei || "Plan"} · M 1:${plan.massstab} · Achsen ${raster.felder.map(f => f.achsen.map(a => a.tag).join(" ")).join(" | ")}` : "Noch kein Plan eingerichtet"}
+          {bild ? `${bild.datei} · M 1:${bild.massstab}${bild.achsen.length ? ` · Achsen ${raster.felder.map(f => f.achsen.map(a => a.tag).join(" ")).join(" | ")}` : " · ohne Achsen"}`
+            : plan.achsen?.length ? `${plan.datei || "Plan"} · M 1:${plan.massstab} · Achsen ${raster.felder.map(f => f.achsen.map(a => a.tag).join(" ")).join(" | ")}` : "Noch kein Plan eingerichtet"}
         </span>
         {zoomLeiste}
       </div>
@@ -349,14 +370,19 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
 
       {reiter === "assistent" && <>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-          {darf && <Knopf Icon={Upload} disabled={!!laeuft} onClick={() => datei.current?.click()}>{bild ? "Anderen Plan laden" : "Dachaufsicht laden"}</Knopf>}
+          {darf && <Knopf Icon={Upload} disabled={!!laeuft} onClick={() => datei.current?.click()}>{bild ? "Anderen Plan laden" : "Plan laden"}</Knopf>}
           <input ref={datei} type="file" hidden accept=".pdf,application/pdf" onChange={e => e.target.files?.[0] && laden(e.target.files[0])} />
-          {darf && <Knopf haupt Icon={Wand2} disabled={!bild || !!laeuft} onClick={() => erkennen()}>Dach erkennen</Knopf>}
-          <label style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center", color: "var(--text2)" }}>Randstreifen
-            <input className="kb-eingabe" value={rsEingabe} onChange={e => setRsEingabe(e.target.value)} placeholder="auto" aria-label="Randstreifenbreite in m" style={{ width: 64, height: 30 }} /> m</label>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>Klappt die Erkennung nicht, einmal in die Dachfläche klicken.</span>
+          <select className="kb-eingabe" aria-label="Profil" value={aktProfil} style={{ width: 160, height: 36 }}
+            onChange={e => { setProfilId(e.target.value); setDach(null); }}>
+            {PROFILE.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {darf && <Knopf haupt Icon={Wand2} disabled={!bild || !!laeuft} onClick={() => erkennen()}>Erkennen</Knopf>}
+          {profilNach(aktProfil).optionen.map(o => <label key={o.id} style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center", color: "var(--text2)" }}>{o.name}
+            <input className="kb-eingabe" value={optWerte[`${aktProfil}.${o.id}`] ?? ""} onChange={e => setOptWerte(w => ({ ...w, [`${aktProfil}.${o.id}`]: e.target.value }))}
+              placeholder={o.platzhalter} aria-label={`${o.name} in ${o.einheit}`} style={{ width: 64, height: 30 }} /> {o.einheit}</label>)}
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>{profilNach(aktProfil).hinweis}{profilId ? "" : " · Vorschlag aus dem LV"}. Klappt die Erkennung nicht, einmal in die Fläche klicken.</span>
         </div>
-        {!bild && <Meldung art="info">Dachaufsicht als Vektor-PDF laden. Der Assistent sucht Dachfläche, Attika, Randstreifen, Öffnungen und Durchführungen und schlägt die Zuordnung zu den LV-Positionen vor.</Meldung>}
+        {!bild && <Meldung art="info">Plan als Vektor-PDF laden (Dachaufsicht oder Parkebene). Je nach Profil sucht der Assistent Fläche, Ränder, Dachlinien oder Stellplätze, Öffnungen und Durchführungen und schlägt die Zuordnung zu den LV-Positionen vor.</Meldung>}
         {dach?.fehler && <Meldung art="fehler">{dach.fehler}</Meldung>}
         {bild && (!dach || dach.fehler) && planAnsicht}
         {dach && !dach.fehler && <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>

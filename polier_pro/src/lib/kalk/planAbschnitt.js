@@ -170,9 +170,9 @@ export function mengeInZelle(bezug, grenzen) {
     if (!t.punkte?.length) continue;
     const v = bezug.art === "flaeche" ? (t.punkte.length >= 3 ? flaecheIn(t.punkte, grenzen) : 0)
       : bezug.art === "strecke" ? streckeIn(t.punkte, grenzen) : punkteIn(t.punkte, grenzen);
-    s += t.abzug ? -v : v;
+    s += (t.abzug ? -v : v) * (t.faktor ?? 1);
   }
-  return s;
+  return s * (bezug?.faktor ?? 1);
 }
 
 export function bezugGesamt(bezug) {
@@ -182,9 +182,9 @@ export function bezugGesamt(bezug) {
     const v = bezug.art === "flaeche" ? (t.punkte.length >= 3 ? polygonFlaeche(t.punkte) : 0)
       : bezug.art === "strecke" ? t.punkte.slice(1).reduce((a, p, i) => a + Math.hypot(p.x - t.punkte[i].x, p.y - t.punkte[i].y), 0)
       : t.punkte.length;
-    s += t.abzug ? -v : v;
+    s += (t.abzug ? -v : v) * (t.faktor ?? 1);
   }
-  return s;
+  return s * (bezug?.faktor ?? 1);
 }
 
 export function mengenJeZelle(raster, bezug) {
@@ -376,7 +376,7 @@ export function fortschritt(planraster, gebucht) {
 // nicht — PV-Module, Schraffurfelder und Beschriftungskästen sind auch
 // geschlossen. Steht ein Maß dabei, muss der Umriss dazu passen (±15 %).
 // Abgezogen wird jede erkannte Öffnung, unabhängig von der Größe.
-export const OEFFNUNG_RE = /lichtkuppel|dachausstieg|ausstieg|dachfenster|dachluke|oberlicht|lichtband|lichtfirst|\brwa\b|rauchabzug|schacht|aussparung|öffnung|oeffnung|luftraum|durchbruch|treppenauge/i;
+export const OEFFNUNG_RE = /aufzug|treppenhaus|lichtkuppel|dachausstieg|ausstieg|dachfenster|dachluke|oberlicht|lichtband|lichtfirst|\brwa\b|rauchabzug|schacht|aussparung|öffnung|oeffnung|luftraum|durchbruch|treppenauge/i;
 const KUERZEL_RE = /^(BD|DD|SD|DB|DÖ|Ö|AU)\b/i;
 const MASS_RE = /(\d{2,4})\s*[x×\/]\s*(\d{2,4})/;
 

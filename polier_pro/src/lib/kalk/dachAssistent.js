@@ -14,20 +14,13 @@
 // Unsicheres wird als Hinweis markiert, nicht verschwiegen.
 
 import { polygonFlaeche, punktInPolygon, oeffnungenFinden, bezugGesamt } from "./planAbschnitt.js";
-import { linienGraph, umrissUmPunkt } from "./umriss.js";
+import { umrissUmPunkt, flaecheFinden, huelle, schwerpunkt } from "./umriss.js";
+import { zuordnungMitRegeln, titel } from "./zuordnung.js";
 
 const r2 = x => Math.round(x * 100) / 100;
 const de = x => r2(x).toLocaleString("de-DE");
 const signiert = p => p.reduce((s, a, i) => { const b = p[(i + 1) % p.length]; return s + a.x * b.y - b.x * a.y; }, 0) / 2;
 export const umfang = p => p.reduce((s, a, i) => { const b = p[(i + 1) % p.length]; return s + Math.hypot(b.x - a.x, b.y - a.y); }, 0);
-const schwerpunkt = p => {
-  let a = 0, x = 0, y = 0;
-  for (let i = 0; i < p.length; i++) {
-    const q = p[i], r = p[(i + 1) % p.length], c = q.x * r.y - r.x * q.y;
-    a += c; x += (q.x + r.x) * c; y += (q.y + r.y) * c;
-  }
-  return Math.abs(a) < 1e-12 ? p[0] : { x: x / (3 * a), y: y / (3 * a) };
-};
 const zu = p => [...p, p[0]];
 
 // Polygon um d nach innen (d > 0) bzw. außen (d < 0) versetzen (Kanten parallel
@@ -51,7 +44,6 @@ export function versatz(poly, d) {
   });
 }
 
-const huelle = pts => ({ x0: Math.min(...pts.map(p => p.x)), x1: Math.max(...pts.map(p => p.x)), y0: Math.min(...pts.map(p => p.y)), y1: Math.max(...pts.map(p => p.y)) });
 
 // Randstreifenbreite: Füllfläche, deren Hülle auf allen vier Seiten gleich weit
 // (±2 cm, 0,2–1,2 m) gegenüber der Dachhülle eingerückt ist.
@@ -93,34 +85,13 @@ export function entwaesserungHinweise(texte, bereich, rand = 3) {
     .flatMap(t => [...String(t.text).matchAll(/LX\s*\d+|not[üu]berlauf|notentw[äa]sserung|attikaentw[äa]sserung|gully|dachablauf|wasserspeier|speier/gi)].map(x => x[0].replace(/\s+/g, " ")));
 }
 
-// Startpunkte: Schwerpunkte großer Füllflächen im Bereich (größte zuerst),
-// dann die Mitte des Bereichs.
-function startpunkte(plan, bereich) {
-  const H = bereich ? huelle(bereich) : null;
-  const drin = p => !H || (p.x > H.x0 && p.x < H.x1 && p.y > H.y0 && p.y < H.y1);
-  const f = (plan.flaechen || []).map(x => ({ p: schwerpunkt(x.punkte), a: polygonFlaeche(x.punkte) }))
-    .filter(x => x.a >= 10 && drin(x.p)).sort((a, b) => b.a - a.a).slice(0, 6);
-  const aus = f.map(x => ({ punkt: x.p, erwartet: x.a }));
-  if (H) aus.push({ punkt: { x: (H.x0 + H.x1) / 2, y: (H.y0 + H.y1) / 2 } });
-  return aus;
-}
-
 // plan: { linien, flaechen, texte, umrisse } in Metern
 // opt.start: Klickpunkt im Dach; opt.bereich: Polygon (z. B. Achsraster + Rand)
 // opt.randstreifen: Breite in m (überschreibt die Erkennung; 0 = keiner)
 export function dachErkennen(plan, { start, bereich, randstreifen } = {}) {
-  const linien = bereich ? (() => { const H = huelle(bereich); return plan.linien.filter(l => [l.p1, l.p2].some(p => p.x > H.x0 && p.x < H.x1 && p.y > H.y0 && p.y < H.y1)); })() : plan.linien;
-  const g = linienGraph(linien);
-  let innen = null;
-  const versuche = start ? [{ punkt: start }] : startpunkte(plan, bereich);
-  for (const v of versuche) {
-    const u = umrissUmPunkt(g, v.punkt, { minFlaeche: 10 });
-    if (!u) continue;
-    if (v.erwartet && (u.flaeche < v.erwartet * 0.6 || u.flaeche > v.erwartet * 1.4)) continue;
-    innen = { ...u, start: v.punkt };
-    break;
-  }
-  if (!innen) return { fehler: start ? "Um den Punkt liegt kein geschlossener Linienzug. Näher an die Dachkante klicken oder den Umriss zeichnen." : "Keine Dachfläche erkannt. Bitte einmal in die Dachfläche klicken." };
+  const gef = flaecheFinden(plan, { start, bereich });
+  if (gef.fehler) return { fehler: gef.fehler.replace("Keine Fläche", "Keine Dachfläche").replace("in die Fläche", "in die Dachfläche") };
+  const { innen, g } = gef;
 
   const hinweise = [];
   const aussenRoh = umrissUmPunkt(g, innen.start, { minFlaeche: innen.flaeche * 1.001, maxFlaeche: innen.flaeche * 1.6, ausser: [innen.punkte] });
@@ -167,47 +138,37 @@ export function dachErkennen(plan, { start, bereich, randstreifen } = {}) {
   return { innen, aussen, feld, randstreifen: rs, attikaBreite, oeffnungen, mengen, hinweise };
 }
 
-// ── Zuordnung zu LV-Positionen ──────────────────────────────────────────
-// Vorschlag je Position nach Einheit und Titel (erste Wörter des Kurztexts).
-// Reihenfolge = Vorrang; NIE schließt eine Position aus. Ein Vorschlag ist
-// kein Urteil: Abweichungen > 25 % zur LV-Menge werden markiert.
-const NIE = /ablauf|abl[äa]ufe|fallrohr|standrohr|sockel|aufgehend|erosion|anschlussleitung|flexleitung|stelzlager|plattenbelag|betonplatte|stundenlohn|notabdichtung|kantholz|schacht|nachweis|seil|klemm|schiene|modul|solar|statisch/i;
-const REGELN = [
+// ── Zuordnung zu LV-Positionen (Flachdach, alle Aufbauten) ──────────────
+// Bitumen, Kunststoff/EPDM, Flüssigabdichtung, Kies-, Grün- und Umkehrdach.
+// Ohne Attika (Dachrandprofil statt Attika) fallen die Attika-Regeln auf den
+// Dachrand (Innenkante) zurück; ohne Begrünung im LV gilt Kies als ganze Fläche.
+const NIE = /ablauf|abl[äa]ufe|fallrohr|standrohr|sockel|aufgehend|erosion|anschlussleitung|flexleitung|stelzlager|plattenbelag|betonplatte|stundenlohn|notabdichtung|kantholz|schacht|nachweis|seil|klemm|schiene|modul|solar|statisch|baustelleneinrichtung|ger[üu]st|kran|container/i;
+const GRUEN = /substrat|sedum|extensiv|intensiv|vegetation|begr[üu]nung|pflanz|ansaat|w[äa]ssern|d[üu]ngen|pflege|rasen|stauden/i;
+const FLACHDACH = [
   ["df_pv", /\bpv\b|elektro|schwanenhals|kabel/i, "zaehlen"],
   ["df_rlt", /\brlt\b|(?<!ent)l[üu]ftung|dn\s*1(25|50)\b/i, "zaehlen"],
-  ["df_sw", /entl[üu]ft|\bsw\b|durchf[üu]hrung/i, "zaehlen"],
-  ["oeffnungen", /lichtkuppel|dachausstieg|\brwa\b|oberlicht|dachfenster|lichtband/i, "zaehlen"],
+  ["df_sw", /entl[üu]ft|\bsw\b|durchf[üu]hrung|rohrmanschette|dunstrohr/i, "zaehlen"],
+  ["oeffnungen", /lichtkuppel|dachausstieg|\brwa\b|oberlicht|dachfenster|lichtband|aufsetzkranz/i, "zaehlen"],
   ["attika_ecken", /\becke|eckaus|eckbild/i, "zaehlen"],
   ["randgrenze", /kiesleiste|trennleiste|trennprofil|kiesfang/i, "strecke"],
   ["rand_mitte", /\bkies|randstreifen/i, "strecke"],
   ["oeffnungen_umfang", /oberlicht|lichtkuppel|geba|aufsetzkranz/i, "strecke"],
   ["anschluss_gesamt", /hochf[üu]hr|hochzuf[üu]hr/i, "strecke"],
-  ["attika_aussen", /abdeckung|fugenversiegel|dehnungsaus/i, "strecke"],
-  ["attika_innen", /uv-schutz|wandanschluss|aufkantung|abwicklung/i, "strecke"],
-  ["attika_mitte", /attik|unterkonstruktion|randabschluss/i, "strecke"],
+  ["attika_aussen", /abdeckung|fugenversiegel|dehnungsaus|attikablende|dachrandprofil|traufblech|randabschluss/i, "strecke"],
+  ["attika_innen", /uv-schutz|wandanschluss|aufkantung|abwicklung|anschlussblech|klemmschiene|kappleiste|randwinkel/i, "strecke"],
+  ["attika_mitte", /attik|unterkonstruktion|bohle/i, "strecke"],
+  ["attika_innen", /attik|unterkonstruktion|bohle|abdeckung|randabschluss|dachrand|traufblech|randprofil/i, "strecke"],
   ["rand", /\bkies|randstreifen/i, "flaeche"],
-  ["feld", /substrat|sedum|extensiv|vegetation|begr[üu]nung|pflanz|ansaat|w[äa]ssern|d[üu]ngen|pflege/i, "flaeche"],
-  ["dach", /d[äa]mm|abdicht|dampf|vlies|schutz|dr[äa]n|filter|s[äa]uber|untergrund|grundier|voranstrich|trenn|bahn|folie|speicher|dach/i, "flaeche"],
+  ["feld", GRUEN, "flaeche"],
+  ["dach", /d[äa]mm|abdicht|dampf|vlies|schutz|dr[äa]n|filter|s[äa]uber|untergrund|grundier|voranstrich|trenn|bahn|folie|speicher|dach|bitumen|schwei[ßs]|oberlage|unterlage|kunststoff|fpo|pvc|epdm|\btpo\b|eps|xps|pir|pur|mineralwoll|gef[äa]lle|auflast|fl[üu]ssig|beschicht|kies/i, "flaeche"],
 ];
-const ART_EINHEIT = [[/^(m2|m²|qm)$/i, "flaeche"], [/^(m|lfm|lfdm)$/i, "strecke"], [/^(st|stk|stck|stück|stueck)$/i, "zaehlen"]];
-const artVon = e => (ART_EINHEIT.find(([re]) => re.test(String(e || "").trim().replace(/\.$/, ""))) || [])[1] || null;
-export const titel = (t, n = 3) => String(t || "").split(/\s+/).slice(0, n).join(" ");
 
 export function zuordnungVorschlagen(positionen, mengen) {
-  const da = new Map(mengen.map(m => [m.id, m]));
-  let vorher = null;
-  return positionen.map(p => {
-    const art = artVon(p.einheit);
-    // Flächen und Längen nach dem Kurztitel, Stück auch nach DN im längeren Titel
-    const t = titel(p.kurztext, art === "zaehlen" ? 8 : 3);
-    let id = null;
-    if (art && /zur vorposition|wie vor\b/i.test(p.kurztext || "") && vorher?.art === art) id = vorher.id;
-    else if (art && !NIE.test(titel(p.kurztext, 8))) id = (REGELN.find(([i, re, a]) => a === art && da.has(i) && re.test(t)) || [])[0] || null;
-    const m = id ? da.get(id) : null;
-    const abweichung = m && p.mengeLv > 0 ? m.menge / p.mengeLv - 1 : null;
-    vorher = art ? { art, id } : vorher;
-    return { key: p.key, id, menge: m?.menge ?? null, abweichung, pruefen: abweichung != null && Math.abs(abweichung) > 0.25 };
-  });
+  const gruen = positionen.some(p => GRUEN.test(titel(p.kurztext, 3)));
+  // Kiesdach: Kies (m²) liegt auf der ganzen Fläche, nicht nur im Randstreifen
+  const regeln = gruen ? FLACHDACH : FLACHDACH.filter(([id, , art]) => !(id === "rand" && art === "flaeche"));
+  return zuordnungMitRegeln(positionen, mengen, { regeln, nie: NIE });
 }
 
+export { titel };
 export function mengeNachId(mengen, id) { return mengen.find(m => m.id === id) || null; }
