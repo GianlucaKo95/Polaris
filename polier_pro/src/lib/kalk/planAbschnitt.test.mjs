@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { achsenAusBlasen, rasterAusAchsen, satzVerstehen, abschnittBerechnen, abschnittInsAufmass, gebuchtAusAufmass,
-  fortschritt, bezugGesamt, mengeInZelle } from "./planAbschnitt.js";
+  fortschritt, bezugGesamt, mengeInZelle, oeffnungenFinden } from "./planAbschnitt.js";
 import { massstabFinden, pdfOperatorenAuswerten } from "../pdfPlan.js";
 
 const nah = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -133,4 +133,28 @@ test("PDF: Maßstab im Schriftfeld auf zwei Zeilen, Kreise aus Kurvenpfaden", ()
   assert.equal(r.kreise.length, 1);
   nah(r.kreise[0].x, 100); nah(r.kreise[0].y, 100); nah(r.kreise[0].r, 10);
   assert.equal(r.linien.length, 0);
+});
+
+test("Öffnungen: nur beschriftete Umrisse, Maß wählt den passenden Rahmen", () => {
+  const dach = rechteck(0, 0, 20, 10);
+  const umrisse = [
+    rechteck(5, 5, 6.2, 6.2),          // Öffnung 1,20 × 1,20
+    rechteck(5.05, 5.05, 6.15, 6.0),   // Innenrahmen (Kuppel)
+    rechteck(4.4, 4.4, 6.8, 6.8),      // Schutzzone drumherum
+    rechteck(10, 2, 11.76, 3.07),      // PV-Modul ohne Beschriftung
+    rechteck(14, 6, 15.44, 7),         // Beschriftungskasten "DD r'/ SW Entlüftung"
+    rechteck(2, 7, 2.6, 7.4),          // Schacht 60/40 (Wort + Maß in einer Zeile)
+    rechteck(25, 2, 26, 3),            // außerhalb der Fläche
+  ];
+  const texte = [
+    { text: "BD /", x: 5.3, y: 5.8 }, { text: "120 x 120", x: 5.3, y: 5.6 },
+    { text: "DD r'/ SW Entlüftung", x: 14.1, y: 6.6 }, { text: "Ø=7", x: 14.5, y: 6.3 },
+    { text: "Schacht 60/40", x: 2.05, y: 7.1 }, { text: "BD 100 x 100", x: 25.1, y: 2.5 },
+  ];
+  const o = oeffnungenFinden(dach, { texte, umrisse });
+  assert.equal(o.length, 2);
+  nah(o[0].flaeche, 1.44, 1e-9);
+  assert.match(o[0].text, /120 x 120/);
+  nah(o[1].flaeche, 0.24, 1e-9);
+  assert.deepEqual(oeffnungenFinden(dach, { texte: [], umrisse }), []);
 });

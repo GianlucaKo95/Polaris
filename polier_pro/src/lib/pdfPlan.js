@@ -18,7 +18,7 @@ const PT_IN_MM = 25.4 / 72;
 // pdf.js ≥ 5: constructPath(args = [malOp, [pfadDaten], minMax]),
 // Pfadcodes 0 moveTo, 1 lineTo, 2 curveTo, 3 quadraticCurveTo, 4 closePath.
 export function pdfOperatorenAuswerten(ops, OPS) {
-  const linien = [], flaechen = [], kreise = [];
+  const linien = [], flaechen = [], kreise = [], umrisse = [];
   let ctm = [1, 0, 0, 1, 0, 0];
   const stapel = [];
   let fuell = "#000000";
@@ -62,12 +62,19 @@ export function pdfOperatorenAuswerten(ops, OPS) {
           if (b > 0 && Math.abs(b - h) < Math.max(b, h) * 0.1) kreise.push({ x: (Math.max(...xs) + Math.min(...xs)) / 2, y: (Math.max(...ys) + Math.min(...ys)) / 2, r: (b + h) / 4 });
           continue;
         }
+        // Geschlossene Umrisse (Rechtecke, Öffnungen, Symbole) zusätzlich als Polygon
+        const ende = pf.punkte.at(-1), anf = pf.punkte[0];
+        const zu = pf.zu || Math.hypot(ende.x - anf.x, ende.y - anf.y) < 0.01;
+        if (zu && !pf.kurven) {
+          const pkt = Math.hypot(ende.x - anf.x, ende.y - anf.y) < 0.01 ? pf.punkte.slice(0, -1) : pf.punkte;
+          if (pkt.length >= 3 && pkt.length <= 24) umrisse.push(pkt);
+        }
         if (gefuellt && pf.punkte.length >= 3) flaechen.push({ layer: `Füllfarbe ${fuell}`, farbe: fuell, punkte: pf.punkte });
         else if (gestrichen) for (let k = 0; k + 1 < pf.punkte.length; k++) linien.push({ layer: "", p1: pf.punkte[k], p2: pf.punkte[k + 1] });
       }
     }
   }
-  return { linien, flaechen, kreise };
+  return { linien, flaechen, kreise, umrisse };
 }
 
 // ── Texte ───────────────────────────────────────────────────────────────
@@ -169,7 +176,7 @@ export function linienVerbinden(linien, toleranz = 1) {
 }
 
 // Objekte (PDF-Punkte) → Meter mit Maßstab. Ergebnis passt zu dxfRasterAuswerten().
-export function pdfObjekteInMeter({ linien, flaechen, texte, kreise = [] }, massstab) {
+export function pdfObjekteInMeter({ linien, flaechen, texte, kreise = [], umrisse = [] }, massstab) {
   const f = PT_IN_MM / 1000 * massstab;
   const m = p => ({ x: p.x * f, y: p.y * f });
   return {
@@ -177,6 +184,7 @@ export function pdfObjekteInMeter({ linien, flaechen, texte, kreise = [] }, mass
     flaechen: flaechen.map(fl => ({ ...fl, punkte: fl.punkte.map(m) })),
     texte: texte.map(t => ({ ...t, ...m(t) })),
     kreise: kreise.map(k => ({ ...m(k), r: k.r * f })),
+    umrisse: umrisse.map(u => u.map(m)),
   };
 }
 

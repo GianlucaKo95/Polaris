@@ -368,3 +368,66 @@ export function fortschritt(planraster, gebucht) {
   }
   return aus;
 }
+
+// ── Öffnungen automatisch abziehen ──────────────────────────────────────
+// Eine Öffnung ist ein geschlossener Umriss im Plan, in dem ihre Beschriftung
+// steht: ein Durchbruchskürzel mit Maß („BD / 120 x 120“, „DD 80/80“) oder ein
+// Wort wie „Lichtkuppel“, „Dachausstieg“, „Schacht“. Ein bloßes Rechteck reicht
+// nicht — PV-Module, Schraffurfelder und Beschriftungskästen sind auch
+// geschlossen. Steht ein Maß dabei, muss der Umriss dazu passen (±15 %).
+// Abgezogen wird jede erkannte Öffnung, unabhängig von der Größe.
+export const OEFFNUNG_RE = /lichtkuppel|dachausstieg|ausstieg|dachfenster|dachluke|oberlicht|lichtband|lichtfirst|\brwa\b|rauchabzug|schacht|aussparung|öffnung|oeffnung|luftraum|durchbruch|treppenauge/i;
+const KUERZEL_RE = /^(BD|DD|SD|DB|DÖ|Ö|AU)\b/i;
+const MASS_RE = /(\d{2,4})\s*[x×\/]\s*(\d{2,4})/;
+
+export function punktInPolygon(p, poly) {
+  let drin = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a.y > p.y) !== (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) drin = !drin;
+  }
+  return drin;
+}
+
+const huelle = pts => {
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+};
+const ueberlappen = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+const passtMass = (k, [a, b]) => {
+  const w = k.h.x1 - k.h.x0, h = k.h.y1 - k.h.y0;
+  const ok = (x, y) => Math.abs(x - y) <= y * 0.15;
+  return (ok(w, a) && ok(h, b)) || (ok(w, b) && ok(h, a));
+};
+
+// flaeche: Punkte der gezeichneten Fläche; plan: { texte, umrisse } in Metern.
+// Ergebnis: [{ punkte, flaeche, text }]
+export function oeffnungenFinden(flaeche, { texte = [], umrisse = [] } = {}) {
+  if (!flaeche || flaeche.length < 3) return [];
+  const gesamt = polygonFlaeche(flaeche);
+  const kandidaten = umrisse
+    .filter(u => u.length >= 3 && u.every(p => punktInPolygon(p, flaeche)))
+    .map(u => ({ punkte: u, flaeche: polygonFlaeche(u), h: huelle(u) }))
+    .filter(k => k.flaeche >= 0.05 && k.flaeche <= Math.min(50, gesamt * 0.5));
+  const innen = texte.filter(t => punktInPolygon(t, flaeche));
+  const aus = [];
+  for (const t of innen) {
+    const text = String(t.text || "").trim();
+    const kuerzel = KUERZEL_RE.test(text), wort = OEFFNUNG_RE.test(text) && text.length <= 40;
+    if (!kuerzel && !wort) continue;
+    // Maß aus diesem Text oder einer Zeile direkt darunter („BD /“ ↵ „120 x 120“)
+    let mass = text.match(MASS_RE);
+    if (!mass) {
+      const unten = innen.find(u => u !== t && Math.abs(u.x - t.x) < 0.6 && t.y - u.y > 0 && t.y - u.y < 0.4 && MASS_RE.test(u.text));
+      if (unten) mass = String(unten.text).match(MASS_RE);
+    }
+    const m = mass ? [Number(mass[1]) / 100, Number(mass[2]) / 100] : null;
+    const um = kandidaten.filter(k => punktInPolygon(t, k.punkte));
+    let wahl = null;
+    if (m) wahl = um.filter(k => passtMass(k, m)).sort((a, b) => Math.abs(a.flaeche - m[0] * m[1]) - Math.abs(b.flaeche - m[0] * m[1]))[0];
+    else if (wort) wahl = um.filter(k => k.flaeche >= 0.25).sort((a, b) => a.flaeche - b.flaeche)[0];
+    if (!wahl || aus.some(o => ueberlappen(o.h, wahl.h))) continue;
+    aus.push({ ...wahl, text: [text, mass && !text.includes(mass[0]) ? mass[0] : ""].filter(Boolean).join(" ") });
+  }
+  return aus.map(({ punkte, flaeche: f, text }) => ({ punkte, flaeche: f, text }));
+}

@@ -5,11 +5,11 @@
 // Der Plan selbst wird nicht gespeichert, nur Achsen und Geometrie (Meter).
 
 import { useMemo, useRef, useState } from "react";
-import { Upload, Undo2, Check, Minus, Plus, Trash2, Grid3x3 } from "lucide-react";
+import { Upload, Undo2, Check, Minus, Plus, Trash2, Grid3x3, ScanSearch } from "lucide-react";
 import { Knopf, Dialog, Meldung, menge as mengeText } from "./ui.jsx";
 import { schluessel } from "../lib/kalk/abrechnung.js";
 import { achsenAusBlasen, rasterAusAchsen, abschnittBerechnen, abschnittInsAufmass, gebuchtAusAufmass, fortschritt,
-  bezugGesamt, zellenDesBereichs } from "../lib/kalk/planAbschnitt.js";
+  bezugGesamt, zellenDesBereichs, oeffnungenFinden, polygonFlaeche } from "../lib/kalk/planAbschnitt.js";
 
 const PT_IN_M = 25.4 / 72 / 1000;
 const ART = { flaeche: "Fläche", strecke: "Linie", zaehlen: "Stückpunkte" };
@@ -25,6 +25,7 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
   const [bild, setBild] = useState(null);          // { url, breite, hoehe, transform, f, punkte }
   const [laeuft, setLaeuft] = useState(null);
   const [fehler, setFehler] = useState(null);
+  const [hinweis, setHinweis] = useState(null);
   const [satz, setSatz] = useState("");
   const [ab, setAb] = useState(() => new Set());   // abgewählte Positionen
   const [aktiv, setAktiv] = useState(null);
@@ -62,7 +63,7 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
       const r = await pdfSeiteRendern(f, 1, 4000);
       const punkte = [];
       for (const l of m.linien) punkte.push(l.p1, l.p2);
-      setBild({ ...r, f: PT_IN_M * ms, punkte });
+      setBild({ ...r, f: PT_IN_M * ms, punkte, plan: { texte: m.texte, umrisse: m.umrisse } });
       const alt = (plan.achsen || []).map(a => a.tag).sort().join(",");
       aendern(p => ({ ...p, datei: f.name, massstab: ms, achsen }));
       if (alt && alt !== achsen.map(a => a.tag).sort().join(",")) setFehler(`Achsen weichen von der bisherigen Einrichtung ab (${alt}). Gezeichnete Geometrie bitte prüfen.`);
@@ -97,13 +98,29 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
     });
     else setTeil(t => [...t, p]);
   };
+  // Öffnungen (Lichtkuppel, Dachausstieg, Durchbrüche mit Maß) in den Flächenteilen
+  // suchen und als Abzug ergänzen — jede erkannte Öffnung, ohne Übermessung.
+  const mitOeffnungen = (teile) => {
+    if (!bild?.plan) return { teile, neu: [] };
+    const neu = [];
+    for (const t of teile.filter(x => !x.abzug)) for (const o of oeffnungenFinden(t.punkte, bild.plan)) {
+      const c = o.punkte.reduce((a, p) => ({ x: a.x + p.x / o.punkte.length, y: a.y + p.y / o.punkte.length }), { x: 0, y: 0 });
+      const schon = [...teile, ...neu].some(x => x.abzug && Math.abs(polygonFlaeche(x.punkte) - o.flaeche) < 0.02
+        && x.punkte.some(p => Math.hypot(p.x - c.x, p.y - c.y) < Math.sqrt(o.flaeche)));
+      if (!schon) neu.push({ punkte: o.punkte, abzug: true, oeffnung: o.text });
+    }
+    return { teile: [...teile, ...neu], neu };
+  };
+  const meldeOeffnungen = neu => setHinweis(neu.length
+    ? `Automatisch abgezogen: ${neu.map(o => `${o.oeffnung} (${mengeText(polygonFlaeche(o.punkte))} m²)`).join(", ")}. Mit „Zurück“ entfernen, falls falsch.`
+    : "Keine beschriftete Öffnung in der Fläche gefunden. Fehlende Öffnungen mit „Abzug“ nachzeichnen.");
   const teilFertig = () => {
     const art = positionen.find(x => x.key === aktiv)?.art;
     if (teil.length < (art === "flaeche" ? 3 : 2)) return;
-    aendern(pl => {
-      const b = pl.bezuege[aktiv] || { art, teile: [] };
-      return { ...pl, bezuege: { ...pl.bezuege, [aktiv]: { ...b, art, teile: [...b.teile, { punkte: teil, ...(abzug ? { abzug: true } : {}) }] } } };
-    });
+    const b = plan.bezuege[aktiv] || { art, teile: [] };
+    let teile = [...b.teile, { punkte: teil, ...(abzug ? { abzug: true } : {}) }];
+    if (art === "flaeche" && !abzug) { const r = mitOeffnungen(teile); teile = r.teile; meldeOeffnungen(r.neu); }
+    aendern(pl => ({ ...pl, bezuege: { ...pl.bezuege, [aktiv]: { ...b, art, teile } } }));
     setTeil([]); setAbzug(false);
   };
   const bezugSetzen = (key, b) => aendern(pl => {
@@ -195,6 +212,7 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
         {zoomLeiste}
       </div>
       {fehler && <Meldung art="fehler" onSchliessen={() => setFehler(null)}>{fehler}</Meldung>}
+      {hinweis && <Meldung art="info" onSchliessen={() => setHinweis(null)}>{hinweis}</Meldung>}
       {laeuft && <div style={{ color: "var(--text2)", fontSize: 13 }}>{laeuft}</div>}
 
       {reiter === "melden" && <>
@@ -236,7 +254,7 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
           <div style={{ border: "1px solid var(--border)", borderRadius: 8, overflowY: "auto", maxHeight: "50vh" }}>
             {positionen.map(p => {
               const b = plan.bezuege[p.key];
-              return <button key={p.key} className="am-pos" aria-current={aktiv === p.key} onClick={() => { setAktiv(p.key); setTeil([]); setAbzug(false); }}>
+              return <button key={p.key} className="am-pos" aria-current={aktiv === p.key} onClick={() => { setAktiv(p.key); setTeil([]); setAbzug(false); setHinweis(null); }}>
                 <span className="kb-zahl" style={{ color: "var(--muted)", width: 70, flex: "none" }}>{p.oz}</span>
                 <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.kurztext}</span>
                 <span className="kb-zahl" style={{ fontSize: 12, width: 92, flex: "none", textAlign: "right", color: b ? "var(--text)" : "var(--muted)" }}>
@@ -262,6 +280,8 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
                 }
               }}>Zurück</Knopf>
               <Knopf klein leise Icon={Trash2} disabled={!aktivBezug} onClick={() => bezugSetzen(aktiv, null)}>Leeren</Knopf>
+              {aktivPos.art === "flaeche" && <Knopf klein leise Icon={ScanSearch} disabled={!aktivBezug || !bild} title={bild ? "" : "Plan laden"}
+                onClick={() => { const r = mitOeffnungen(aktivBezug.teile); if (r.neu.length) bezugSetzen(aktiv, { ...aktivBezug, teile: r.teile }); meldeOeffnungen(r.neu); }}>Öffnungen abziehen</Knopf>}
               <select className="kb-eingabe" aria-label="Geometrie übernehmen von" value="" style={{ width: 200, height: 30 }}
                 onChange={e => { const q = plan.bezuege[e.target.value]; if (q) bezugSetzen(aktiv, { ...q, modus: aktivBezug?.modus }); }}>
                 <option value="">Übernehmen von …</option>
@@ -280,7 +300,7 @@ export function PlanAbschnitteDialog({ projekt, zeilen, aufmass, darf, onProjekt
           </div>}
           {bild && aktivPos && <div style={{ fontSize: 12, color: "var(--muted)" }}>
             {aktivPos.art === "zaehlen" ? "Jeder Klick setzt einen Stückpunkt." : "Punkte nacheinander anklicken, dann schließen. Klicks rasten auf Linienenden im Plan ein."}
-            {" "}Mehrere Teile und Abzüge sind möglich.</div>}
+            {" "}Beschriftete Öffnungen (z. B. „BD 120 x 120“, Lichtkuppel) zieht Polaris beim Schließen automatisch ab, egal wie groß. Fehlende mit „Abzug“ nachzeichnen.</div>}
         </div>
       </div>}
     </Dialog>
