@@ -1,7 +1,7 @@
 // Abrechnung (Phase 5): Aufmaß je Position, Nachträge, Rechnungen, NU-Rechnungen.
 // Grundlage ist der Auftragsstand und die Stände der Nachträge. Logik: lib/kalk/abrechnung.js.
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, Upload, Download, Printer, Sparkles, Ruler, Search, FileText, Box } from "lucide-react";
+import { Plus, Trash2, Upload, Download, Printer, Sparkles, Ruler, Search, FileText, Box, Grid3x3 } from "lucide-react";
 import { BimDialog } from "./Bim.jsx";
 import { bimInsAufmass } from "../lib/kalk/bim.js";
 import { useStammdaten } from "./stammdaten.js";
@@ -14,6 +14,7 @@ import {
 import { angebotSummen, angebotHtml } from "../lib/kalk/angebotDruck.js";
 import { QUELLE } from "../lib/aufmass.js";
 
+const PlanAbschnitteDialog = lazy(() => import("./PlanAbschnitte.jsx").then(m => ({ default: m.PlanAbschnitteDialog })));
 const AufmassWerkzeug = lazy(() => import("../components/AufmassWerkzeug.jsx").then(m => ({ default: m.AufmassWerkzeug })));
 const UNTER = [["aufmass", "Aufmaß"], ["nachtraege", "Nachträge"], ["rechnungen", "Rechnungen"], ["nu", "NU-Rechnungen"]];
 const heute = () => new Date().toISOString().slice(0, 10);
@@ -25,7 +26,7 @@ function herunterladen(name, inhalt, typ = "application/xml") {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function AbrechnungBereich({ speicher, projekt, staende, darf, kiAktiv, onFehler, onStandGeaendert, onStandOeffnen }) {
+export function AbrechnungBereich({ speicher, projekt, staende, darf, kiAktiv, onFehler, onStandGeaendert, onStandOeffnen, onProjektAendern }) {
   const sd = useStammdaten();
   const [unter, setUnter] = useState("aufmass");
   const [d, setD] = useState(null);
@@ -60,7 +61,7 @@ export function AbrechnungBereich({ speicher, projekt, staende, darf, kiAktiv, o
   const alleTeile = [{ stand: auftrag, knoten: d.knoten.get(auftrag.id) || [] },
     ...d.nachtraege.filter(n => n.stand_id && nachtragStaende.has(n.stand_id)).map(n => ({ stand: nachtragStaende.get(n.stand_id), knoten: d.knoten.get(n.stand_id) || [], nachtrag: n }))];
   const abrechenbar = alleTeile.filter(t => !t.nachtrag || istBeauftragt(t.nachtrag));
-  const ctx = { speicher, projekt, auftrag, darf, kiAktiv, sd, onFehler, laden, d, setD, alleTeile, abrechenbar, nachtragStaende, onStandGeaendert, onStandOeffnen };
+  const ctx = { speicher, projekt, auftrag, darf, kiAktiv, sd, onFehler, laden, d, setD, alleTeile, abrechenbar, nachtragStaende, onStandGeaendert, onStandOeffnen, onProjektAendern };
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
@@ -80,7 +81,8 @@ export function AbrechnungBereich({ speicher, projekt, staende, darf, kiAktiv, o
 }
 
 // ── Aufmaß ─────────────────────────────────────────────────────────────────
-function AufmassBereich({ speicher, projekt, auftrag, darf, sd, kiAktiv, onFehler, d, setD, alleTeile }) {
+function AufmassBereich({ speicher, projekt, auftrag, darf, sd, kiAktiv, onFehler, d, setD, alleTeile, onProjektAendern }) {
+  const [abschnitte, setAbschnitte] = useState(false);
   const [auswahl, setAuswahl] = useState(null); // schluessel
   const [suche, setSuche] = useState("");
   const [messen, setMessen] = useState(false);
@@ -152,6 +154,7 @@ function AufmassBereich({ speicher, projekt, auftrag, darf, sd, kiAktiv, onFehle
             <Knopf klein leise Icon={Download} onClick={x31Export} title="Aufmaß als GAEB X31">X31</Knopf>
             {darf && <Knopf klein leise Icon={Upload} onClick={() => x31Datei.current?.click()} title="Aufmaß aus GAEB X31 übernehmen">X31</Knopf>}
             {darf && <Knopf klein leise Icon={Box} onClick={() => setBim(true)} title="Aufmaß aus einem IFC-Modell">BIM</Knopf>}
+            {(darf || projekt.planraster?.achsen?.length > 0) && <Knopf klein leise Icon={Grid3x3} onClick={() => setAbschnitte(true)} title="Abschnitt nach Planachsen fertig melden">Abschnitte</Knopf>}
             <input ref={x31Datei} type="file" hidden accept=".x31,.xml" onChange={e => e.target.files?.[0] && x31Import(e.target.files[0])} />
           </div>
         </div>
@@ -231,6 +234,15 @@ function AufmassBereich({ speicher, projekt, auftrag, darf, sd, kiAktiv, onFehle
           setBim(false);
           setMeldung(`${n.length} Aufmaßzeilen aus ${datei} angelegt (Blatt „BIM“).`);
         }} />}
+      {abschnitte && <Suspense fallback={null}><PlanAbschnitteDialog projekt={projekt} darf={darf} aufmass={d.aufmass}
+        zeilen={zeilen.filter(z => !z.nachtrag || istBeauftragt(alleTeile.find(t => t.nachtrag?.id === z.nachtrag.id)?.nachtrag))}
+        onProjektAendern={onProjektAendern} onSchliessen={() => setAbschnitte(false)}
+        onUebernehmen={async roh => {
+          const n = roh.map(f => neueAufmassZeile(f));
+          setD(x => ({ ...x, aufmass: [...x.aufmass, ...n] }));
+          await speichern({ neu: n });
+          setMeldung(`${n.length} Aufmaßzeilen für Abschnitt ${n[0]?.ort || ""} angelegt (Blatt „Abschnitte“).`);
+        }} /></Suspense>}
       {messen && aktiv && <Suspense fallback={null}><AufmassWerkzeug ziel={{ bez: aktiv.kurztext, einheit: aktiv.einheit }} session={sd.session || null} onUebernehmen={ausWerkzeug} onClose={() => setMessen(false)} /></Suspense>}
     </div>
   );

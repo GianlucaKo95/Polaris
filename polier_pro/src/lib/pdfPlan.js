@@ -18,7 +18,7 @@ const PT_IN_MM = 25.4 / 72;
 // pdf.js ≥ 5: constructPath(args = [malOp, [pfadDaten], minMax]),
 // Pfadcodes 0 moveTo, 1 lineTo, 2 curveTo, 3 quadraticCurveTo, 4 closePath.
 export function pdfOperatorenAuswerten(ops, OPS) {
-  const linien = [], flaechen = [];
+  const linien = [], flaechen = [], kreise = [];
   let ctm = [1, 0, 0, 1, 0, 0];
   const stapel = [];
   let fuell = "#000000";
@@ -45,21 +45,29 @@ export function pdfOperatorenAuswerten(ops, OPS) {
       let akt = null;
       for (let k = 0; k < daten.length;) {
         const code = daten[k];
-        if (code === 0) { akt = { punkte: [p(daten[k + 1], daten[k + 2])], zu: false }; pfade.push(akt); k += 3; }
+        if (code === 0) { akt = { punkte: [p(daten[k + 1], daten[k + 2])], zu: false, kurven: 0 }; pfade.push(akt); k += 3; }
         else if (code === 1) { akt?.punkte.push(p(daten[k + 1], daten[k + 2])); k += 3; }
-        else if (code === 2) { akt?.punkte.push(p(daten[k + 5], daten[k + 6])); k += 7; } // Kurve: nur Endpunkt
+        else if (code === 2) { if (akt) { akt.punkte.push(p(daten[k + 5], daten[k + 6])); akt.kurven++; } k += 7; } // Kurve: nur Endpunkt
         else if (code === 3) { akt?.punkte.push(p(daten[k + 3], daten[k + 4])); k += 5; }
         else if (code === 4) { if (akt) akt.zu = true; k += 1; }
         else break;
       }
       for (const pf of pfade) {
         if (pf.punkte.length < 2) continue;
+        // Kreis (Achsblase, Symbol): nur Kurven, Hülle fast quadratisch. Bei 4
+        // Bézier-Vierteln liegen die Endpunkte genau auf den Extremen.
+        if (pf.kurven >= 3 && pf.kurven === pf.punkte.length - 1) {
+          const xs = pf.punkte.map(q => q.x), ys = pf.punkte.map(q => q.y);
+          const b = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+          if (b > 0 && Math.abs(b - h) < Math.max(b, h) * 0.1) kreise.push({ x: (Math.max(...xs) + Math.min(...xs)) / 2, y: (Math.max(...ys) + Math.min(...ys)) / 2, r: (b + h) / 4 });
+          continue;
+        }
         if (gefuellt && pf.punkte.length >= 3) flaechen.push({ layer: `Füllfarbe ${fuell}`, farbe: fuell, punkte: pf.punkte });
         else if (gestrichen) for (let k = 0; k + 1 < pf.punkte.length; k++) linien.push({ layer: "", p1: pf.punkte[k], p2: pf.punkte[k + 1] });
       }
     }
   }
-  return { linien, flaechen };
+  return { linien, flaechen, kreise };
 }
 
 // ── Texte ───────────────────────────────────────────────────────────────
@@ -82,6 +90,11 @@ export function massstabFinden(texte) {
   for (const t of texte) {
     const m = String(t.text).match(/\b(?:M|Maßstab|Massstab|Mst\.?)\s*[:.]?\s*1\s*:\s*(\d{1,4})\b/i);
     if (m) return Number(m[1]);
+  }
+  // Schriftfeld: "Maßstab:" und "1 : 50" stehen oft als getrennte Texte untereinander.
+  if (texte.some(t => /^(Maßstab|Massstab|M\.?|Mst\.?)\s*:?$/i.test(String(t.text).trim()))) {
+    const allein = texte.map(t => String(t.text).trim().match(/^1\s*:\s*(\d{1,4})$/)).filter(Boolean).map(m => Number(m[1]));
+    if (allein.length) return allein[0];
   }
   return null;
 }
@@ -156,13 +169,14 @@ export function linienVerbinden(linien, toleranz = 1) {
 }
 
 // Objekte (PDF-Punkte) → Meter mit Maßstab. Ergebnis passt zu dxfRasterAuswerten().
-export function pdfObjekteInMeter({ linien, flaechen, texte }, massstab) {
+export function pdfObjekteInMeter({ linien, flaechen, texte, kreise = [] }, massstab) {
   const f = PT_IN_MM / 1000 * massstab;
   const m = p => ({ x: p.x * f, y: p.y * f });
   return {
     linien: linienVerbinden(linien, 0.5).map(l => ({ ...l, p1: m(l.p1), p2: m(l.p2) })),
     flaechen: flaechen.map(fl => ({ ...fl, punkte: fl.punkte.map(m) })),
     texte: texte.map(t => ({ ...t, ...m(t) })),
+    kreise: kreise.map(k => ({ ...m(k), r: k.r * f })),
   };
 }
 
@@ -200,7 +214,7 @@ export async function pdfSeiteRendern(datei, seite = 1, maxPx = 2600) {
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport, canvas }).promise;
-    return { url: canvas.toDataURL("image/png"), breite: canvas.width, hoehe: canvas.height, renderFaktor, seiten: doc.numPages };
+    return { url: canvas.toDataURL("image/png"), breite: canvas.width, hoehe: canvas.height, renderFaktor, transform: [...viewport.transform], seiten: doc.numPages };
   } finally {
     doc.destroy();
   }

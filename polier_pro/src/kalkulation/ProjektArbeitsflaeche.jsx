@@ -109,6 +109,7 @@ export function ProjektArbeitsflaeche({ speicher, projektId, onZurueck, onProjek
         {reiter === "abrechnung" && (
           <AbrechnungBereich speicher={speicher} projekt={projekt} staende={staende} darf={recht >= 2} kiAktiv={kiAktiv} onFehler={setFehler}
             onStandGeaendert={async neuId => { await ladeProjekt(); if (neuId) setStandId(neuId); onProjektGeaendert?.(); }}
+            onProjektAendern={projektAendern}
             onStandOeffnen={id => { setStandId(id); setReiter("lv"); }} />
         )}
         {reiter === "controlling" && (

@@ -841,3 +841,8 @@ from kalk_rechnungen r join kalk_projekte p on p.id = r.kalk_projekt_id
 where r.status <> 'entwurf';
 
 grant select on kalk_export_controlling, kalk_export_ergebnis, kalk_export_rechnungen to authenticated;
+
+-- Abschlag nach Planabschnitten (lib/kalk/planAbschnitt.js): Achsraster aus
+-- dem PDF-Plan und Geometrie je LV-Position in Metern. Der Plan selbst wird
+-- nicht gespeichert. Gebuchte Felder stehen in kalk_aufmass.extra.abschnitt.
+alter table kalk_projekte add column if not exists planraster jsonb not null default '{}'::jsonb;
